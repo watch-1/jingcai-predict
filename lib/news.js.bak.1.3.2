@@ -1,0 +1,596 @@
+// Domestic Chinese sports news aggregator (懂球帝公开接口 + 中新网/人民网 RSS).
+// English RSS kept behind ?lang=en. Attribution + outbound links only; no full-article scrape.
+'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { DATA_DIR } = require('./db');
+
+const CACHE_TTL_MS = 20 * 60 * 1000; // 20 min
+const STALE_MAX_MS = 6 * 60 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 10000;
+const CACHE_DIR = () => path.join(DATA_DIR, 'news');
+const CACHE_FILE = (lang) => path.join(CACHE_DIR(), lang === 'en' ? 'cache-en.json' : 'cache-zh.json');
+
+// Default: 国内体坛中文源（经 box + 阿里云 120.77.152.74 实测可达）
+const SOURCES_ZH = [
+  {
+    id: 'dq_top',
+    name: '懂球帝',
+    nameZh: '懂球帝',
+    format: 'dongqiudi',
+    url: 'https://api.dongqiudi.com/app/tabs/android/1.json',
+  },
+  {
+    id: 'dq_epl',
+    name: '懂球帝英超',
+    nameZh: '懂球帝·英超',
+    format: 'dongqiudi',
+    url: 'https://api.dongqiudi.com/app/tabs/android/3.json',
+  },
+  {
+    id: 'dq_csl',
+    name: '懂球帝中超',
+    nameZh: '懂球帝·中超',
+    format: 'dongqiudi',
+    url: 'https://api.dongqiudi.com/app/tabs/android/56.json',
+  },
+  {
+    id: 'chinanews',
+    name: '中国新闻网',
+    nameZh: '中新网体育',
+    format: 'rss',
+    url: 'https://www.chinanews.com.cn/rss/sports.xml',
+  },
+  {
+    id: 'people',
+    name: '人民网',
+    nameZh: '人民网体育',
+    format: 'rss',
+    url: 'https://www.people.com.cn/rss/sports.xml',
+  },
+];
+
+// Optional English feeds (?lang=en) — often blocked or empty from CN egress
+const SOURCES_EN = [
+  {
+    id: 'sky',
+    name: 'Sky Sports',
+    nameZh: '天空体育',
+    format: 'rss',
+    url: 'https://www.skysports.com/rss/12040',
+  },
+  {
+    id: 'espn',
+    name: 'ESPN FC',
+    nameZh: 'ESPN足球',
+    format: 'rss',
+    url: 'https://www.espn.com/espn/rss/soccer/news',
+  },
+  {
+    id: 'bbc',
+    name: 'BBC Sport',
+    nameZh: 'BBC体育',
+    format: 'rss',
+    url: 'https://feeds.bbci.co.uk/sport/football/rss.xml',
+  },
+  {
+    id: 'guardian',
+    name: 'The Guardian',
+    nameZh: '卫报足球',
+    format: 'rss',
+    url: 'https://www.theguardian.com/football/rss',
+  },
+];
+
+// Prefer Chinese keys for 竞彩 team filter; English tokens still help EN mode
+const ZH_TEAM = {
+  '曼城': ['Manchester City', 'Man City'],
+  '曼联': ['Manchester United', 'Man United', 'Man Utd'],
+  '利物浦': ['Liverpool'],
+  '阿森纳': ['Arsenal'],
+  '切尔西': ['Chelsea'],
+  '热刺': ['Tottenham', 'Spurs'],
+  '纽卡': ['Newcastle'],
+  '维拉': ['Aston Villa'],
+  '布莱顿': ['Brighton'],
+  '西汉姆': ['West Ham'],
+  '富勒姆': ['Fulham'],
+  '狼队': ['Wolves', 'Wolverhampton'],
+  '埃弗顿': ['Everton'],
+  '水晶宫': ['Crystal Palace'],
+  '布伦特福德': ['Brentford'],
+  '诺丁汉': ['Nottingham Forest', 'Forest'],
+  '伯恩茅斯': ['Bournemouth'],
+  '莱斯特': ['Leicester'],
+  '南安普顿': ['Southampton'],
+  '伊普斯维奇': ['Ipswich'],
+  '皇马': ['Real Madrid'],
+  '巴萨': ['Barcelona', 'Barça', 'Barca'],
+  '马竞': ['Atletico Madrid', 'Atlético'],
+  '塞维利亚': ['Sevilla'],
+  '皇家社会': ['Real Sociedad'],
+  '比利亚雷亚尔': ['Villarreal'],
+  '拜仁': ['Bayern', 'Bayern Munich'],
+  '多特': ['Dortmund', 'Borussia Dortmund'],
+  '勒沃库森': ['Leverkusen'],
+  '莱比锡': ['Leipzig', 'RB Leipzig'],
+  '法兰克福': ['Frankfurt'],
+  '国米': ['Inter', 'Inter Milan'],
+  '米兰': ['AC Milan', 'Milan'],
+  '尤文': ['Juventus', 'Juve'],
+  '那不勒斯': ['Napoli'],
+  '罗马': ['Roma', 'AS Roma'],
+  '拉齐奥': ['Lazio'],
+  '亚特兰大': ['Atalanta'],
+  '佛罗伦萨': ['Fiorentina'],
+  '巴黎': ['PSG', 'Paris Saint-Germain', 'Paris'],
+  '马赛': ['Marseille'],
+  '里昂': ['Lyon'],
+  '摩纳哥': ['Monaco'],
+  '葡体': ['Sporting'],
+  '本菲卡': ['Benfica'],
+  '波尔图': ['Porto'],
+  '阿贾克斯': ['Ajax'],
+  '埃因霍温': ['PSV'],
+  '凯尔特人': ['Celtic'],
+  '流浪者': ['Rangers'],
+  '上海海港': ['Shanghai Port'],
+  '上海申花': ['Shanghai Shenhua'],
+  '山东泰山': ['Shandong Taishan'],
+  '北京国安': ['Beijing Guoan'],
+  '成都蓉城': ['Chengdu Rongcheng'],
+  '武汉三镇': ['Wuhan Three Towns'],
+  '天津津门虎': ['Tianjin Jinmen Tiger'],
+  '浙江': ['Zhejiang'],
+  '河南': ['Henan'],
+  '青岛海牛': ['Qingdao Hainiu'],
+  '青岛西海岸': ['Qingdao West Coast'],
+  '梅州客家': ['Meizhou Hakka'],
+  '长春亚泰': ['Changchun Yatai'],
+  '深圳新鹏城': ['Shenzhen Peng City'],
+};
+
+const memByLang = { zh: null, en: null };
+const inflightByLang = { zh: null, en: null };
+
+function normalizeLang(lang) {
+  return String(lang || 'zh').toLowerCase().startsWith('en') ? 'en' : 'zh';
+}
+
+function sourcesFor(lang) {
+  return normalizeLang(lang) === 'en' ? SOURCES_EN : SOURCES_ZH;
+}
+
+function readDisk(lang) {
+  try {
+    return JSON.parse(fs.readFileSync(CACHE_FILE(lang), 'utf8'));
+  } catch {
+    // migrate legacy cache.json into zh once
+    if (lang === 'zh') {
+      try {
+        const legacy = JSON.parse(fs.readFileSync(path.join(CACHE_DIR(), 'cache.json'), 'utf8'));
+        return legacy;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function writeDisk(lang, obj) {
+  try {
+    fs.mkdirSync(CACHE_DIR(), { recursive: true });
+    const tmp = CACHE_FILE(lang) + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(obj));
+    fs.renameSync(tmp, CACHE_FILE(lang));
+  } catch (e) {
+    console.warn('news cache write failed', e.message);
+  }
+}
+
+function stripHtml(s) {
+  return String(s || '')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, '$1')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tagText(block, tag) {
+  const re = new RegExp(
+    `<${tag}(?:\\s[^>]*)?>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))</${tag}>`,
+    'i'
+  );
+  const m = block.match(re);
+  if (!m) return '';
+  return stripHtml(m[1] != null && m[1] !== undefined ? m[1] : m[2] || '');
+}
+
+function attrIn(block, re) {
+  const m = block.match(re);
+  return m ? String(m[1] || '').trim() : '';
+}
+
+function parsePubDate(s) {
+  if (!s) return null;
+  const t = Date.parse(String(s).replace(/(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2+08:00'));
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+}
+
+/** Prefer created_at when published_at is a far-future pin (懂球帝置顶常见). */
+function pickTime(...candidates) {
+  const now = Date.now();
+  const parsed = candidates.map(parsePubDate).filter(Boolean);
+  for (const iso of parsed) {
+    const t = Date.parse(iso);
+    if (t <= now + 24 * 60 * 60 * 1000) return iso; // allow up to +1 day skew
+  }
+  return parsed[0] || null;
+}
+
+function itemId(link) {
+  return crypto.createHash('sha256').update(String(link || '')).digest('hex').slice(0, 16);
+}
+
+function parseRss(xml, source) {
+  const items = [];
+  const chunks = String(xml || '').match(/<item[\s\S]*?<\/item>/gi) || [];
+  const entries = chunks.length ? chunks : (String(xml || '').match(/<entry[\s\S]*?<\/entry>/gi) || []);
+  for (const block of entries) {
+    let title = tagText(block, 'title');
+    let link = tagText(block, 'link');
+    if (!link) {
+      link = attrIn(block, /<link[^>]+href=["']([^"']+)["']/i);
+    }
+    if (!link) {
+      const guid = tagText(block, 'guid');
+      if (/^https?:\/\//i.test(guid)) link = guid;
+    }
+    if (!title || !link || !/^https?:\/\//i.test(link)) continue;
+    try {
+      const u = new URL(link);
+      u.searchParams.delete('at_medium');
+      u.searchParams.delete('at_campaign');
+      link = u.toString();
+    } catch { /* keep */ }
+
+    let summary = tagText(block, 'description') || tagText(block, 'summary') || tagText(block, 'content:encoded') || tagText(block, 'content');
+    if (summary.length > 480) summary = summary.slice(0, 477) + '…';
+
+    let thumb =
+      attrIn(block, /<media:thumbnail[^>]+url=["']([^"']+)["']/i) ||
+      attrIn(block, /<media:content[^>]+url=["']([^"']+)["'][^>]*(?:medium=["']image["']|type=["']image)/i) ||
+      attrIn(block, /<enclosure[^>]+(?:type=["']image[^"']*["'][^>]+url=["']([^"']+)["']|url=["']([^"']+)["'][^>]+type=["']image)/i) ||
+      attrIn(block, /<enclosure[^>]+url=["']([^"']+\.(?:jpe?g|png|webp|gif)[^"']*)["']/i) ||
+      '';
+    if (!thumb) {
+      const img = block.match(/<img[^>]+src=["']([^"']+)["']/i);
+      if (img) thumb = img[1];
+    }
+    if (thumb && thumb.startsWith('//')) thumb = 'https:' + thumb;
+
+    const publishedAt = pickTime(
+      tagText(block, 'pubDate'),
+      tagText(block, 'published'),
+      tagText(block, 'updated'),
+      attrIn(block, /<dc:date[^>]*>([^<]+)</i)
+    );
+
+    items.push({
+      id: itemId(link),
+      title,
+      summary,
+      link,
+      thumb: thumb || '',
+      source: source.name,
+      sourceId: source.id,
+      sourceZh: source.nameZh,
+      publishedAt,
+    });
+  }
+  return items;
+}
+
+function parseDongqiudi(jsonText, source) {
+  let data;
+  try {
+    data = JSON.parse(jsonText);
+  } catch {
+    throw new Error('invalid JSON');
+  }
+  const articles = Array.isArray(data.articles) ? data.articles : [];
+  const items = [];
+  for (const a of articles) {
+    if (!a || a.is_business_ad) continue;
+    const title = String(a.title || a.share_title || '').trim();
+    if (!title) continue;
+    // Prefer stable public article URL for attribution / outbound
+    let link =
+      (a.share && String(a.share)) ||
+      (a.id ? `https://www.dongqiudi.com/article/${a.id}` : '') ||
+      String(a.url || a.web_url || '');
+    if (!/^https?:\/\//i.test(link)) continue;
+    // Drop tracking query on webapp urls
+    try {
+      const u = new URL(link);
+      if (u.hostname.includes('dongqiudi.com') && a.id) {
+        link = `https://www.dongqiudi.com/article/${a.id}`;
+      }
+    } catch { /* keep */ }
+
+    let summary = String(a.description || a.b_description || '').trim();
+    if (summary.length > 480) summary = summary.slice(0, 477) + '…';
+    let thumb = String(a.thumb || a.litpic || a.cover || '').trim();
+    if (thumb.startsWith('//')) thumb = 'https:' + thumb;
+
+    const publishedAt = pickTime(a.created_at, a.published_at, a.display_time);
+
+    items.push({
+      id: itemId(link),
+      title,
+      summary,
+      link,
+      thumb: thumb || '',
+      source: source.name,
+      sourceId: source.id,
+      sourceZh: source.nameZh,
+      publishedAt,
+    });
+  }
+  return items;
+}
+
+async function fetchText(url) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; JingcaiNews/1.3.2; +https://tiicai.local)',
+        Accept: 'application/rss+xml, application/atom+xml, application/json, application/xml, text/xml, */*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.5',
+      },
+      signal: ctrl.signal,
+      redirect: 'follow',
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const text = await r.text();
+    if (!text || text.length < 32) throw new Error('empty body');
+    return text;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+function mergeBySource(prevItems, freshBySource, now) {
+  const bySource = {};
+  for (const it of prevItems || []) {
+    if (!bySource[it.sourceId]) bySource[it.sourceId] = [];
+    bySource[it.sourceId].push(it);
+  }
+  for (const [sid, items] of Object.entries(freshBySource)) {
+    bySource[sid] = items.map((x) => ({ ...x, _fetchedAt: now }));
+  }
+  const out = [];
+  const seen = new Set();
+  for (const list of Object.values(bySource)) {
+    for (const it of list) {
+      if (seen.has(it.id)) continue;
+      const fetched = it._fetchedAt || (it.publishedAt ? Date.parse(it.publishedAt) : now);
+      if (now - fetched > STALE_MAX_MS && !freshBySource[it.sourceId]) continue;
+      seen.add(it.id);
+      const { _fetchedAt, ...clean } = it;
+      out.push(clean);
+    }
+  }
+  out.sort((a, b) => {
+    const ta = a.publishedAt ? Date.parse(a.publishedAt) : 0;
+    const tb = b.publishedAt ? Date.parse(b.publishedAt) : 0;
+    return tb - ta;
+  });
+  return out;
+}
+
+async function refresh(lang) {
+  lang = normalizeLang(lang);
+  const sources = sourcesFor(lang);
+  const prev = (memByLang[lang] && memByLang[lang].payload) || readDisk(lang) || { items: [], sources: [], errors: [] };
+  // Drop legacy English items from zh cache when switching sources
+  const prevItems = (prev.items || []).filter((it) => {
+    if (lang !== 'zh') return true;
+    return sources.some((s) => s.id === it.sourceId);
+  });
+  const freshBySource = {};
+  const errors = [];
+  const sourceStatus = [];
+
+  await Promise.all(
+    sources.map(async (src) => {
+      try {
+        const body = await fetchText(src.url);
+        let items;
+        if (src.format === 'dongqiudi') {
+          items = parseDongqiudi(body, src);
+        } else {
+          if (/^\s*<!DOCTYPE html/i.test(body) || /^\s*<html/i.test(body)) throw new Error('HTML not RSS');
+          items = parseRss(body, src);
+        }
+        if (!items.length) throw new Error('no items parsed');
+        freshBySource[src.id] = items.slice(0, 40);
+        sourceStatus.push({ id: src.id, name: src.nameZh, ok: true, count: items.length });
+      } catch (e) {
+        errors.push(`${src.id}: ${e.message}`);
+        sourceStatus.push({ id: src.id, name: src.nameZh, ok: false, error: e.message });
+      }
+    })
+  );
+
+  const now = Date.now();
+  const items = mergeBySource(prevItems, freshBySource, now);
+  const noteZh =
+    lang === 'en'
+      ? 'English RSS (optional). Titles may be English. Attribution + outbound link only.'
+      : '体坛资讯来自国内公开源（懂球帝接口摘要、中新网/人民网 RSS），仅展示标题/摘要并注明出处；点击跳转原文。不构成投注建议。';
+  const payload = {
+    source: Object.keys(freshBySource).length ? 'live' : prevItems.length ? 'cache' : 'empty',
+    lang,
+    fetchedAt: new Date().toISOString(),
+    cacheTtlSec: Math.round(CACHE_TTL_MS / 1000),
+    sources: sourceStatus,
+    errors: errors.length ? errors : undefined,
+    noteZh,
+    items,
+  };
+  memByLang[lang] = { at: Date.now(), payload };
+  writeDisk(lang, payload);
+  return payload;
+}
+
+async function getNews({ force, lang } = {}) {
+  lang = normalizeLang(lang);
+  const mem = memByLang[lang];
+  if (!force && mem && Date.now() - mem.at < CACHE_TTL_MS) return mem.payload;
+  if (!force && !mem) {
+    const disk = readDisk(lang);
+    if (disk && disk.fetchedAt && Date.now() - Date.parse(disk.fetchedAt) < CACHE_TTL_MS) {
+      memByLang[lang] = { at: Date.parse(disk.fetchedAt) || Date.now(), payload: disk };
+      return disk;
+    }
+    if (disk && disk.items && disk.items.length) {
+      memByLang[lang] = { at: Date.now() - CACHE_TTL_MS + 5000, payload: disk };
+    }
+  }
+  if (inflightByLang[lang]) return inflightByLang[lang];
+  inflightByLang[lang] = refresh(lang)
+    .catch((e) => {
+      const disk = readDisk(lang);
+      if (disk && disk.items && disk.items.length) {
+        const payload = {
+          ...disk,
+          source: 'cache',
+          noteZh: (disk.noteZh || '') + '（刷新失败，显示缓存）',
+          errors: [e.message],
+        };
+        memByLang[lang] = { at: Date.now(), payload };
+        return payload;
+      }
+      throw e;
+    })
+    .finally(() => {
+      inflightByLang[lang] = null;
+    });
+  return inflightByLang[lang];
+}
+
+function expandQuery(q) {
+  const raw = String(q || '').trim();
+  if (!raw) return [];
+  const terms = new Set([raw]);
+  for (const part of raw.split(/[\s,，/|]+/).filter(Boolean)) {
+    terms.add(part);
+    const mapped = ZH_TEAM[part];
+    if (mapped) mapped.forEach((t) => terms.add(t));
+    for (const [zh, ens] of Object.entries(ZH_TEAM)) {
+      if (part.includes(zh) || zh.includes(part)) {
+        terms.add(zh);
+        ens.forEach((t) => terms.add(t));
+      }
+    }
+  }
+  try {
+    const crests = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'crests.json'), 'utf8'));
+    const lowerTerms = new Set([...terms].map((x) => String(x).toLowerCase()));
+    for (const row of Object.values((crests && crests.teams) || {})) {
+      const en = row && row.en;
+      if (!en) continue;
+      const el = en.toLowerCase();
+      if (lowerTerms.has(el)) terms.add(en);
+    }
+  } catch { /* optional */ }
+  return [...terms].filter(Boolean);
+}
+
+function filterItems(items, q) {
+  const terms = expandQuery(q);
+  if (!terms.length) return items;
+  const lower = terms.map((t) => String(t).toLowerCase());
+  return items.filter((it) => {
+    const hay = (it.title + ' ' + (it.summary || '')).toLowerCase();
+    return lower.some((t) => t.length >= 2 && hay.includes(t));
+  });
+}
+
+function listNews(opts = {}) {
+  const lang = normalizeLang(opts.lang);
+  return getNews({ force: !!opts.force, lang }).then((payload) => {
+    let items = payload.items || [];
+    if (opts.q) items = filterItems(items, opts.q);
+    const limit = Math.min(Math.max(parseInt(opts.limit, 10) || 50, 1), 100);
+    return {
+      ...payload,
+      q: opts.q || undefined,
+      total: items.length,
+      items: items.slice(0, limit).map((it) => ({
+        id: it.id,
+        title: it.title,
+        summary: it.summary,
+        link: it.link,
+        thumb: it.thumb,
+        source: it.source,
+        sourceZh: it.sourceZh,
+        sourceId: it.sourceId,
+        publishedAt: it.publishedAt,
+      })),
+    };
+  });
+}
+
+function getNewsItem(idOrHash, opts = {}) {
+  const key = String(idOrHash || '').trim();
+  if (!key) return Promise.resolve(null);
+  const lang = normalizeLang(opts.lang);
+  // Search both caches so deep links still resolve after lang switch
+  return Promise.all([getNews({ lang }), getNews({ lang: lang === 'en' ? 'zh' : 'en' })]).then(([a, b]) => {
+    const items = [...(a.items || []), ...(b.items || [])];
+    let hit = items.find((x) => x.id === key);
+    if (!hit && /^https?:\/\//i.test(key)) {
+      const id = itemId(key);
+      hit = items.find((x) => x.id === id || x.link === key);
+    }
+    if (!hit) {
+      hit = items.find((x) => x.id.startsWith(key) || key.startsWith(x.id));
+    }
+    if (!hit) return null;
+    return {
+      source: a.source,
+      fetchedAt: a.fetchedAt,
+      noteZh: a.noteZh,
+      item: hit,
+    };
+  });
+}
+
+module.exports = {
+  listNews,
+  getNewsItem,
+  getNews,
+  refresh,
+  SOURCES: SOURCES_ZH,
+  SOURCES_ZH,
+  SOURCES_EN,
+  CACHE_TTL_MS,
+  itemId,
+  parseRss,
+  parseDongqiudi,
+  expandQuery,
+  normalizeLang,
+};

@@ -1,0 +1,797 @@
+{
+  "1": {
+    "idTeam": "133604",
+    "strTeam": "Arsenal",
+    "strLeague": "English Premier League"
+  },
+  "2": {
+    "idTeam": "133601",
+    "strTeam": "Aston Villa",
+    "strLeague": "English Premier League"
+  },
+  "7": {
+    "idTeam": "133610",
+    "strTeam": "Chelsea",
+    "strLeague": "English Premier League"
+  },
+  "8": {
+    "idTeam": "133632",
+    "strTeam": "Crystal Palace",
+    "strLeague": "English Premier League"
+  },
+  "9": {
+    "idTeam": "133615",
+    "strTeam": "Everton",
+    "strLeague": "English Premier League"
+  },
+  "10": {
+    "idTeam": "133600",
+    "strTeam": "Fulham",
+    "strLeague": "English Premier League"
+  },
+  "11": {
+    "idTeam": "133602",
+    "strTeam": "Liverpool",
+    "strLeague": "English Premier League"
+  },
+  "12": {
+    "idTeam": "133613",
+    "strTeam": "Manchester City",
+    "strLeague": "English Premier League"
+  },
+  "13": {
+    "idTeam": "133612",
+    "strTeam": "Manchester United",
+    "strLeague": "English Premier League"
+  },
+  "14": {
+    "idTeam": "133628",
+    "strTeam": "Middlesbrough",
+    "strLeague": "English League Championship"
+  },
+  "15": {
+    "idTeam": "134777",
+    "strTeam": "Newcastle United",
+    "strLeague": "English Premier League"
+  },
+  "17": {
+    "idTeam": "133629",
+    "strTeam": "Portsmouth",
+    "strLeague": "English League Championship"
+  },
+  "18": {
+    "idTeam": "134778",
+    "strTeam": "Southampton",
+    "strLeague": "English League Championship"
+  },
+  "19": {
+    "idTeam": "133616",
+    "strTeam": "Tottenham Hotspur",
+    "strLeague": "English Premier League"
+  },
+  "26": {
+    "idTeam": "133675",
+    "strTeam": "Genoa",
+    "strLeague": "Italian Serie A"
+  },
+  "30": {
+    "idTeam": "134384",
+    "strTeam": "Elche",
+    "strLeague": "Spanish La Liga"
+  },
+  "33": {
+    "idTeam": "133732",
+    "strTeam": "Levante",
+    "strLeague": "Spanish La Liga"
+  },
+  "44": {
+    "idTeam": "133625",
+    "strTeam": "Coventry City",
+    "strLeague": "English Premier League"
+  },
+  "48": {
+    "idTeam": "133622",
+    "strTeam": "Ipswich Town",
+    "strLeague": "English Premier League"
+  },
+  "49": {
+    "idTeam": "133635",
+    "strTeam": "Leeds United",
+    "strLeague": "English Premier League"
+  },
+  "55": {
+    "idTeam": "133605",
+    "strTeam": "Queens Park Rangers",
+    "strLeague": "English League Championship"
+  },
+  "59": {
+    "idTeam": "133609",
+    "strTeam": "Stoke City",
+    "strLeague": "English League Championship"
+  },
+  "62": {
+    "idTeam": "133636",
+    "strTeam": "West Ham United",
+    "strLeague": "English League Championship"
+  },
+  "67": {
+    "idTeam": "134301",
+    "strTeam": "Bournemouth",
+    "strLeague": "English Premier League"
+  },
+  "69": {
+    "idTeam": "134355",
+    "strTeam": "Brentford",
+    "strLeague": "English Premier League"
+  },
+  "76": {
+    "idTeam": "133617",
+    "strTeam": "Hull City",
+    "strLeague": "English Premier League"
+  },
+  "116": {
+    "idTeam": "133667",
+    "strTeam": "AC Milan",
+    "strLeague": "Italian Serie A"
+  },
+  "117": {
+    "idTeam": "134782",
+    "strTeam": "Atalanta",
+    "strLeague": "Italian Serie A"
+  },
+  "118": {
+    "idTeam": "134781",
+    "strTeam": "Bologna",
+    "strLeague": "Italian Serie A"
+  },
+  "120": {
+    "idTeam": "134783",
+    "strTeam": "Cagliari",
+    "strLeague": "Italian Serie A"
+  },
+  "122": {
+    "idTeam": "133674",
+    "strTeam": "Fiorentina",
+    "strLeague": "Italian Serie A"
+  },
+  "123": {
+    "idTeam": "133681",
+    "strTeam": "Inter Milan",
+    "strLeague": "Italian Serie A"
+  },
+  "124": {
+    "idTeam": "133676",
+    "strTeam": "Juventus",
+    "strLeague": "Italian Serie A"
+  },
+  "125": {
+    "idTeam": "133668",
+    "strTeam": "Lazio",
+    "strLeague": "Italian Serie A"
+  },
+  "126": {
+    "idTeam": "133678",
+    "strTeam": "Lecce",
+    "strLeague": "Italian Serie A"
+  },
+  "130": {
+    "idTeam": "135728",
+    "strTeam": "Parma",
+    "strLeague": "Italian Serie A"
+  },
+  "132": {
+    "idTeam": "133682",
+    "strTeam": "Roma",
+    "strLeague": "Italian Serie A"
+  },
+  "135": {
+    "idTeam": "133679",
+    "strTeam": "Udinese",
+    "strLeague": "Italian Serie A"
+  },
+  "136": {
+    "idTeam": "133687",
+    "strTeam": "Torino",
+    "strLeague": "Italian Serie A"
+  },
+  "137": {
+    "idTeam": "133664",
+    "strTeam": "Bayern Munich",
+    "strLeague": "German Bundesliga"
+  },
+  "140": {
+    "idTeam": "133650",
+    "strTeam": "Borussia Dortmund",
+    "strLeague": "German Bundesliga"
+  },
+  "141": {
+    "idTeam": "133653",
+    "strTeam": "Freiburg",
+    "strLeague": "German Bundesliga"
+  },
+  "142": {
+    "idTeam": "133651",
+    "strTeam": "Hamburg",
+    "strLeague": "German Bundesliga"
+  },
+  "145": {
+    "idTeam": "133663",
+    "strTeam": "Kaiserslautern",
+    "strLeague": "German 2. Bundesliga"
+  },
+  "146": {
+    "idTeam": "133666",
+    "strTeam": "Bayer Leverkusen",
+    "strLeague": "German Bundesliga"
+  },
+  "147": {
+    "idTeam": "133665",
+    "strTeam": "Mainz",
+    "strLeague": "German Bundesliga"
+  },
+  "148": {
+    "idTeam": "134779",
+    "strTeam": "Borussia Mönchengladbach",
+    "strLeague": "German Bundesliga"
+  },
+  "151": {
+    "idTeam": "133661",
+    "strTeam": "Schalke 04",
+    "strLeague": "German Bundesliga"
+  },
+  "152": {
+    "idTeam": "133660",
+    "strTeam": "Stuttgart",
+    "strLeague": "German Bundesliga"
+  },
+  "153": {
+    "idTeam": "133662",
+    "strTeam": "Werder Bremen",
+    "strLeague": "German Bundesliga"
+  },
+  "172": {
+    "idTeam": "133729",
+    "strTeam": "Atletico Madrid",
+    "strLeague": "Spanish La Liga"
+  },
+  "179": {
+    "idTeam": "133822",
+    "strTeam": "Lens",
+    "strLeague": "French Ligue 1"
+  },
+  "180": {
+    "idTeam": "133711",
+    "strTeam": "Lille",
+    "strLeague": "French Ligue 1"
+  },
+  "181": {
+    "idTeam": "133713",
+    "strTeam": "Lyon",
+    "strLeague": "French Ligue 1"
+  },
+  "182": {
+    "idTeam": "133707",
+    "strTeam": "Marseille",
+    "strLeague": "French Ligue 1"
+  },
+  "183": {
+    "idTeam": "133883",
+    "strTeam": "Metz",
+    "strLeague": "French Ligue 2"
+  },
+  "184": {
+    "idTeam": "133823",
+    "strTeam": "Monaco",
+    "strLeague": "French Ligue 1"
+  },
+  "186": {
+    "idTeam": "133712",
+    "strTeam": "Nice",
+    "strLeague": "French Ligue 1"
+  },
+  "208": {
+    "idTeam": "133718",
+    "strTeam": "Dijon",
+    "strLeague": "French Ligue 2"
+  },
+  "225": {
+    "idTeam": "133789",
+    "strTeam": "Club Brugge",
+    "strLeague": "Belgian Pro League"
+  },
+  "250": {
+    "idTeam": "133768",
+    "strTeam": "PSV Eindhoven",
+    "strLeague": "Dutch Eredivisie"
+  },
+  "260": {
+    "idTeam": "143704",
+    "strTeam": "Alverca",
+    "strLeague": "Portuguese Primeira Liga"
+  },
+  "283": {
+    "idTeam": "133804",
+    "strTeam": "Galatasaray",
+    "strLeague": "Turkish Super Lig"
+  },
+  "341": {
+    "idTeam": "134574",
+    "strTeam": "Vålerenga",
+    "strLeague": "Norwegian Eliteserien"
+  },
+  "401": {
+    "idTeam": "133739",
+    "strTeam": "Barcelona",
+    "strLeague": "Spanish La Liga"
+  },
+  "538": {
+    "idTeam": "134115",
+    "strTeam": "Vitória de Guimarães",
+    "strLeague": "Portuguese Primeira Liga"
+  },
+  "546": {
+    "idTeam": "139881",
+    "strTeam": "Albirex Niigata",
+    "strLeague": "Japanese J2 League"
+  },
+  "547": {
+    "idTeam": "137703",
+    "strTeam": "Cerezo Osaka",
+    "strLeague": "Japanese J1 League"
+  },
+  "552": {
+    "idTeam": "137708",
+    "strTeam": "Kashiwa Reysol",
+    "strLeague": "Japanese J1 League"
+  },
+  "553": {
+    "idTeam": "137709",
+    "strTeam": "Kawasaki Frontale",
+    "strLeague": "Japanese J1 League"
+  },
+  "554": {
+    "idTeam": "137710",
+    "strTeam": "Nagoya Grampus",
+    "strLeague": "Japanese J1 League"
+  },
+  "555": {
+    "idTeam": "137711",
+    "strTeam": "Oita Trinita",
+    "strLeague": "Japanese J2 League"
+  },
+  "556": {
+    "idTeam": "139893",
+    "strTeam": "RB Omiya Ardija",
+    "strLeague": "Japanese J2 League"
+  },
+  "557": {
+    "idTeam": "137713",
+    "strTeam": "Sanfrecce Hiroshima",
+    "strLeague": "Japanese J1 League"
+  },
+  "560": {
+    "idTeam": "137716",
+    "strTeam": "Urawa Red Diamonds",
+    "strLeague": "Japanese J1 League"
+  },
+  "561": {
+    "idTeam": "137717",
+    "strTeam": "Vissel Kobe",
+    "strLeague": "Japanese J1 League"
+  },
+  "562": {
+    "idTeam": "137719",
+    "strTeam": "Yokohama F Marinos",
+    "strLeague": "Japanese J1 League"
+  },
+  "563": {
+    "idTeam": "134299",
+    "strTeam": "Atlético Mineiro",
+    "strLeague": "Brazilian Serie A"
+  },
+  "564": {
+    "idTeam": "134297",
+    "strTeam": "Athletico Paranaense",
+    "strLeague": "Brazilian Serie A"
+  },
+  "566": {
+    "idTeam": "134285",
+    "strTeam": "Botafogo",
+    "strLeague": "Brazilian Serie A"
+  },
+  "567": {
+    "idTeam": "134284",
+    "strTeam": "Corinthians",
+    "strLeague": "Brazilian Serie A"
+  },
+  "568": {
+    "idTeam": "134298",
+    "strTeam": "Coritiba",
+    "strLeague": "Brazilian Serie A"
+  },
+  "602": {
+    "idTeam": "134002",
+    "strTeam": "Kalmar",
+    "strLeague": "Swedish Allsvenskan"
+  },
+  "606": {
+    "idTeam": "134166",
+    "strTeam": "Malmö",
+    "strLeague": "Swedish Allsvenskan"
+  },
+  "613": {
+    "idTeam": "134570",
+    "strTeam": "Viking",
+    "strLeague": "Norwegian Eliteserien"
+  },
+  "664": {
+    "idTeam": "133738",
+    "strTeam": "Real Madrid",
+    "strLeague": "Spanish La Liga"
+  },
+  "676": {
+    "idTeam": "133726",
+    "strTeam": "Racing de Santander",
+    "strLeague": "Spanish La Liga"
+  },
+  "677": {
+    "idTeam": "133735",
+    "strTeam": "Sevilla",
+    "strLeague": "Spanish La Liga"
+  },
+  "678": {
+    "idTeam": "133725",
+    "strTeam": "Valencia",
+    "strLeague": "Spanish La Liga"
+  },
+  "679": {
+    "idTeam": "133740",
+    "strTeam": "Villarreal",
+    "strLeague": "Spanish La Liga"
+  },
+  "686": {
+    "idTeam": "133766",
+    "strTeam": "Heracles Almelo",
+    "strLeague": "Dutch Eerste Divisie"
+  },
+  "744": {
+    "idTeam": "133670",
+    "strTeam": "Napoli",
+    "strLeague": "Italian Serie A"
+  },
+  "751": {
+    "idTeam": "145594",
+    "strTeam": "Al-Ittihad Misurata",
+    "strLeague": "Libyan Premier League"
+  },
+  "784": {
+    "idTeam": "139900",
+    "strTeam": "Ventforet Kofu",
+    "strLeague": "Japanese J2 League"
+  },
+  "785": {
+    "idTeam": "139888",
+    "strTeam": "Kyoto Sanga",
+    "strLeague": "Japanese J1 League"
+  },
+  "791": {
+    "idTeam": "134288",
+    "strTeam": "Grêmio",
+    "strLeague": "Brazilian Serie A"
+  },
+  "808": {
+    "idTeam": "133652",
+    "strTeam": "Augsburg",
+    "strLeague": "German Bundesliga"
+  },
+  "849": {
+    "idTeam": "133728",
+    "strTeam": "Rayo Vallecano",
+    "strLeague": "Spanish La Liga"
+  },
+  "873": {
+    "idTeam": "134023",
+    "strTeam": "Marítimo",
+    "strLeague": "Portuguese Primeira Liga"
+  },
+  "884": {
+    "idTeam": "137720",
+    "strTeam": "Yokohama FC",
+    "strLeague": "Japanese J2 League"
+  },
+  "900": {
+    "idTeam": "134550",
+    "strTeam": "Dordrecht",
+    "strLeague": "Dutch Eerste Divisie"
+  },
+  "902": {
+    "idTeam": "134154",
+    "strTeam": "Chicago Fire",
+    "strLeague": "American Major League Soccer"
+  },
+  "909": {
+    "idTeam": "134153",
+    "strTeam": "LA Galaxy",
+    "strLeague": "American Major League Soccer"
+  },
+  "910": {
+    "idTeam": "134159",
+    "strTeam": "New England Revolution",
+    "strLeague": "American Major League Soccer"
+  },
+  "911": {
+    "idTeam": "134158",
+    "strTeam": "Real Salt Lake",
+    "strLeague": "American Major League Soccer"
+  },
+  "912": {
+    "idTeam": "134156",
+    "strTeam": "New York Red Bulls",
+    "strLeague": "American Major League Soccer"
+  },
+  "929": {
+    "idTeam": "138115",
+    "strTeam": "FC Seoul",
+    "strLeague": "South Korean K League 1"
+  },
+  "937": {
+    "idTeam": "134114",
+    "strTeam": "Porto",
+    "strLeague": "Portuguese Primeira Liga"
+  },
+  "969": {
+    "idTeam": "134635",
+    "strTeam": "Beijing Guoan",
+    "strLeague": "Chinese Super League"
+  },
+  "974": {
+    "idTeam": "134164",
+    "strTeam": "Mjällby",
+    "strLeague": "Swedish Allsvenskan"
+  },
+  "1009": {
+    "idTeam": "146781",
+    "strTeam": "Al Hilal Wau",
+    "strLeague": "_No League Soccer"
+  },
+  "1023": {
+    "idTeam": "139892",
+    "strTeam": "Montedio Yamagata",
+    "strLeague": "Japanese J2 League"
+  },
+  "1060": {
+    "idTeam": "135708",
+    "strTeam": "Sporting CP",
+    "strLeague": "Portuguese Primeira Liga"
+  },
+  "1073": {
+    "idTeam": "134157",
+    "strTeam": "San Jose Earthquakes",
+    "strLeague": "American Major League Soccer"
+  },
+  "1078": {
+    "idTeam": "137718",
+    "strTeam": "Vegalta Sendai",
+    "strLeague": "Japanese J2 League"
+  },
+  "1083": {
+    "idTeam": "139785",
+    "strTeam": "Daejeon Hana Citizen",
+    "strLeague": "South Korean K League 1"
+  },
+  "1084": {
+    "idTeam": "138113",
+    "strTeam": "Gimcheon Sangmu",
+    "strLeague": "South Korean K League 1"
+  },
+  "1086": {
+    "idTeam": "138110",
+    "strTeam": "Incheon United",
+    "strLeague": "South Korean K League 1"
+  },
+  "1087": {
+    "idTeam": "139078",
+    "strTeam": "Jeju SK",
+    "strLeague": "South Korean K League 1"
+  },
+  "1088": {
+    "idTeam": "138112",
+    "strTeam": "Pohang Steelers",
+    "strLeague": "South Korean K League 1"
+  },
+  "1090": {
+    "idTeam": "138117",
+    "strTeam": "Ulsan HD",
+    "strLeague": "South Korean K League 1"
+  },
+  "1097": {
+    "idTeam": "134280",
+    "strTeam": "Vitória",
+    "strLeague": "Brazilian Serie A"
+  },
+  "1110": {
+    "idTeam": "134728",
+    "strTeam": "Degerfors",
+    "strLeague": "Swedish Allsvenskan"
+  },
+  "1192": {
+    "idTeam": "138108",
+    "strTeam": "Gangwon FC",
+    "strLeague": "South Korean K League 1"
+  },
+  "1193": {
+    "idTeam": "141251",
+    "strTeam": "Kataller Toyama",
+    "strLeague": "Japanese J2 League"
+  },
+  "1256": {
+    "idTeam": "134303",
+    "strTeam": "Cambuur",
+    "strLeague": "Dutch Eredivisie"
+  },
+  "1270": {
+    "idTeam": "134690",
+    "strTeam": "Union Berlin",
+    "strLeague": "German Bundesliga"
+  },
+  "1303": {
+    "idTeam": "133818",
+    "strTeam": "Frosinone",
+    "strLeague": "Italian Serie A"
+  },
+  "1346": {
+    "idTeam": "134142",
+    "strTeam": "Philadelphia Union",
+    "strLeague": "American Major League Soccer"
+  },
+  "1420": {
+    "idTeam": "134155",
+    "strTeam": "Portland Timbers",
+    "strLeague": "American Major League Soccer"
+  },
+  "1472": {
+    "idTeam": "137996",
+    "strTeam": "Almere City",
+    "strLeague": "Dutch Eerste Divisie"
+  },
+  "1474": {
+    "idTeam": "134264",
+    "strTeam": "Fortuna Sittard",
+    "strLeague": "Dutch Eredivisie"
+  },
+  "1489": {
+    "idTeam": "139889",
+    "strTeam": "Machida Zelvia",
+    "strLeague": "Japanese J1 League"
+  },
+  "1509": {
+    "idTeam": "133701",
+    "strTeam": "Sassuolo",
+    "strLeague": "Italian Serie A"
+  },
+  "1553": {
+    "idTeam": "134147",
+    "strTeam": "Vancouver Whitecaps",
+    "strLeague": "American Major League Soccer"
+  },
+  "1557": {
+    "idTeam": "138109",
+    "strTeam": "Gwangju FC",
+    "strLeague": "South Korean K League 1"
+  },
+  "1619": {
+    "idTeam": "134695",
+    "strTeam": "RB Leipzig",
+    "strLeague": "German Bundesliga"
+  },
+  "1666": {
+    "idTeam": "147404",
+    "strTeam": "Al Ahli Amman",
+    "strLeague": "_No League Soccer"
+  },
+  "1667": {
+    "idTeam": "139208",
+    "strTeam": "Buriram United",
+    "strLeague": "Thai Premier League"
+  },
+  "1672": {
+    "idTeam": "134148",
+    "strTeam": "Toronto FC",
+    "strLeague": "American Major League Soccer"
+  },
+  "1861": {
+    "idTeam": "141245",
+    "strTeam": "Fujieda MYFC",
+    "strLeague": "Japanese J2 League"
+  },
+  "1863": {
+    "idTeam": "140509",
+    "strTeam": "Blaublitz Akita",
+    "strLeague": "Japanese J2 League"
+  },
+  "1865": {
+    "idTeam": "150222",
+    "strTeam": "Tochigi City",
+    "strLeague": "Japanese J2 League"
+  },
+  "1947": {
+    "idTeam": "134464",
+    "strTeam": "Chapecoense",
+    "strLeague": "Brazilian Serie A"
+  },
+  "1957": {
+    "idTeam": "137878",
+    "strTeam": "VPS",
+    "strLeague": "Finnish Veikkausliiga"
+  },
+  "2111": {
+    "idTeam": "136854",
+    "strTeam": "Famalicao",
+    "strLeague": "Portuguese Primeira Liga"
+  },
+  "2194": {
+    "idTeam": "138411",
+    "strTeam": "Elversberg",
+    "strLeague": "German Bundesliga"
+  },
+  "2216": {
+    "idTeam": "134640",
+    "strTeam": "Shanghai Port",
+    "strLeague": "Chinese Super League"
+  },
+  "2331": {
+    "idTeam": "135723",
+    "strTeam": "KFUM-Kameratene Oslo",
+    "strLeague": "Norwegian Eliteserien"
+  },
+  "2469": {
+    "idTeam": "141181",
+    "strTeam": "Mirassol",
+    "strLeague": "Brazilian Serie A"
+  },
+  "2585": {
+    "idTeam": "136050",
+    "strTeam": "Los Angeles FC",
+    "strLeague": "American Major League Soccer"
+  },
+  "2605": {
+    "idTeam": "137835",
+    "strTeam": "Al Wasl",
+    "strLeague": "UAE Pro League"
+  },
+  "2705": {
+    "idTeam": "137699",
+    "strTeam": "Inter Miami",
+    "strLeague": "American Major League Soccer"
+  },
+  "2706": {
+    "idTeam": "137700",
+    "strTeam": "Nashville SC",
+    "strLeague": "American Major League Soccer"
+  },
+  "2734": {
+    "idTeam": "134736",
+    "strTeam": "Bragantino",
+    "strLeague": "Brazilian Serie A"
+  },
+  "1026400": {
+    "idTeam": "136832",
+    "strTeam": "Västerås",
+    "strLeague": "Swedish Allsvenskan"
+  },
+  "1029209": {
+    "idTeam": "134234",
+    "strTeam": "Venezia",
+    "strLeague": "Italian Serie A"
+  },
+  "1042694": {
+    "idTeam": "147062",
+    "strTeam": "St. Louis City SC",
+    "strLeague": "American Major League Soccer"
+  },
+  "2064951": {
+    "idTeam": "141149",
+    "strTeam": "Gnistan",
+    "strLeague": "Finnish Veikkausliiga"
+  }
+}

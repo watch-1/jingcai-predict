@@ -1,0 +1,15 @@
+node_modules/
+data/live-stats/
+data/news-images/
+data/crests/
+data/league-tables/
+data/*.db
+dist/
+backups/
+screenshots/
+*.apk
+server.log
+.env
+.env.*
+android/build/
+android/.gradle/

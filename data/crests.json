@@ -1,0 +1,1132 @@
+{
+  "source": "thesportsdb+api-football",
+  "verified": "2026-10-15",
+  "teams": {
+    "1": {
+      "en": "Arsenal",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/uyhbfe1612467038.png",
+      "afTeamId": 42
+    },
+    "2": {
+      "en": "Aston Villa",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/uwzw561787679026.png",
+      "afTeamId": 66
+    },
+    "7": {
+      "en": "Chelsea",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/pbf4ul1782638263.png",
+      "afTeamId": 49
+    },
+    "8": {
+      "en": "Crystal Palace",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ia6i3m1656014992.png",
+      "afTeamId": 52
+    },
+    "9": {
+      "en": "Everton",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/eqayrf1523184794.png",
+      "afTeamId": 45
+    },
+    "10": {
+      "en": "Fulham",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xwwvyt1448811086.png",
+      "afTeamId": 36
+    },
+    "11": {
+      "en": "Liverpool",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/kfaher1737969724.png",
+      "afTeamId": 40
+    },
+    "12": {
+      "en": "Manchester City",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vwpvry1467462651.png",
+      "afTeamId": 50
+    },
+    "13": {
+      "en": "Manchester United",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xzqdr11517660252.png",
+      "afTeamId": 33
+    },
+    "14": {
+      "en": "Middlesbrough"
+    },
+    "15": {
+      "en": "Newcastle",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/lhwuiz1621593302.png",
+      "afTeamId": 34
+    },
+    "17": {
+      "en": "Portsmouth",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/j13pfe1601726274.png"
+    },
+    "18": {
+      "en": "Southampton",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ggqtd01621593274.png"
+    },
+    "19": {
+      "en": "Tottenham Hotspur",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/dfyfhl1604094109.png",
+      "zh": "托特纳姆",
+      "afTeamId": 47
+    },
+    "26": {
+      "en": "Genoa",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/52s8dn1655553600.png"
+    },
+    "30": {
+      "en": "Elche",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/e4vaw51655594332.png"
+    },
+    "33": {
+      "en": "Levante",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xwtxsx1473503739.png"
+    },
+    "44": {
+      "en": "Coventry",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/uxyqys1424033798.png"
+    },
+    "48": {
+      "en": "Ipswich",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/mdj1ey1634670785.png"
+    },
+    "49": {
+      "en": "Leeds",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/jcgrml1756649030.png"
+    },
+    "55": {
+      "en": "Queens Park Rangers",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/l4qscx1601721022.png"
+    },
+    "59": {
+      "en": "Stoke City"
+    },
+    "60": {
+      "en": "Sunderland",
+      "zh": "桑德兰",
+      "afTeamId": 746,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/tprtus1448813498.png"
+    },
+    "62": {
+      "en": "West Ham",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/yutyxs1467459956.png"
+    },
+    "67": {
+      "en": "Bournemouth",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/y08nak1534071116.png",
+      "afTeamId": 35
+    },
+    "69": {
+      "en": "Brentford",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/grv1aw1546453779.png"
+    },
+    "76": {
+      "en": "Hull City",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/fbqqda1601726113.png"
+    },
+    "116": {
+      "en": "AC Milan",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/wvspur1448806617.png",
+      "afTeamId": 489
+    },
+    "117": {
+      "en": "Atalanta",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/qix5ku1780561327.png"
+    },
+    "118": {
+      "en": "Bologna",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/2qi1u31655592366.png"
+    },
+    "120": {
+      "en": "Cagliari",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/wvsvxt1447534471.png"
+    },
+    "122": {
+      "en": "Fiorentina",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/hc8nhu1656098030.png"
+    },
+    "123": {
+      "en": "Inter Milan",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ryhu6d1617113103.png"
+    },
+    "124": {
+      "en": "Juventus",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/uxf0gr1742983727.png",
+      "afTeamId": 496
+    },
+    "125": {
+      "en": "Lazio",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/rwqyvs1448806608.png"
+    },
+    "126": {
+      "en": "Lecce",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/j4vznr1567365249.png"
+    },
+    "130": {
+      "en": "Parma",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/6yiaxs1627406063.png"
+    },
+    "132": {
+      "en": "AS Roma",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/jwro2s1760820674.png"
+    },
+    "135": {
+      "en": "Udinese",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vwvstr1448806811.png"
+    },
+    "136": {
+      "en": "Torino",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xxprty1448806802.png"
+    },
+    "137": {
+      "en": "Bayern Munich",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/01ogkh1716960412.png"
+    },
+    "140": {
+      "en": "Borussia Dortmund",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/tqo8ge1716960353.png"
+    },
+    "141": {
+      "en": "Freiburg",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/urwtup1473453288.png"
+    },
+    "142": {
+      "en": "Hamburg",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/tvtppt1473453296.png"
+    },
+    "145": {
+      "en": "Kaiserslautern",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/jghax31740165513.png"
+    },
+    "146": {
+      "en": "Bayer Leverkusen",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/3x9k851726760113.png",
+      "afTeamId": 168
+    },
+    "147": {
+      "en": "Mainz",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/fhm9v51552134916.png"
+    },
+    "148": {
+      "en": "Monchengladbach",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/sysurw1473453380.png"
+    },
+    "151": {
+      "en": "Schalke 04",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/hnci291621593978.png"
+    },
+    "152": {
+      "en": "Stuttgart",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/yppyux1473454085.png"
+    },
+    "153": {
+      "en": "Werder Bremen",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/tkvqan1716960454.png"
+    },
+    "158": {
+      "en": "Hoffenheim",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/9hwvb21621593919.png",
+      "zh": "霍芬海姆",
+      "afTeamId": 167
+    },
+    "166": {
+      "en": "Koln",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/2j1sc91566049407.png"
+    },
+    "169": {
+      "en": "Paderborn",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/kddvva1566048058.png"
+    },
+    "170": {
+      "en": "Eintracht Frankfurt",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/rurwpy1473453269.png"
+    },
+    "171": {
+      "en": "Alaves",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/mfn99h1734673842.png"
+    },
+    "172": {
+      "en": "Atlético Madrid",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/0ulh3q1719984315.png"
+    },
+    "179": {
+      "en": "Lens",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/3pxoum1598797195.png"
+    },
+    "180": {
+      "en": "Lille",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/2giize1534005340.png"
+    },
+    "181": {
+      "en": "Lyon",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/blk9771656932845.png",
+      "afTeamId": 80
+    },
+    "182": {
+      "en": "Marseille",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/c6bazh1779212287.png",
+      "afTeamId": 81
+    },
+    "183": {
+      "en": "Metz",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/1iuew61688452857.png"
+    },
+    "184": {
+      "en": "Monaco",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/exjf5l1678808044.png"
+    },
+    "186": {
+      "en": "Nice",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/msy7ly1621593859.png"
+    },
+    "191": {
+      "en": "Strasbourg",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/b8k77w1766625501.png"
+    },
+    "192": {
+      "en": "Toulouse",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/17eqox1688449282.png"
+    },
+    "194": {
+      "en": "Le Havre",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/aikowk1546475003.png"
+    },
+    "198": {
+      "en": "Troyes",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/sl5kzg1766617559.png"
+    },
+    "208": {
+      "en": "Dijon",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/viin5f1547898121.png"
+    },
+    "211": {
+      "en": "Celtic",
+      "zh": "凯尔特人",
+      "afTeamId": 247,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/3uv1641758780002.png"
+    },
+    "225": {
+      "en": "Club Brugge",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/mz8y0q1771129880.png"
+    },
+    "241": {
+      "en": "AZ Alkmaar",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/wtqwvv1473534757.png"
+    },
+    "242": {
+      "en": "De Graafschap",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/36habq1718289995.png"
+    },
+    "243": {
+      "en": "Den Bosch",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/3ftbir1489836926.png"
+    },
+    "245": {
+      "en": "Feyenoord",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/uturtx1473534803.png"
+    },
+    "247": {
+      "en": "Heerenveen",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/surtsx1473534841.png"
+    },
+    "250": {
+      "en": "PSV Eindhoven",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xfsz6i1721297428.png"
+    },
+    "252": {
+      "en": "RKC Waalwijk",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/11v54c1659096848.png"
+    },
+    "253": {
+      "en": "Roda JC",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/nmlzx31601664391.png"
+    },
+    "254": {
+      "en": "Twente",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/rsrxrt1473534783.png"
+    },
+    "255": {
+      "en": "Utrecht",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/yuhha71625167104.png"
+    },
+    "256": {
+      "en": "Vitesse",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/wrptxp1473534864.png"
+    },
+    "257": {
+      "en": "Willem II",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ushlnc1666107465.png"
+    },
+    "260": {
+      "en": "Alverca",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/6ljryf1691990098.png"
+    },
+    "267": {
+      "en": "Benfica",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/hj4kyc1781152436.png",
+      "afTeamId": 211
+    },
+    "269": {
+      "en": "Braga",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/skbiwo1785775946.png",
+      "afTeamId": 217
+    },
+    "279": {
+      "en": "Besiktas",
+      "zh": "贝西克塔",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/svo05k1776827439.png",
+      "afTeamId": 549
+    },
+    "280": {
+      "en": "FC Copenhagen",
+      "zh": "哥本哈根",
+      "afTeamId": 400,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/styqtr1473535513.png"
+    },
+    "283": {
+      "en": "Galatasaray",
+      "zh": "加拉塔萨雷",
+      "afTeamId": 645,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/io7jk21767941298.png"
+    },
+    "286": {
+      "en": "Olympiacos",
+      "zh": "奥林匹亚",
+      "afTeamId": 553,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xckasq1721291508.png"
+    },
+    "297": {
+      "en": "HJK Helsinki",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/z43x021775498790.png"
+    },
+    "330": {
+      "en": "Molde",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/apziyg1534866527.png"
+    },
+    "335": {
+      "en": "Red Bull Salzburg",
+      "zh": "萨尔茨堡",
+      "afTeamId": 571,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/nc2cua1781541639.png"
+    },
+    "341": {
+      "en": "Vålerenga",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/e8c63s1764643725.png"
+    },
+    "401": {
+      "en": "Barcelona",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/wq9sir1639406443.png"
+    },
+    "505": {
+      "en": "Real Betis",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/2oqulv1663245386.png"
+    },
+    "506": {
+      "en": "Athletic Club",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/68w7fe1639408210.png"
+    },
+    "508": {
+      "en": "Celta Vigo",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xfjtku1690436219.png",
+      "afTeamId": 538
+    },
+    "510": {
+      "en": "Espanyol",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/867nzz1681703222.png"
+    },
+    "511": {
+      "en": "Getafe",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/eyh2891655594452.png",
+      "afTeamId": 546
+    },
+    "512": {
+      "en": "Málaga",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/upqyvr1473502952.png"
+    },
+    "534": {
+      "en": "Osasuna",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/rvspvt1473502960.png"
+    },
+    "537": {
+      "en": "PEC Zwolle",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/qpvqwy1473534822.png"
+    },
+    "538": {
+      "en": "Vitória de Guimarães",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/af52z61628855707.png"
+    },
+    "546": {
+      "en": "Albirex Niigata",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/l16fvz1590070788.png"
+    },
+    "547": {
+      "en": "Cerezo Osaka",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/a7oyde1706245108.png"
+    },
+    "549": {
+      "en": "Gamba Osaka",
+      "zh": "大阪钢巴"
+    },
+    "552": {
+      "en": "Kashiwa Reysol",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/mwnejb1578238986.png"
+    },
+    "553": {
+      "en": "Kawasaki Frontale",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/c6pot51578239112.png"
+    },
+    "554": {
+      "en": "Nagoya Grampus",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/a1ucr01706244426.png"
+    },
+    "555": {
+      "en": "Oita Trinita",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/kwyqsd1578239318.png"
+    },
+    "556": {
+      "en": "RB Omiya Ardija",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/5bcan31734626857.png"
+    },
+    "557": {
+      "en": "Sanfrecce Hiroshima",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/gsgkxj1590068965.png"
+    },
+    "560": {
+      "en": "Urawa Red Diamonds",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ce3lhk1578239741.png"
+    },
+    "561": {
+      "en": "Vissel Kobe",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/2axjch1578239819.png"
+    },
+    "562": {
+      "en": "Yokohama F Marinos",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/rgeshm1578240000.png"
+    },
+    "563": {
+      "en": "Atlético Mineiro",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/x5lixs1743742872.png"
+    },
+    "564": {
+      "en": "Athletico Paranaense",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/irzu1u1554237406.png"
+    },
+    "566": {
+      "en": "Botafogo",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/bs5mbw1733004596.png"
+    },
+    "567": {
+      "en": "Corinthians",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vvuvps1473538042.png"
+    },
+    "568": {
+      "en": "Coritiba",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ywwsyu1473538050.png"
+    },
+    "571": {
+      "en": "Flamengo",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/syptwx1473538074.png"
+    },
+    "572": {
+      "en": "Fluminense",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/stvvwp1473538082.png"
+    },
+    "575": {
+      "en": "Internacional",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/yprvxx1473538097.png"
+    },
+    "577": {
+      "en": "Palmeiras",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vsqwqp1473538105.png"
+    },
+    "581": {
+      "en": "Santos",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/j8xk9g1679447486.png"
+    },
+    "583": {
+      "en": "São Paulo",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/sxpupx1473538135.png"
+    },
+    "584": {
+      "en": "Vasco da Gama",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ynqlxo1630521109.png"
+    },
+    "586": {
+      "en": "KuPS",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/qmrrop1717396470.png"
+    },
+    "588": {
+      "en": "Inter Turku",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xoi4oo1738193128.png"
+    },
+    "600": {
+      "en": "IFK Göteborg",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ywyxtp1429470529.png"
+    },
+    "602": {
+      "en": "Kalmar",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/3tnu4i1688449562.png"
+    },
+    "606": {
+      "en": "Malmö",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/429jzd1779940315.png"
+    },
+    "612": {
+      "en": "Brann",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ovuad71690695412.png"
+    },
+    "613": {
+      "en": "Viking",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/9mzq961590148192.png"
+    },
+    "616": {
+      "en": "Fredrikstad",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/9se6qv1690695269.png"
+    },
+    "617": {
+      "en": "Tromsø",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/sb24al1764644259.png"
+    },
+    "619": {
+      "en": "Lillestrøm",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/txpuvv1448823342.png"
+    },
+    "664": {
+      "en": "Real Madrid",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vwvwrw1473502969.png"
+    },
+    "675": {
+      "en": "Real Sociedad",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vptvpr1473502986.png",
+      "afTeamId": 548
+    },
+    "676": {
+      "en": "Racing Santander",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/97kkiq1536575158.png"
+    },
+    "677": {
+      "en": "Sevilla",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vpsqqx1473502977.png"
+    },
+    "678": {
+      "en": "Valencia",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/dm8l6o1655594864.png"
+    },
+    "679": {
+      "en": "Villarreal",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vrypqy1473503073.png"
+    },
+    "686": {
+      "en": "Heracles Almelo",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vyyvss1473534851.png"
+    },
+    "744": {
+      "en": "Napoli",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/l8qyxv1742982541.png"
+    },
+    "751": {
+      "en": "Al-Ittihad",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/8n1t1j1755192418.png"
+    },
+    "784": {
+      "en": "Ventforet Kofu",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/z37pbr1590071044.png"
+    },
+    "785": {
+      "en": "Kyoto Sanga",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/5akmlf1590070888.png"
+    },
+    "791": {
+      "en": "Grêmio",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/uvpwyt1473538089.png"
+    },
+    "808": {
+      "en": "Augsburg",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xqyyvq1473453233.png"
+    },
+    "849": {
+      "en": "Rayo Vallecano",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/nzhu941655595465.png"
+    },
+    "873": {
+      "en": "Marítimo",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xlr0tw1656336618.png"
+    },
+    "884": {
+      "en": "Yokohama FC",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/k5f7kz1578240065.png"
+    },
+    "900": {
+      "en": "Dordrecht",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/2kfuzk1579463622.png"
+    },
+    "902": {
+      "en": "Chicago Fire",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/8xuc781639493166.png"
+    },
+    "903": {
+      "en": "Colorado Rapids",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/uppupv1473536412.png"
+    },
+    "904": {
+      "en": "Columbus Crew",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/dzs8cp1629059854.png"
+    },
+    "906": {
+      "en": "FC Dallas",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vxy8xy1602103187.png"
+    },
+    "909": {
+      "en": "Los Angeles Galaxy",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ysyysr1420227188.png"
+    },
+    "910": {
+      "en": "New England Revolution",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/1ula2l1639493143.png"
+    },
+    "911": {
+      "en": "Real Salt Lake",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/kkjlfa1556488022.png"
+    },
+    "912": {
+      "en": "New York Red Bulls",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/suytvy1473536462.png"
+    },
+    "929": {
+      "en": "FC Seoul",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/31z1zf1579473186.png"
+    },
+    "937": {
+      "en": "FC Porto",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xu47rb1628855600.png"
+    },
+    "969": {
+      "en": "Beijing Guoan",
+      "zh": "北京国安"
+    },
+    "974": {
+      "en": "Mjällby",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ruwqxv1430239112.png"
+    },
+    "1009": {
+      "en": "Al-Hilal",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/w0b80d1661656916.png"
+    },
+    "1023": {
+      "en": "Montedio Yamagata",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/e9nykx1639487487.png"
+    },
+    "1060": {
+      "en": "Sporting CP",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/5hiuk71783137875.png"
+    },
+    "1061": {
+      "en": "Torreense",
+      "zh": "托林斯",
+      "afTeamId": 4799,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/byn6c21659694982.png"
+    },
+    "1073": {
+      "en": "San Jose Earthquakes",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xyrqqt1420781048.png"
+    },
+    "1078": {
+      "en": "Vegalta Sendai",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/2xxh2c1578239899.png"
+    },
+    "1083": {
+      "en": "Daejeon Citizen",
+      "zh": "大田市民"
+    },
+    "1084": {
+      "en": "Gimcheon Sangmu",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/g4cjyk1609536787.png"
+    },
+    "1086": {
+      "en": "Incheon United",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/2no9nq1579473100.png"
+    },
+    "1087": {
+      "en": "Jeju United",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/hna7ae1736207131.png"
+    },
+    "1088": {
+      "en": "Pohang Steelers",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/63jst01769097748.png"
+    },
+    "1090": {
+      "en": "Ulsan Hyundai",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/0wooic1706533767.png"
+    },
+    "1097": {
+      "en": "Vitoria",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/tysrrx1473538156.png"
+    },
+    "1110": {
+      "en": "Degerfors",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/wrytvq1429977939.png"
+    },
+    "1136": {
+      "en": "Newcastle Jets",
+      "zh": "纽喷气机"
+    },
+    "1163": {
+      "en": "Lech Poznań",
+      "zh": "波兹南",
+      "afTeamId": 347,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/8zfxyx1685597440.png"
+    },
+    "1192": {
+      "en": "Gangwon FC",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/c4igx71579729617.png"
+    },
+    "1193": {
+      "en": "Kataller Toyama",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/wri77d1617289688.png"
+    },
+    "1256": {
+      "en": "Cambuur",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/b3rap31579463652.png"
+    },
+    "1270": {
+      "en": "Union Berlin",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/q0o5001599679795.png"
+    },
+    "1276": {
+      "en": "Sturm Graz",
+      "zh": "格风暴",
+      "afTeamId": 637,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ppg0j71578585847.png"
+    },
+    "1303": {
+      "en": "Frosinone",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/a7xa151603170120.png"
+    },
+    "1346": {
+      "en": "Philadelphia Union",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/gyznyo1602103682.png"
+    },
+    "1420": {
+      "en": "Portland Timbers",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/skm30j1557953559.png"
+    },
+    "1472": {
+      "en": "Almere City",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/qhxtg31579206207.png"
+    },
+    "1474": {
+      "en": "Fortuna Sittard",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/aqr7it1685596947.png"
+    },
+    "1489": {
+      "en": "Machida Zelvia",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/99zl6k1590070905.png"
+    },
+    "1509": {
+      "en": "Sassuolo",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xystvp1448806138.png"
+    },
+    "1553": {
+      "en": "Vancouver Whitecaps",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/tpwxpy1473536521.png"
+    },
+    "1557": {
+      "en": "Gwangju FC",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/uuzr4x1579473084.png"
+    },
+    "1558": {
+      "en": "Bahia",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/xuvtsv1473539308.png"
+    },
+    "1560": {
+      "en": "Al-Nassr",
+      "zh": "利雅胜利",
+      "afTeamId": 2939,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/84yvqi1748524565.png"
+    },
+    "1583": {
+      "en": "Orlando City",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/qyppxw1423832326.png"
+    },
+    "1587": {
+      "en": "Heidenheim",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/lbj7g01608236988.png"
+    },
+    "1619": {
+      "en": "RB Leipzig",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/zjgapo1594244951.png"
+    },
+    "1666": {
+      "en": "Al Ahli Jeddah",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/1bbtgb1755192301.png"
+    },
+    "1667": {
+      "en": "Buriram United",
+      "zh": "布里兰"
+    },
+    "1672": {
+      "en": "Toronto FC",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/rsxyrr1473536512.png"
+    },
+    "1861": {
+      "en": "Fujieda MYFC",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/4vjy3y1617289642.png"
+    },
+    "1863": {
+      "en": "Blaublitz Akita",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/mi64031706246538.png"
+    },
+    "1865": {
+      "en": "Tochigi City",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/29x1qq1734321870.png"
+    },
+    "1947": {
+      "en": "Chapecoense",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/wy0e1i1765900601.png"
+    },
+    "1957": {
+      "en": "VPS",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vpavez1578953729.png"
+    },
+    "2111": {
+      "en": "Famalicao",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/a3f4er1563653256.png"
+    },
+    "2194": {
+      "en": "Elversberg",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/z079go1677573926.png"
+    },
+    "2216": {
+      "en": "SHANGHAI SIPG",
+      "zh": "上海海港",
+      "afAliases": [
+        "Shanghai Port",
+        "Shanghai SIPG"
+      ]
+    },
+    "2331": {
+      "en": "KFUM-Kameratene Oslo",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/981eyj1690696173.png"
+    },
+    "2469": {
+      "en": "Mirassol",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/pw8uo11765900737.png"
+    },
+    "2484": {
+      "en": "Union Saint-Gilloise",
+      "zh": "圣吉联合",
+      "afTeamId": 1393,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ljszp41654601742.png"
+    },
+    "2542": {
+      "en": "Universitatea Craiova",
+      "zh": "克拉约瓦",
+      "afTeamId": 632,
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/1jdz2y1579793710.png"
+    },
+    "2585": {
+      "en": "Los Angeles FC",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/7nbj2a1602103638.png"
+    },
+    "2605": {
+      "en": "Al Wasl",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/s3o3ew1578859398.png"
+    },
+    "2705": {
+      "en": "Inter Miami",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/m4it3e1602103647.png"
+    },
+    "2706": {
+      "en": "Nashville SC",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/znrwt71602103062.png"
+    },
+    "2734": {
+      "en": "Bragantino",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/2p7tl41701423595.png"
+    },
+    "1026400": {
+      "en": "Västerås",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/mscha61644586515.png"
+    },
+    "1029209": {
+      "en": "Venezia",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/vbiget1781026964.png"
+    },
+    "1035899": {
+      "en": "FC Anyang",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/0tens91589557588.png"
+    },
+    "1035930": {
+      "en": "Remo",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/u36jfy1579341655.png"
+    },
+    "1039249": {
+      "en": "Monza",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/bxearg1603170113.png"
+    },
+    "1040070": {
+      "en": "Como",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/02x81t1627405841.png"
+    },
+    "1040074": {
+      "en": "AC Oulu",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/fj51wx1785822404.png"
+    },
+    "1042693": {
+      "en": "Iwaki FC",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/w3igvh1638823138.png"
+    },
+    "1042694": {
+      "en": "St Louis City",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/22wanp1674118724.png"
+    },
+    "2064951": {
+      "en": "Gnistan",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/fakswa1615842508.png"
+    },
+    "20": {
+      "en": "Brighton and Hove Albion",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/ywypts1448810904.png",
+      "afTeamId": 51
+    },
+    "21": {
+      "en": "Nottingham Forest",
+      "badge": "https://r2.thesportsdb.com/images/media/team/badge/sar2y41781740886.png",
+      "afTeamId": 65
+    },
+    "16": {
+      "en": "Norwich"
+    },
+    "42": {
+      "en": "Burnley"
+    },
+    "51": {
+      "en": "Millwall"
+    },
+    "52": {
+      "en": "Nottingham Forest"
+    },
+    "64": {
+      "en": "Wolves"
+    },
+    "99": {
+      "en": "Lincoln"
+    },
+    "149": {
+      "en": "Nurnberg"
+    },
+    "164": {
+      "en": "Cottbus"
+    },
+    "195": {
+      "en": "Le Mans"
+    },
+    "197": {
+      "en": "Montpellier"
+    },
+    "240": {
+      "en": "Ajax"
+    },
+    "246": {
+      "en": "Groningen"
+    },
+    "289": {
+      "en": "Rosenborg"
+    },
+    "294": {
+      "en": "Djurgarden"
+    },
+    "393": {
+      "en": "Gil Vicente"
+    },
+    "459": {
+      "en": "Angers"
+    },
+    "476": {
+      "en": "Rodez"
+    },
+    "509": {
+      "en": "Deportivo La Coruna"
+    },
+    "545": {
+      "en": "FC Oss"
+    },
+    "550": {
+      "en": "Jubilo Iwata"
+    },
+    "551": {
+      "en": "Kashima"
+    },
+    "558": {
+      "en": "Shimizu"
+    },
+    "608": {
+      "en": "Elfsborg"
+    },
+    "610": {
+      "en": "Hacken"
+    },
+    "618": {
+      "en": "Bodo Glimt"
+    },
+    "750": {
+      "en": "Lorient"
+    },
+    "753": {
+      "en": "Sydney"
+    },
+    "786": {
+      "en": "Avispa Fukuoka"
+    },
+    "795": {
+      "en": "Universidad de Chile"
+    },
+    "860": {
+      "en": "Jeonbuk"
+    },
+    "872": {
+      "en": "Go Ahead Eagles"
+    },
+    "888": {
+      "en": "Brommapojkarna"
+    },
+    "1077": {
+      "en": "Melbourne Victory"
+    },
+    "1118": {
+      "en": "Sarpsborg"
+    },
+    "1135": {
+      "en": "Central Coast Mariners"
+    },
+    "1137": {
+      "en": "Perth Glory"
+    },
+    "1475": {
+      "en": "Telstar"
+    },
+    "1615": {
+      "en": "V-varen Nagasaki"
+    },
+    "1686": {
+      "en": "Western Sydney Wanderers"
+    },
+    "1917": {
+      "en": "Sirius"
+    },
+    "2437": {
+      "en": "Bucheon"
+    },
+    "2717": {
+      "en": "Port FC"
+    },
+    "816": {
+      "en": "Excelsior"
+    },
+    "1025286": {
+      "en": "Macarthur"
+    },
+    "2078898": {
+      "en": "Tegevajaro Miyazaki"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- APP 通过明文 HTTP 访问构建时固定的 API_BASE 服务器（如 http://120.77.152.74:8088）。改用 HTTPS 后可关闭 cleartext。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors><certificates src="system" /></trust-anchors>
+    </base-config>
+</network-security-config>

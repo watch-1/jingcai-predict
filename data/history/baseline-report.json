@@ -1,0 +1,129 @@
+{
+  "total": 1857,
+  "dateRange": {
+    "from": "2026-04-12",
+    "to": "2026-10-11"
+  },
+  "outcomeDistPct": {
+    "H": 43.3,
+    "D": 25.6,
+    "A": 31
+  },
+  "train": {
+    "name": "train",
+    "n": 1485,
+    "hitRate": 52.66,
+    "roi": -11.57,
+    "byOutcome": {
+      "H": {
+        "n": 980,
+        "hitRate": 53.2
+      },
+      "D": {
+        "n": 4,
+        "hitRate": 75
+      },
+      "A": {
+        "n": 501,
+        "hitRate": 51.5
+      }
+    }
+  },
+  "test": {
+    "name": "test",
+    "n": 372,
+    "hitRate": 57.8,
+    "roi": -6.16,
+    "byOutcome": {
+      "H": {
+        "n": 236,
+        "hitRate": 60.6
+      },
+      "D": {
+        "n": 1,
+        "hitRate": 0
+      },
+      "A": {
+        "n": 135,
+        "hitRate": 53.3
+      }
+    }
+  },
+  "naiveOnTest": [
+    {
+      "flag": "H",
+      "hitRate": 46.77
+    },
+    {
+      "flag": "D",
+      "hitRate": 23.92
+    },
+    {
+      "flag": "A",
+      "hitRate": 29.3
+    }
+  ],
+  "topLeaguesOnTest": [
+    {
+      "league": "欧国联",
+      "n": 50,
+      "hitRate": 60
+    },
+    {
+      "league": "西甲",
+      "n": 32,
+      "hitRate": 50
+    },
+    {
+      "league": "意甲",
+      "n": 28,
+      "hitRate": 42.9
+    },
+    {
+      "league": "德甲",
+      "n": 24,
+      "hitRate": 50
+    },
+    {
+      "league": "英超",
+      "n": 24,
+      "hitRate": 41.7
+    },
+    {
+      "league": "法甲",
+      "n": 17,
+      "hitRate": 58.8
+    },
+    {
+      "league": "巴甲",
+      "n": 17,
+      "hitRate": 64.7
+    },
+    {
+      "league": "国际赛",
+      "n": 13,
+      "hitRate": 84.6
+    },
+    {
+      "league": "欧冠",
+      "n": 12,
+      "hitRate": 75
+    },
+    {
+      "league": "美职",
+      "n": 12,
+      "hitRate": 58.3
+    },
+    {
+      "league": "亚运男足",
+      "n": 12,
+      "hitRate": 75
+    },
+    {
+      "league": "日职",
+      "n": 11,
+      "hitRate": 63.6
+    }
+  ],
+  "note": "Baseline = always pick the outcome with highest de-vigged implied probability from published 胜平负 odds. ROI assumes flat 1 unit stakes at those odds; tax/caps ignored."
+}

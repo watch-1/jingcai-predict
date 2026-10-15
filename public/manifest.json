@@ -1,0 +1,36 @@
+{
+  "name": "竞彩预测",
+  "short_name": "竞彩预测",
+  "description": "竞彩足球赛程、赔率隐含概率预测与开奖结果（仅供参考，理性购彩 · 本站不提供投注服务）",
+  "lang": "zh-CN",
+  "start_url": "./index.html#/home",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f2f4f8",
+  "theme_color": "#1a62f0",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": [
+    "sports",
+    "news"
+  ]
+}
