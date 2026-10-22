@@ -1588,15 +1588,21 @@ function twoFoldCard(ms) {
 
 function ring(v, opts) {
   const muted = !!(opts && opts.muted);
-  const c = 2 * Math.PI * 23;
+  const sm = !!(opts && opts.sm);
+  const r = sm ? 17 : 23;
+  const vb = sm ? 40 : 54;
+  const cx = vb / 2;
+  const sw = sm ? 4 : 5;
+  const c = 2 * Math.PI * r;
   const stroke = muted ? '#98a1b3' : (v >= .6 ? '#e03e36' : v >= .45 ? '#1565e0' : '#98a1b3');
-  const cls = muted ? 'ring ring-muted' : 'ring';
-  return `<div class="${cls}"><svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="23" stroke="#e9f0ff" stroke-width="5" fill="none"/><circle cx="27" cy="27" r="23" stroke="${stroke}" stroke-width="5" fill="none" stroke-linecap="round" stroke-dasharray="${(c * v).toFixed(1)} ${c.toFixed(1)}"/></svg><span class="num">${Math.round(v * 100)}</span></div>`;
+  const cls = (muted ? 'ring ring-muted' : 'ring') + (sm ? ' ring-sm' : '');
+  return `<div class="${cls}"><svg viewBox="0 0 ${vb} ${vb}"><circle cx="${cx}" cy="${cx}" r="${r}" stroke="#e9f0ff" stroke-width="${sw}" fill="none"/><circle cx="${cx}" cy="${cx}" r="${r}" stroke="${stroke}" stroke-width="${sw}" fill="none" stroke-linecap="round" stroke-dasharray="${(c * v).toFixed(1)} ${c.toFixed(1)}"/></svg><span class="num">${Math.round(v * 100)}</span></div>`;
 }
 function ringCluster(v, opts) {
   const muted = !!(opts && opts.muted);
   const lab = (opts && opts.label != null) ? opts.label : '信心';
-  return `<div class="pr-conf-cluster${muted ? ' muted' : ''}"><span class="pr-conf-lab">${esc(lab)}</span>${ring(v, opts)}</div>`;
+  const sm = !!(opts && opts.sm);
+  return `<div class="pr-conf-cluster${muted ? ' muted' : ''}${sm ? ' sm' : ''}"><span class="pr-conf-lab">${esc(lab)}</span>${ring(v, { muted, sm })}</div>`;
 }
 
 function shortReason(m, pr) {
@@ -1673,11 +1679,10 @@ function predCardHtml(m, pr, i, opts) {
     <div class="pr-quiet-head">
       <span class="rank ${i < 3 && !isWatch && !isPending ? 'r' + (i + 1) : ''} num">${i + 1}</span>
       <div class="pr-meta">${lgTag(m)}<span>${esc(m.num)} · ${esc(m.date.slice(5))} ${esc(m.time)}</span>${m.sample ? '<span class="sample-tag">示例</span>' : ''}</div>
-      ${ringCluster(pr.conf, { muted: isWatch || isPending, label: confLab })}
+      ${ringCluster(pr.conf, { muted: isWatch || isPending, label: confLab, sm: true })}
     </div>
     <div class="pr-quiet-body">
       <div class="pr-teams">${badge(m.home, 'sm', m.homeLogo)}<span class="nm">${esc(m.home)}</span><span class="vs">vs</span><span class="nm">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div>
-      <div class="pr-quiet-odds">${predOddsMini(m, pr)}</div>
     </div></div>`;
   }
   return `<div class="card pr-card${cardCls}" data-go="#/match/${encodeURIComponent(m.id)}">
@@ -1921,6 +1926,7 @@ function pagePredict() {
     // legacy chips
     return x.pr.lvl && x.pr.lvl[1] === S.prFilter;
   });
+  h += `<div id="prBody" class="pr-body">`;
   h += `<div class="list-meta"><span>点击场次查看完整简报与依据</span><span>${list.length} 场</span></div>`;
   if (!list.length) {
     h += empty('该筛选暂无场次，可切换「全部」或等待情报简报加载。', '<button class="btn ghost sm" data-pf="全部">查看全部</button>', '暂无场次');
@@ -1940,11 +1946,15 @@ function pagePredict() {
       const items = byDay.get(d);
       const md = (d && d.length >= 10) ? d.slice(5) : d;
       const lab = `${dayName(d)} ${md}`;
+      const cards = items.map(({ m, pr }, i) =>
+        `<div class="pr-shell">${predCardHtml(m, pr, i, { quiet: true })}</div>`
+      ).join('');
       return `<div class="pr-day"><div class="pr-day-h"><span class="pr-day-lab">${esc(lab)}</span><span>${items.length} 场</span></div>`
-        + `<div class="grid">${items.map(({ m, pr }, i) => predCardHtml(m, pr, i, { quiet: true })).join('')}</div></div>`;
+        + `<div class="grid">${cards}</div></div>`;
     }).join('');
   }
   if (nPending) h += `<p class="note" style="margin:10px 14px 4px">正在加载 ${nPending} 场情报简报…请稍候自动刷新。</p>`;
+  h += `</div>`;
   return h + foot();
 }
 
