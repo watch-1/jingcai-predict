@@ -6536,6 +6536,13 @@ async function loadKbPackItems(packId, force) {
   return j;
 }
 
+function syncKbCanvasEmptyHint() {
+  const hint = document.getElementById('kb-canvas-hint');
+  if (!hint) return;
+  const n = ((S.kb && S.kb.packItems && S.kb.packItems.items) || []).length;
+  hint.classList.toggle('hidden', n > 0);
+}
+
 function destroyKbCanvas() {
   if (S.kb && S.kb.canvasInst) {
     try { S.kb.canvasInst.flushChange(); } catch (_) {}
@@ -6605,10 +6612,12 @@ function mountKbPackCanvas(packId) {
         }
         S.kb.picker = null;
         if (S.kb.canvasInst) S.kb.canvasInst.removeItem(id);
+        syncKbCanvasEmptyHint();
         toast('已删除');
       } catch (err) { toast(err.message || '删除失败'); }
     },
   });
+  syncKbCanvasEmptyHint();
 }
 
 /** Load KB data for current route only when cache miss — avoids render↔fetch infinite loop (1.9.131). */
@@ -6702,7 +6711,7 @@ function pageKbPack(packId) {
   }
   h += `<div class="kb-canvas-page">
     <div id="kb-canvas-mount" class="kb-canvas-mount" aria-label="知识画布"></div>
-    ${!items.length ? '<p class="kb-canvas-hint">画布为空，点右下角「添加节点」开始。</p>' : ''}
+    <p id="kb-canvas-hint" class="kb-canvas-hint${items.length ? ' hidden' : ''}">画布为空，点击右下角「添加节点」开始。</p>
     <button type="button" class="kb-canvas-fab" data-act="kbAddNode" data-pack="${esc(packId)}">添加节点</button>
   </div>`;
   return h + foot();
@@ -7999,9 +8008,13 @@ function predictPlatformWrapActive(r, viewEl) {
 function viewWrapClass(r, viewEl) {
   const isTab = TABS.includes(r.name);
   const prPlat = predictPlatformWrapActive(r, viewEl);
-  let wrap = r.name === 'results' ? ' rs-wrap' : (r.name === 'match' ? ' md-wrap' : (prPlat ? ' pr-wrap' : ''));
-  // 1.9.137: 赛后复盘 — no layered card shell on content pane (wide tables must not clip)
-  if (r.name === 'match' && detailTabOf(String(r.arg || '')) === 'review') wrap += ' md-wrap--review';
+  let wrap = '';
+  if (r.name === 'results') wrap = ' rs-wrap';
+  else if (r.name === 'match') {
+    // 1.9.142: 赛后复盘不用 md-wrap 海军蓝内容包裹（宽表不被裁切）；其它 Tab 保持 md-wrap
+    const isReview = detailTabOf(String(r.arg || '')) === 'review';
+    wrap = isReview ? ' md-wrap--review' : ' md-wrap';
+  } else if (prPlat) wrap = ' pr-wrap';
   if (r.name === 'kb') {
     const kp = String(r.arg || '').split('/').filter(Boolean);
     if (kp[0] === 'pack') wrap += ' kb-wrap';
@@ -8508,6 +8521,7 @@ document.addEventListener('click', async e => {
             else items.unshift(j.item);
             S.kb.packItems.items = items;
             if (S.kb.canvasInst) S.kb.canvasInst.upsertItem(j.item);
+            syncKbCanvasEmptyHint();
           }
         } else {
           const payload = { title, body };
@@ -8521,6 +8535,7 @@ document.addEventListener('click', async e => {
             S.kb.packItems.items = [j.item, ...(S.kb.packItems.items || []).filter(x => x.id !== j.item.id)];
             if (S.kb.canvasInst) S.kb.canvasInst.upsertItem(j.item);
             else render({ force: true });
+            syncKbCanvasEmptyHint();
           }
         }
         S.kb.picker = null;
