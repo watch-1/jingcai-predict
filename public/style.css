@@ -740,8 +740,14 @@ body.me-drawer-on { overflow: hidden; }
   border-top: 0;
   box-shadow: 0 1px 0 rgba(0,0,0,.06);
 }
+.view.sub.md-wrap .dtabs button {
+  min-height: 38px;
+  padding: 6px 8px 5px;
+  font-size: 13px;
+  line-height: 1.3;
+}
 .view.sub.md-wrap .detail-pane {
-  padding: 8px 0 16px;
+  padding: 4px 0 16px;
   min-height: 40vh;
   background: transparent;
 }
@@ -814,40 +820,47 @@ html[data-theme="pitch"] .pmr-report .pmr-wrap {
 
 /* ---------- detail ---------- */
 .hero { background: var(--pri-g); color: #fff; padding: 6px 16px 22px; text-align: center; }
-/* 1.9.148: match detail — compact edge hero (懂球帝式贴顶小控件) */
+/* 1.9.149: match detail — toolbar + meta/teams share one tight stack under safe area */
 .hero.hero--edge {
-  padding: calc(var(--sat) + 26px) 12px 14px;
+  --hero-edge-toolbar: 26px;
+  padding: calc(var(--sat) + var(--hero-edge-toolbar) + 2px) 10px 6px;
   position: relative;
 }
-.hero.hero--edge-min { min-height: calc(var(--sat) + 40px); padding-bottom: 10px; }
+.hero.hero--edge-min { min-height: calc(var(--sat) + var(--hero-edge-toolbar, 26px) + 8px); padding-bottom: 6px; }
 .hero-edge-nav {
   position: absolute; left: 0; right: 0; top: 0;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: calc(var(--sat) + 1px) 4px 0; z-index: 3;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  height: calc(var(--sat) + var(--hero-edge-toolbar));
+  padding: calc(var(--sat) + 1px) 6px 0; box-sizing: border-box;
+  z-index: 3;
   pointer-events: none;
 }
 .hero-edge-nav .ic-btn.hero-ic,
 .hero-edge-nav .hero-edge-r,
 .hero-edge-nav .fav-btn { pointer-events: auto; }
 .hero-edge-nav .ic-btn.hero-ic {
-  width: 32px; height: 32px; color: #fff;
+  width: 28px; height: 28px; color: #fff;
   background: rgba(0, 0, 0, .1);
   border-radius: 50%;
 }
-.hero-edge-nav .ic-btn.hero-ic svg { width: 20px; height: 20px; }
+.hero-edge-nav .ic-btn.hero-ic svg { width: 18px; height: 18px; }
 .hero-edge-nav .ic-btn.hero-ic:active { background: rgba(0, 0, 0, .22); }
-.hero-edge-r { display: flex; align-items: center; justify-content: flex-end; min-width: 32px; }
+.hero-edge-r { display: flex; align-items: center; justify-content: flex-end; min-width: 28px; }
 .hero-edge-nav .fav-btn {
-  padding: 3px 8px; font-size: 11px; border-radius: 12px; gap: 3px;
+  padding: 2px 7px; font-size: 10px; border-radius: 11px; gap: 2px; line-height: 1.2;
 }
-.hero-edge-nav .fav-btn svg { width: 13px; height: 13px; }
+.hero-edge-nav .fav-btn svg { width: 12px; height: 12px; }
 .view.sub.md-wrap .hero.hero--edge { margin-top: 0; }
-.hero .meta { font-size: 12px; opacity: .85; display: flex; justify-content: center; gap: 8px; align-items: center; }
-.hero .teams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: 8px; }
-.hero .tm { display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 600; font-size: 16px; min-width: 0; }
+.hero.hero--edge .meta { margin-top: 0; line-height: 1.25; }
+.hero.hero--edge .badge.lg,
+.hero.hero--edge .tm .badge.lg.crest { width: 56px; height: 56px; font-size: 20px; border-width: 2px; }
+.hero .meta { font-size: 11px; opacity: .85; display: flex; justify-content: center; gap: 6px; align-items: center; }
+.hero .teams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: 4px; }
+.hero .tm { display: flex; flex-direction: column; align-items: center; gap: 4px; font-weight: 600; font-size: 15px; min-width: 0; }
 .hero .tm span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hero .tm small { font-size: 11px; opacity: .75; font-weight: 400; }
-.hero .mid .vs { font-size: 26px; font-weight: 800; opacity: .9; }
+.hero .mid .vs { font-size: 22px; font-weight: 800; opacity: .9; }
+.hero.hero--edge .mid small { font-size: 11px; }
 .hero .mid .score { font-size: 34px; font-weight: 800; }
 .hero .mid small { display: block; font-size: 12px; opacity: .8; }
 .fav-btn { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 16px; background: rgba(255,255,255,.18); color: #fff; font-size: 13px; }

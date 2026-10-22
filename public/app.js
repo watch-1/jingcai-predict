@@ -8131,9 +8131,7 @@ function render(opts) {
   if (!PAGES[r.name]) return go('#/home', true);
   if (PROTECTED.includes(r.name) && !loggedIn()) return go('#/login', true);
   if ((r.name === 'login' || r.name === 'register') && loggedIn()) {
-    go('#/home', true);
-    openMeDrawer();
-    return;
+    return go('#/home', true);
   }
   const isTab = isShellTab(r.name);
   const v = $('#view');
@@ -9019,7 +9017,6 @@ async function afterAuth(res, isNew) {
   S.memberCatalog = null;
   toast(isNew ? '注册成功，欢迎你！' : `欢迎回来，${res.user.nickname}` + (lp.length || lf.length ? '（本机数据已同步）' : ''));
   go('#/home', true);
-  openMeDrawer();
 }
 document.addEventListener('submit', async e => {
   e.preventDefault(); const f = e.target;
