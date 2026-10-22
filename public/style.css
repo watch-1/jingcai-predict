@@ -503,6 +503,45 @@ html[data-ready="1"] .app {
   box-shadow: 0 2px 10px rgba(0, 0, 0, .22), 0 1px 2px rgba(0, 0, 0, .12);
 }
 
+/* 1.9.137 赛后复盘：去掉内容区双层海军蓝/白卡包裹，宽表可横滑、不被圆角裁切 */
+.view.sub.md-wrap.md-wrap--review .detail-pane--review {
+  padding: 4px 0 16px;
+  overflow-x: visible;
+}
+.view.sub.md-wrap.md-wrap--review .detail-pane--review > .dsec {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-radius: 0;
+  box-shadow: none !important;
+  border: 0;
+  background: transparent !important;
+  overflow: visible;
+}
+.view.sub.md-wrap.md-wrap--review .detail-pane--review .pr-src-bar {
+  margin: 8px 12px 0;
+}
+.pmr-report .pmr-wrap {
+  margin: 0;
+  padding: 0;
+  box-shadow: none !important;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  overflow: visible;
+}
+html[data-theme="pitch"] .pmr-report .pmr-wrap {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
+.view.sub.md-wrap.md-wrap--review .detail-pane--review .pmr-table-wrap {
+  margin-left: -4px;
+  margin-right: -4px;
+  max-width: none;
+}
+
 /* ---------- detail ---------- */
 .hero { background: var(--pri-g); color: #fff; padding: 6px 16px 22px; text-align: center; }
 .hero .meta { font-size: 12px; opacity: .85; display: flex; justify-content: center; gap: 8px; align-items: center; }
@@ -2372,7 +2411,7 @@ html[data-theme="pitch"] .pmr-ai-unit { color: var(--t3); }
 .pmr-recent-list span { font-size: 11px; color: var(--t3); }
 .pmr-recent-list small { font-size: 12px; color: var(--t2); line-height: 1.4; }
 .pmr-loading .spinner { margin: 12px auto; }
-.pmr-report .pmr-wrap { margin: 0; box-shadow: none; border: 0; padding: 0; background: transparent; }
+/* pmr-report flatten: see md-wrap--review block above */
 
 /* ---------- 1.9.22 本场球员 (1.9.58: also on 赛后复盘) ---------- */
 .fp-sec {
