@@ -5017,6 +5017,30 @@ html[data-edge="1"] .auth-hd {
   background-clip: border-box;
 }
 
+/* ---------- 预测 Tab 双入口 (1.9.131) ---------- */
+.pred-gate-wrap { margin: 12px 12px 20px; display: flex; flex-direction: column; gap: 12px; }
+.pred-gate-lead { margin: 0 2px 4px; font-size: 13px; line-height: 1.55; color: var(--t2); }
+.pred-gate {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  padding: 16px 14px; border: 1px solid var(--line, #eef2f8); border-radius: var(--r, 14px);
+  background: #fff; cursor: pointer; font: inherit; color: inherit;
+  box-shadow: 0 2px 10px rgba(26, 98, 240, .06);
+}
+.pred-gate:active { filter: brightness(.98); }
+.pred-gate-ico {
+  flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 800; color: #fff;
+}
+.pred-gate-ico.pri { background: linear-gradient(135deg, #1a62f0, #1246b5); }
+.pred-gate-ico.kb { background: linear-gradient(135deg, #5b7cfa, #3d4fc7); }
+.pred-gate-body { flex: 1; min-width: 0; }
+.pred-gate-body h3 { margin: 0 0 6px; font-size: 17px; color: var(--pri-d, #1246b5); }
+.pred-gate-body p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--t2); }
+.pred-gate-meta { display: block; margin-top: 8px; font-size: 12px; color: var(--t3, #8b95a8); }
+.pred-gate-arr { font-size: 22px; color: var(--t3); font-weight: 300; }
+.pr-card.pr-list-quiet .pr-cbar { margin-top: 8px; }
+
 /* ---------- 个人知识库 (1.9.130) ---------- */
 .kb-hdr-sp { min-height: 8px; }
 .kb-entry {

@@ -333,7 +333,7 @@ const S = {
   schHideFinished: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_hide_fin') === '1'),
   schStatus: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_status')) || '全部',
   liveScores: null, liveScoresAt: 0, liveScorePoll: null, liveScoresLoading: false,
-  rsDate: null, rsLeague: '全部', prFilter: '全部', dataLeague: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_lg')) || 'epl', dataKind: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_kind')) || 'standings', bannerIdx: 0, pendingAv: null,
+  rsDate: null, rsLeague: '全部', prFilter: '全部', prLane: 'hub', dataLeague: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_lg')) || 'epl', dataKind: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_kind')) || 'standings', bannerIdx: 0, pendingAv: null,
   detailTab: {}, voteCache: {}, statsCache: {}, statsUi: {}, liveStatsCache: {}, livePoll: null, predictCache: {}, reviewCache: {}, reviewListCache: null, usefulness: null, leanByMatch: {},
   chatCache: {}, chatPoll: null, chatEs: null, aiChatCache: {}, pitchAnimSeen: {},
   membership: null, orders: null, payUi: { planId: 'quarter', channel: 'wechat', agree: false, phase: 'form', orderId: null, err: '' },
@@ -1629,7 +1629,8 @@ function predOddsMini(m, pr) {
     `<div class="oc ${k === top ? 'on' : ''}">${lab}<b class="num">${o[k] ? o[k].toFixed(2) : '-'}</b></div>`
   ).join('')}</div>`;
 }
-function predCardHtml(m, pr, i) {
+function predCardHtml(m, pr, i, opts) {
+  const quiet = !!(opts && opts.quiet);
   const confPct = Math.round(pr.conf * 100);
   const mode = pr.speakMode || 'amplify';
   const isPending = mode === 'pending' || !!pr._pending;
@@ -1660,6 +1661,18 @@ function predCardHtml(m, pr, i) {
   const agree = !edged && !upset && !isPending && !isWatch && isAllAgreePr(pr);
   const flag = (edged ? '<span class="pr-edge-tag">优势关注</span>' : '') + (upset ? '<span class="pr-upset-tag">预测爆冷</span>' : '') + (agree ? '<span class="pr-agree-tag">态度一致</span>' : '');
   const cardCls = (isPending ? ' pr-pending' : (isWatch ? ' pr-watch' : ' pr-speak')) + (edged ? ' pr-edge' : '') + (upset ? ' pr-upset' : '') + (agree ? ' pr-agree' : '');
+  if (quiet) {
+    const qCls = (isPending ? ' pr-pending' : (isWatch ? ' pr-watch' : '')) + (m.sample ? ' pr-sample' : '');
+    return `<div class="card pr-card pr-list-quiet${qCls}" data-go="#/match/${encodeURIComponent(m.id)}">
+    <div class="pr-hd"><span class="rank ${i < 3 && !isWatch && !isPending ? 'r' + (i + 1) : ''} num">${i + 1}</span>
+      <div class="pr-hd-body">
+        <div class="pr-meta">${lgTag(m)}<span>${esc(m.num)} · ${esc(m.date.slice(5))} ${esc(m.time)}</span>${m.sample ? '<span class="sample-tag">示例</span>' : ''}</div>
+        <div class="pr-teams">${badge(m.home, 'sm', m.homeLogo)}<span class="nm">${esc(m.home)}</span><span class="vs">vs</span><span class="nm">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div>
+      </div>${ring(pr.conf, (isWatch || isPending) ? { muted: true } : null)}</div>
+    ${predOddsMini(m, pr)}
+    <div class="pr-cbar"><div class="lab"><span>${isPending ? '参考指数' : (isWatch ? '观望指数' : '信心指数')}</span><span class="num">${confPct}%</span></div>
+      <div class="track"><i style="width:${confPct}%;background:${barColor}"></i></div></div></div>`;
+  }
   return `<div class="card pr-card${cardCls}" data-go="#/match/${encodeURIComponent(m.id)}">
     <div class="pr-hd"><span class="rank ${i < 3 && !isWatch && !isPending ? 'r' + (i + 1) : ''} num">${i + 1}</span>
       <div class="pr-hd-body">
@@ -1835,24 +1848,46 @@ function usefulnessStripHtml() {
   const note = (u && u.noteZh) ? `<span class="use-note">${esc(u.noteZh)}</span>` : '';
   return `<div class="use-strip">${bits.join('')}<button type="button" class="use-mc" data-act="modelCheck">模型体检</button>${note}</div>`;
 }
+function pagePredictHub() {
+  const ms = S.matches;
+  const n = ms ? ms.length : 0;
+  return `<div class="pred-gate-wrap">
+    <p class="pred-gate-lead">选择预测来源：平台简报与私有知识相互独立，个人预测不会写入平台缓存。</p>
+    <button type="button" class="pred-gate card" data-act="prLane" data-lane="platform">
+      <span class="pred-gate-ico pri">平</span>
+      <div class="pred-gate-body">
+        <h3>平台预测</h3>
+        <p>站内模型与情报简报，按场次查看信心指数与完整分析。</p>
+        <span class="pred-gate-meta">${n ? `在售约 ${n} 场` : '加载场次中…'}</span>
+      </div>
+      <span class="pred-gate-arr">›</span>
+    </button>
+    <button type="button" class="pred-gate card" data-act="prLane" data-lane="kb">
+      <span class="pred-gate-ico kb">私</span>
+      <div class="pred-gate-body">
+        <h3>私有知识预测</h3>
+        <p>管理你的知识包与笔记，在单场中勾选条目生成个人参考概率。</p>
+        <span class="pred-gate-meta">${loggedIn() ? '用户私有数据' : '登录后可用'}</span>
+      </div>
+      <span class="pred-gate-arr">›</span>
+    </button>
+  </div>`;
+}
 function pagePredict() {
   const ms = S.matches;
-  let h = hdr('预测', { back: false, right: srcPill() });
-  if (!ms) return h + `<div class="hdr-ext kb-hdr-sp"></div>` + skeleton(4);
+  const lane = S.prLane || 'hub';
+  let h = hdr('预测', { back: false, right: lane === 'platform' ? `<button type="button" class="ic-btn" data-act="prHub" aria-label="切换">切换</button>` : srcPill() });
+  if (!ms) return h + `<div class="hdr-ext kb-hdr-sp"></div>` + (lane === 'hub' ? pagePredictHub() : skeleton(4));
+  if (lane === 'hub') {
+    h += `<div class="hdr-ext kb-hdr-sp"></div>` + pagePredictHub();
+    return h + foot();
+  }
   const all = ms.map(m => ({ m, pr: effectivePredict(m) })).filter(x => x.pr)
     .sort(prCompare);
   const nSpeak = all.filter(x => isSpeakPr(x.pr)).length;
   const nPending = all.filter(x => isPendingPr(x.pr)).length;
   const nWatch = all.length - nSpeak - nPending;
   h += `<div class="hdr-ext kb-hdr-sp"></div>`;
-  h += `<div class="kb-entry card" style="margin:10px 12px 6px">
-    <div class="kb-entry-body">
-      <h3>我的知识库</h3>
-      <p>录入你自己的赛前笔记与判断依据，在单场中勾选知识条目，生成<strong>独立于站内简报</strong>的个人参考概率（与平台预测分开存储）。</p>
-      <p class="note" style="margin:6px 0 0">内容未经核实，仅供参考，非购彩建议。</p>
-    </div>
-    <button type="button" class="btn pri sm" data-go="${loggedIn() ? '#/kb' : '#/login'}">${loggedIn() ? '管理知识库' : '登录后使用'}</button>
-  </div>`;
   const filters = [
     ['全部', all.length],
     ['表态', nSpeak],
@@ -1867,7 +1902,7 @@ function pagePredict() {
     // legacy chips
     return x.pr.lvl && x.pr.lvl[1] === S.prFilter;
   });
-  h += `<div class="list-meta"><span>少而准：多数与盘口一致不表态 · 点击看简报</span><span>${list.length} 场</span></div>`;
+  h += `<div class="list-meta"><span>点击场次查看完整简报与依据</span><span>${list.length} 场</span></div>`;
   if (!list.length) {
     h += empty('该筛选暂无场次，可切换「全部」或等待情报简报加载。', '<button class="btn ghost sm" data-pf="全部">查看全部</button>', '暂无场次');
   } else {
@@ -1887,11 +1922,10 @@ function pagePredict() {
       const md = (d && d.length >= 10) ? d.slice(5) : d;
       const lab = `${dayName(d)} ${md}`;
       return `<div class="pr-day"><div class="pr-day-h"><span class="pr-day-lab">${esc(lab)}</span><span>${items.length} 场</span></div>`
-        + `<div class="grid">${items.map(({ m, pr }, i) => predCardHtml(m, pr, i)).join('')}</div></div>`;
+        + `<div class="grid">${items.map(({ m, pr }, i) => predCardHtml(m, pr, i, { quiet: true })).join('')}</div></div>`;
     }).join('');
   }
-  if (nPending) h += `<p class="note" style="margin:10px 14px 4px">正在加载 ${nPending} 场情报简报…加载完成前不预判「与盘口一致」，请稍候自动刷新。</p>`;
-  h += `<p class="note" style="margin:10px 14px 4px">逆盘口必表态；同向且信心≥62% 亦表态；过程/近况/伤停/赛程冲击信号亦表态。低信心同向无冲击仍「与盘口一致 / 信息不足」。完场后写入表态反馈。</p>`;
+  if (nPending) h += `<p class="note" style="margin:10px 14px 4px">正在加载 ${nPending} 场情报简报…请稍候自动刷新。</p>`;
   return h + foot();
 }
 
@@ -6353,6 +6387,35 @@ async function loadKbPackItems(packId, force) {
   return j;
 }
 
+/** Load KB data for current route only when cache miss — avoids render↔fetch infinite loop (1.9.131). */
+function ensureKbRouteData() {
+  if (!loggedIn() || route().name !== 'kb') return;
+  const { sub, id } = kbRouteParts();
+  S.kb = S.kb || { selected: {}, intervention: 'medium' };
+  const jobs = [];
+  if (sub === 'predict' && id) {
+    if (S.kb.picker == null) jobs.push(loadKbPicker(false));
+  } else if (sub === 'pack' && id) {
+    if (S.kb.packs == null) jobs.push(loadKbPacks(false));
+    if (String(S.kb.packId) !== String(id) || !S.kb.packItems) jobs.push(loadKbPackItems(id, true));
+  } else if (S.kb.packs == null) {
+    jobs.push(loadKbPacks(false));
+  }
+  if (!jobs.length) {
+    S.kb.loading = false;
+    return;
+  }
+  S.kb.loading = true;
+  Promise.all(jobs).then(() => {
+    S.kb.loading = false;
+    if (route().name === 'kb') render({ force: true });
+  }).catch(() => {
+    S.kb.loading = false;
+    toast('知识库加载失败');
+    if (route().name === 'kb') render({ force: true });
+  });
+}
+
 function kbToggleItem(id) {
   S.kb = S.kb || { selected: {} };
   const k = String(id);
@@ -7605,13 +7668,14 @@ function tabContentSig(name) {
       const pc = S.predictCache || {};
       let ready = 0;
       for (const k of Object.keys(pc)) { if (pc[k] && pc[k].ok) ready++; }
-      return 'p:' + ms.length + ':' + (S.prFilter || '') + ':' + ready + ':kb1';
+      return 'p:' + ms.length + ':' + (S.prFilter || '') + ':' + ready + ':' + (S.prLane || 'hub');
     }
     if (name === 'kb') {
       const p = kbRouteParts();
       const nsel = kbSelectedIds().length;
       const lr = (S.kb && S.kb.lastResult && S.kb.lastResult.matchId) || '';
-      return 'kb:' + p.sub + ':' + p.id + ':' + nsel + ':' + lr + ':' + ((S.kb && S.kb.intervention) || 'medium');
+      const np = (S.kb && S.kb.packs) ? S.kb.packs.length : (S.kb && S.kb.loading ? 'L' : 'x');
+      return 'kb:' + p.sub + ':' + p.id + ':' + nsel + ':' + lr + ':' + ((S.kb && S.kb.intervention) || 'medium') + ':' + np;
     }
     if (name === 'data') {
       const lg = dataLeagueOf(), kind = dataKindOf();
@@ -7735,6 +7799,7 @@ function render(opts) {
 
   const prevTab = render.lastTab || null;
   const switchingTab = isTab && prevTab && prevTab !== r.name && TABS.includes(prevTab);
+  if (switchingTab && r.name === 'predict') S.prLane = 'hub';
 
   // Stash leaving tab before wipe
   if (switchingTab) saveTabKeep(prevTab, v);
@@ -7817,24 +7882,7 @@ function render(opts) {
     else if (parts[0] === 'player' && parts[1]) setTimeout(() => loadPlayerDbPlayer(parts[1]), 0);
     else setTimeout(() => loadPlayerDbHome(false), 0);
   }
-  if (r.name === 'kb' && loggedIn()) {
-    const parts = String(r.arg || '').split('/').filter(Boolean);
-    const sub = parts[0] || 'home';
-    const id = parts[1] || '';
-    S.kb = S.kb || { selected: {}, intervention: 'medium' };
-    S.kb.loading = true;
-    const done = () => {
-      S.kb.loading = false;
-      if (route().name === 'kb') render({ force: true });
-    };
-    if (sub === 'predict' && id) {
-      loadKbPicker(false).then(done).catch(() => { toast('知识库加载失败'); done(); });
-    } else if (sub === 'pack' && id) {
-      Promise.all([loadKbPacks(false), loadKbPackItems(id, true)]).then(done).catch(() => { toast('加载失败'); done(); });
-    } else {
-      loadKbPacks(false).then(done).catch(() => { toast('加载失败'); done(); });
-    }
-  }
+  if (r.name === 'kb' && loggedIn()) ensureKbRouteData();
   tickClock();
 }
 
@@ -8077,16 +8125,42 @@ document.addEventListener('click', async e => {
       toast('复盘已更新');
       return;
     }
+    case 'prLane': {
+      const lane = el.dataset.lane || 'platform';
+      if (lane === 'kb') {
+        go(loggedIn() ? '#/kb' : '#/login');
+        return;
+      }
+      S.prLane = 'platform';
+      invalidateTabKeep('predict');
+      return render({ force: true });
+    }
+    case 'prHub': {
+      S.prLane = 'hub';
+      invalidateTabKeep('predict');
+      return render({ force: true });
+    }
     case 'kbCreatePack': {
+      if (S.kb && S.kb._creating) return;
       const inp = document.querySelector('input[name="kbPackName"]');
-      const name = inp && inp.value;
+      const name = (inp && inp.value || '').trim();
+      if (!name) { toast('请输入知识包名称'); return; }
+      S.kb = S.kb || {};
+      S.kb._creating = true;
       try {
-        await api('/kb/packs', { method: 'POST', body: { name } });
-        S.kb.packs = null;
+        const j = await api('/kb/packs', { method: 'POST', body: { name } });
+        if (j && j.pack) {
+          const prev = Array.isArray(S.kb.packs) ? S.kb.packs : [];
+          S.kb.packs = [j.pack, ...prev.filter(p => p.id !== j.pack.id)];
+        } else {
+          S.kb.packs = null;
+          await loadKbPacks(true);
+        }
         if (inp) inp.value = '';
         toast('知识包已创建');
         render({ force: true });
       } catch (err) { toast(err.message || '创建失败'); }
+      finally { if (S.kb) S.kb._creating = false; }
       return;
     }
     case 'kbRenamePack': {
