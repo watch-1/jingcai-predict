@@ -21,13 +21,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     ok(/#\/login$/.test(p.url()), 'first launch shows login page: ' + p.url());
     await shot('login');
     // guest browsing
-    await tap('[data-act="guest"]'); await p.waitForSelector('.hc-item, .empty', { timeout: 15000 });
+    await tap('[data-act="guest"]'); await p.waitForSelector('#top-chrome:not(.hidden)', { timeout: 15000 });
     ok(/#\/home$/.test(p.url()), '游客浏览 -> home');
     const src = await p.evaluate(() => document.querySelector('.src-pill')?.textContent || '');
     console.log('     data source pill:', src);
-    ok(await p.$$eval('.tabbar button', l => l.map(x => x.textContent).join()) === '首页,赛程,预测,开奖,我的', 'bottom tab bar has 首页/赛程/预测/开奖/我的');
+    ok(await p.$$eval('.tabbar button', l => l.map(x => x.textContent).join()) === '赛程,预测,数据', 'bottom tab bar has 赛程/预测/数据');
+    ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '部落,头条,开奖', 'top chrome has 部落/头条/开奖');
     ok(!(await p.content()).includes('服务器地址'), 'no 服务器地址 setting anywhere');
-    ok((await txt('.foot')).includes('仅供参考，理性购彩 · 本站不提供投注服务'), 'footer disclaimer present');
+    ok(!(await p.$('.hdr-title')) || !(await p.evaluate(() => document.querySelector('.hdr-title')?.textContent === '赛程')), 'no centered navy page title on home');
     // register
     await p.evaluate(() => { location.hash = '#/register'; }); await p.waitForSelector('#fReg');
     await p.type('#fReg [name=phone]', phone); await p.type('#fReg [name=password]', pw); await p.type('#fReg [name=password2]', pw); await p.type('#fReg [name=nickname]', 'UI测试');
@@ -35,21 +36,23 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     ok((await txt('#err')).includes('同意'), 'registration blocked until agreement checkbox ticked');
     await shot('register');
     await p.$eval('#fReg [name=agree]', e => e.click()); await tap('#fReg [type=submit]');
-    await p.waitForFunction(() => location.hash === '#/me', { timeout: 10000 }); registered = true;
-    ok((await txt('.me-row .nm')) === 'UI测试', 'registered + logged in, 我的 shows nickname');
-    // home
-    await tap('.tabbar [data-go="#/home"]'); await p.waitForSelector('.banner .bn-bg, .banner img'); await p.waitForFunction(() => [...document.querySelectorAll('.banner .bn-bg, .banner > .track img.bn-bg')].every(i => i.complete && i.naturalWidth > 0));
+    await p.waitForFunction(() => location.hash === '#/home', { timeout: 10000 }); registered = true;
+    await tap('[data-act="openMe"]'); await p.waitForSelector('.me-drawer.open');
+    ok((await txt('.md-name')) === 'UI测试', 'registered + logged in, drawer shows nickname');
+    await p.evaluate(() => document.getElementById('me-drawer-mask').click());
+    // home (部落)
+    await tap('.tc-tab[data-go="#/home"]'); await p.waitForSelector('.banner .bn-bg, .banner img'); await p.waitForFunction(() => [...document.querySelectorAll('.banner .bn-bg, .banner > .track img.bn-bg')].every(i => i.complete && i.naturalWidth > 0));
     ok(await p.$$eval('.banner .hero-slide', l => l.length) === 3, 'home banner carousel with 3 slides');
     ok(await p.$$eval('.banner img.bn-bg', l => l.length) === 3, 'home banner carousel with 3 background images');
     await shot('home');
     // schedule
     await tap('.tabbar [data-go="#/schedule"]'); await p.waitForSelector('.dstrip button');
     ok(await p.$$eval('.dstrip button', l => l.length) > 0 && await p.$$eval('.chips button', l => l.length) > 0, 'schedule: date strip + league chips');
-    const hasMatch = await p.$('.mc .cell:not(.dis)');
+    const hasMatch = await p.$('.ls-row[data-go^="#/match/"]');
     await shot('schedule');
-    if (!hasMatch) { const d = await p.$$('.dstrip button'); for (const x of d) { await x.click(); await sleep(200); if (await p.$('.mc .cell:not(.dis)')) break; } }
+    if (!hasMatch) { const d = await p.$$('.dstrip button'); for (const x of d) { await x.click(); await sleep(200); if (await p.$('.ls-row[data-go^="#/match/"]')) break; } }
     // detail
-    await tap('.mc[data-go^="#/match/"] .mc-teams'); await p.waitForSelector('.hero');
+    await tap('.ls-row[data-go^="#/match/"]'); await p.waitForSelector('.hero');
     const hasOdds = await p.$('.otable button.cell');
     ok(!!hasOdds, 'match detail shows selectable 胜平负/让球 odds');
     ok((await p.$$eval('.reason p', l => l.length)) >= 3, 'match detail has odds-based reasoning');
@@ -65,19 +68,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     // predict / results
     await tap('.hdr [data-act="back"]'); await p.waitForFunction(() => location.hash === '#/schedule');
     await tap('.tabbar [data-go="#/predict"]'); await p.waitForSelector('.kb-entry'); await shot('predict');
-    await tap('.tabbar [data-go="#/results"]'); await p.waitForSelector('.dstrip button, .empty'); await shot('results');
-    // me
-    await tap('.tabbar [data-go="#/me"]'); await p.waitForSelector('.me-stats');
-    const stats = await p.$$eval('.me-stats b', l => l.map(x => x.textContent));
-    ok(stats[0] === '1' && stats[1] === '1', `我的: 1 plan, 1 favorite (${stats})`);
-    await shot('me');
+    await tap('.tc-tab[data-go="#/results"]'); await p.waitForSelector('.dstrip button, .empty'); await shot('results');
+    // me drawer
+    await tap('[data-act="openMe"]'); await p.waitForSelector('.me-drawer.open');
+    const stats = await p.$$eval('.md-stats b', l => l.map(x => x.textContent));
+    ok(stats[0] === '1' && stats[2] === '1', `drawer: 1 plan, 1 favorite (${stats})`);
+    await shot('me-drawer');
     // logout -> relogin -> sync
     await p.evaluate(() => { location.hash = '#/settings'; }); await p.waitForSelector('[data-act="logout"]');
     await shot('settings');
     await tap('[data-act="logout"]'); await tap('.dialog .ok'); await p.waitForFunction(() => location.hash === '#/login');
     ok(await p.evaluate(() => !localStorage.getItem('jc_token')), 'logout clears token');
-    await p.evaluate(() => { location.hash = '#/me'; }); await p.waitForSelector('.me-stats');
-    ok((await p.$$eval('.me-stats b', l => l.map(x => x.textContent))).slice(0, 2).join() === '0,0', 'after logout, guest view shows no account data');
+    await tap('[data-act="openMe"]'); await p.waitForSelector('.me-drawer.open');
+    ok((await p.$$eval('.md-stats b', l => l.map(x => x.textContent))).slice(0, 3).join() === '0,0,0', 'after logout, guest drawer shows no account data');
     await p.evaluate(() => { location.hash = '#/login'; }); await p.waitForSelector('#fLogin');
     await p.$eval('#fLogin [name=phone]', e => (e.value = '')); await p.type('#fLogin [name=phone]', phone); await p.type('#fLogin [name=password]', pw);
     await tap('#fLogin [type=submit]'); await p.waitForFunction(() => location.hash === '#/me', { timeout: 10000 });

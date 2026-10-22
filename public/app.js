@@ -178,6 +178,7 @@ const I = {
   column: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect class="fill" x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
   ball: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle class="fill" cx="12" cy="12" r="8.2"/><path d="M12 3.8c1.6 1.8 2.5 4.3 2.5 8.2S13.6 18.4 12 20.2M12 3.8C10.4 5.6 9.5 8.1 9.5 12s.9 6.4 2.5 8.2M4.2 9.2h15.6M4.2 14.8h15.6"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.2"/><path d="m15.5 15.5 4.2 4.2"/></svg>',
+  mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect class="fill" x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4 7.5 8 6 8-6"/></svg>',
   clear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>',
 };
 const EMPTY_SVG = '<svg viewBox="0 0 120 96" fill="none"><ellipse cx="60" cy="86" rx="40" ry="6" fill="#e3e8f2"/><rect x="26" y="18" width="68" height="58" rx="10" fill="#fff" stroke="#cdd7ea" stroke-width="2"/><path d="M38 36h44M38 48h30M38 60h36" stroke="#dbe3f1" stroke-width="5" stroke-linecap="round"/><circle cx="88" cy="22" r="12" fill="#e9f0ff" stroke="#1a62f0" stroke-width="2"/><path d="m84 22 3 3 5-6" stroke="#1a62f0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -707,7 +708,11 @@ function openPlanSheet() {
 function closeSheet() { $('#sheet').classList.add('hidden'); $('#sheet').innerHTML = ''; }
 
 // ======================= router =======================
-const TABS = ['home', 'schedule', 'predict', 'data', 'me'];
+/** 1.9.143: top feed tabs (部落/头条/开奖) + bottom tool tabs (赛程/预测/数据). */
+const TOP_TABS = ['home', 'news', 'results'];
+const TABS = ['schedule', 'predict', 'data'];
+const SHELL_TABS = [...TOP_TABS, ...TABS];
+function isShellTab(name) { return SHELL_TABS.includes(name); }
 const PROTECTED = ['profile', 'password', 'delete', 'pay', 'orders'];
 function route() {
   const raw = location.hash.replace(/^#\/?/, '');
@@ -719,7 +724,12 @@ function route() {
   if (qs) try { new URLSearchParams(qs).forEach((v, k) => { query[k] = v; }); } catch { }
   return { name: name || 'home', arg: decodeURIComponent(rest.join('/') || ''), query };
 }
-function go(h, replace) { if (replace) { history.replaceState(null, '', h); if (typeof NAV !== 'undefined') { if (NAV.length) NAV[NAV.length - 1] = h; else NAV.push(h); } render(); window.scrollTo(0, 0); } else if (location.hash !== h) location.hash = h; else render(); }
+function go(h, replace) {
+  closeMeDrawer();
+  if (replace) { history.replaceState(null, '', h); if (typeof NAV !== 'undefined') { if (NAV.length) NAV[NAV.length - 1] = h; else NAV.push(h); } render(); window.scrollTo(0, 0); }
+  else if (location.hash !== h) location.hash = h;
+  else render();
+}
 // 1.9.3: explicit in-app nav stack (navDepth counter drifted: hashchange fired for both forward & back)
 const NAV = [];
 function navNote(h) {
@@ -732,11 +742,12 @@ function back() {
     history.replaceState(null, '', prev); navNote(prev); render(); window.scrollTo(0, 0);
   } else { NAV.length = 0; go('#/home', true); navNote('#/home'); }
 }
-window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeSheet(); if (route().name !== 'match' || (detailTabOf(route().arg) !== 'data' && detailTabOf(route().arg) !== 'events')) stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'events') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || (detailTabOf(route().arg) !== 'data' && detailTabOf(route().arg) !== 'events')) stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'events') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); render(); window.scrollTo(0, 0); });
 // Android back button hook (MainActivity calls this): returns 1 if handled in-page, 0 to exit the app
 window.__appBack = () => {
   if (!$('#dialog').classList.contains('hidden')) { $('#dialog').querySelector('[data-r="0"]').click(); return 1; }
   if (!$('#sheet').classList.contains('hidden')) { closeSheet(); return 1; }
+  if (meDrawerOpen()) { closeMeDrawer(); return 1; }
   const r = route();
   if (r.name === 'login' && !S.guest && !loggedIn()) return 0;
   if (r.name === 'home') return 0;
@@ -747,6 +758,93 @@ window.__appBack = () => {
 const hdr = (title, { back: b = true, right = '' } = {}) =>
   `<header class="hdr center"><div class="hdr-side left">${b ? `<button class="ic-btn" data-act="back" aria-label="返回">${I.back}</button>` : '<span class="ph"></span>'}</div><h1 class="hdr-title">${esc(title)}</h1><div class="hdr-side right">${right || '<span class="ph"></span>'}</div></header>`;
 const foot = () => ''; // 1.9.96: no data-source / disclaimer footer in end-user UI
+
+const TOP_TAB_DEF = [['home', '部落'], ['news', '头条'], ['results', '开奖']];
+const TAB_DEF = [['schedule', '赛程', I.cal], ['predict', '预测', I.chart], ['data', '数据', I.data]];
+
+function meDrawerOpen() {
+  const dr = $('#me-drawer');
+  return !!(dr && dr.classList.contains('open'));
+}
+function closeMeDrawer() {
+  const dr = $('#me-drawer'); const mask = $('#me-drawer-mask');
+  if (dr) { dr.classList.remove('open'); dr.setAttribute('aria-hidden', 'true'); }
+  if (mask) mask.classList.add('hidden');
+  document.body.classList.remove('me-drawer-on');
+}
+function openMeDrawer() {
+  syncMeDrawer();
+  const dr = $('#me-drawer'); const mask = $('#me-drawer-mask');
+  if (dr) { dr.classList.add('open'); dr.setAttribute('aria-hidden', 'false'); }
+  if (mask) mask.classList.remove('hidden');
+  document.body.classList.add('me-drawer-on');
+  if (loggedIn() && !S.membership) {
+    api('/membership/status').then(ms => { S.membership = ms; if (meDrawerOpen()) syncMeDrawer(); }).catch(() => {});
+  }
+}
+function meDrawerRow(g, ic, title, badge = '') {
+  return `<button type="button" class="md-row" data-go="${g}"><span class="md-ic">${ic}</span><span class="md-lab">${esc(title)}</span>${badge ? `<span class="md-badge">${badge}</span>` : ''}<span class="md-arr">${I.arr}</span></button>`;
+}
+function meDrawerHtml() {
+  const u = S.user; const li = loggedIn();
+  const mem = isMember();
+  const until = (S.membership && S.membership.memberUntil) || (u && u.memberUntil);
+  const daysLeft = (S.membership && S.membership.daysLeft) || (u && u.memberDaysLeft) || 0;
+  const nick = li ? esc(u?.nickname || '球迷') : '登录 / 注册';
+  const sub = li
+    ? (mem ? `会员至 ${esc(fmtMemberUntil(until))} · 剩余约 ${esc(String(daysLeft))} 天` : '方案与关注已云端同步')
+    : '游客浏览中 · 登录后同步方案与关注';
+  const plansN = (S.plans && S.plans.length) || 0;
+  const favsN = (S.favs && S.favs.length) || 0;
+  let h = `<div class="md-hd">
+    <button type="button" class="md-profile" data-go="${li ? '#/profile' : '#/login'}">
+      <span class="md-av">${avatarSvg(li ? u?.avatar : 'a8')}</span>
+      <span class="md-id"><b class="md-name">${nick}${mem ? '<span class="vip-chip">会员</span>' : ''}</b><span class="md-sub">${sub}</span></span>
+    </button>
+    <div class="md-stats">
+      <button type="button" data-go="#/plans"><b class="num">${plansN}</b><span>方案</span></button>
+      <button type="button" data-go="#/column"><b class="num">${(S.user && S.user.coinBalance != null) ? esc(String(S.user.coinBalance)) : '0'}</b><span>云朵</span></button>
+      <button type="button" data-go="#/favs"><b class="num">${favsN}</b><span>关注</span></button>
+      <button type="button" data-go="#/kb"><b class="num">${li ? '开' : '—'}</b><span>知识库</span></button>
+    </div>
+  </div>`;
+  h += `<div class="md-body">
+    <div class="md-card">${meDrawerRow('#/plans', I.doc, '我的方案', plansN ? `${plansN} 个` : '')}${meDrawerRow('#/favs', I.star, '我的关注', favsN ? `${favsN} 场` : '')}</div>
+    <div class="md-card">${meDrawerRow('#/membership', I.vip, '会员中心', mem ? '已开通' : '未开通')}${meDrawerRow('#/orders', I.doc, '会员订单')}${meDrawerRow('#/kb', I.doc, '我的知识库', '个人预测')}</div>
+    <div class="md-card">${meDrawerRow('#/column', I.column, '球迷专栏')}${meDrawerRow('#/column/wallet', I.vip, '云朵钱包')}${meDrawerRow('#/settings', I.gear, '设置 / 外观', THEME_LABEL[homeTheme()])}${meDrawerRow('#/about', I.info, '关于我们', 'v' + esc(CFG.version || ''))}</div>
+  </div>`;
+  if (!li) h += `<div class="md-foot"><button type="button" class="btn pri block" data-go="#/login">登录 / 注册</button></div>`;
+  return h;
+}
+function syncMeDrawer() {
+  const dr = $('#me-drawer');
+  if (!dr) return;
+  const html = meDrawerHtml();
+  if (dr.innerHTML !== html) dr.innerHTML = html;
+}
+function syncTopChrome(rName) {
+  const el = $('#top-chrome');
+  const app = $('#app');
+  if (!el || !app) return;
+  const show = isShellTab(rName);
+  el.classList.toggle('hidden', !show);
+  app.classList.toggle('has-top-chrome', show);
+  if (!show) return;
+  const activeTop = TOP_TABS.includes(rName) ? rName : '';
+  const li = loggedIn();
+  const av = avatarSvg(li ? (S.user && S.user.avatar) || 'a1' : 'a8');
+  const msgDot = (S.plans && S.plans.length) ? '<i class="tc-dot" aria-hidden="true"></i>' : '';
+  const tabs = TOP_TAB_DEF.map(([k, lab]) =>
+    `<button type="button" class="tc-tab${k === activeTop ? ' on' : ''}" data-go="#/${k}">${esc(lab)}</button>`
+  ).join('');
+  const want = `<button type="button" class="tc-avatar" data-act="openMe" aria-label="我的">${av}</button>
+    <nav class="tc-tabs" aria-label="内容">${tabs}</nav>
+    <div class="tc-actions">
+      <button type="button" class="tc-ic" data-go="#/search" aria-label="搜索">${I.search}</button>
+      <button type="button" class="tc-ic" data-go="#/plans" aria-label="我的消息">${I.mail}${msgDot}</button>
+    </div>`;
+  if (el.innerHTML !== want) el.innerHTML = want;
+}
 const empty = (text, btn = '', title = '') => `<div class="empty">${EMPTY_SVG}${title ? `<div class="empty-t">${title}</div>` : ''}<div class="empty-d">${text}</div>${btn}</div>`;
 const skeleton = (n = 4) => '<div class="grid">' + Array.from({ length: n }, () => `<div class="card sk-card"><div style="display:flex;gap:8px"><div class="sk sk-line" style="width:48px;margin:0"></div><div class="sk sk-line" style="width:90px;margin:0"></div></div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0"><div style="display:flex;gap:8px;align-items:center"><div class="sk" style="width:36px;height:36px;border-radius:50%"></div><div class="sk sk-line" style="width:70px"></div></div><div class="sk sk-line" style="width:30px"></div><div style="display:flex;gap:8px;align-items:center"><div class="sk sk-line" style="width:70px"></div><div class="sk" style="width:36px;height:36px;border-radius:50%"></div></div></div>
@@ -1223,13 +1321,7 @@ function pageHome() {
   const theme = homeTheme();
   const ms = S.matches;
   const focus = focusMatchPool();
-  let h = `<header class="hdr home-hdr home-search-hdr theme-${theme}">
-    <button type="button" class="home-search-cap" data-go="#/search" aria-label="搜索球队、球员、比赛">
-      <span class="hs-ico" aria-hidden="true">${I.search}</span>
-      <span class="hs-ph">请输入查询的内容</span>
-    </button>
-  </header>`;
-  h += `<div class="banner home-hero theme-${theme}"><div class="track" id="bnTrack">${homeHeroSlides(theme, S.homeBannerNews || null)}</div><div class="dots">${Array.from({ length: BANNER_N }, (_, i) => `<i class="${i === S.bannerIdx ? 'on' : ''}"></i>`).join('')}</div></div>`;
+  let h = `<div class="banner home-hero theme-${theme}"><div class="track" id="bnTrack">${homeHeroSlides(theme, S.homeBannerNews || null)}</div><div class="dots">${Array.from({ length: BANNER_N }, (_, i) => `<i class="${i === S.bannerIdx ? 'on' : ''}"></i>`).join('')}</div></div>`;
   if (theme === 'luxury') {
     h += `<div class="focus-row">${ms ? (focus.slice(0, 2).map(focusCardCompact).join('') || '<div class="focus-empty note">暂无焦点赛事</div>') : '<div class="focus-card skel"></div><div class="focus-card skel"></div>'}</div>`;
     h += homeQuick('luxury');
@@ -1241,10 +1333,8 @@ function pageHome() {
   h += homeAttitudeSection(ms);
   h += `<div class="sec-h"><h2>专栏作者</h2><button class="more" data-go="#/column">进入专栏 ${I.arr}</button></div>`;
   h += `<div id="home-column-authors" class="col-wall">${skeletonNews(1)}</div>`;
-  h += `<div class="sec-h"><h2>体坛资讯</h2><button class="more" data-go="#/news">更多资讯 ${I.arr}</button></div>`;
-  h += `<div id="home-news" class="news-home">${skeletonNews(2)}</div>`;
   setTimeout(() => {
-    fillHomeBanners(); fillHomeNews(); fillHomeColumnAuthors(); fillHomePlatformAttitude();
+    fillHomeBanners(); fillHomeColumnAuthors(); fillHomePlatformAttitude();
     // 1.9.123: warm live-scores without full home wipe (was blanking page under float-ball)
     const ids = (S.matches || []).slice(0, 40).map(m => String(m.id)).filter(Boolean);
     if (ids.length) {
@@ -1257,8 +1347,9 @@ function pageHome() {
   return h + foot();
 }
 
-function dateStrip(dates, cur, key) {
-  return `<div class="dstrip" id="dstrip">${dates.map(d => `<button class="${d === cur ? 'on' : ''}" data-${key}="${d}">${dayName(d)}<small>${d.slice(5)}</small></button>`).join('')}</div>`;
+function dateStrip(dates, cur, key, { light = true } = {}) {
+  const cls = 'dstrip' + (light ? ' light' : '');
+  return `<div class="${cls}" id="dstrip">${dates.map(d => `<button class="${d === cur ? 'on' : ''}" data-${key}="${d}">${dayName(d)}<small>${d.slice(5)}</small></button>`).join('')}</div>`;
 }
 /** 热门 = 竞彩常见优先联赛（LEAGUE_PRIO 白名单），不含瑞超/挪超/巴甲等长尾。 */
 function isHotLeague(l) { return prio(l) < 99; }
@@ -1537,7 +1628,7 @@ function ensureLiveScorePoll(ids, hasLive) {
 }
 
 function pageSchedule() {
-  let h = hdr('赛程', { back: false, right: srcPill() });
+  let h = `<div class="shell-tools"><span class="shell-title">赛程</span>${srcPill()}</div>`;
   const ms = (S.schedule && S.schedule.length) ? S.schedule : S.matches, rs = S.results;
   if (!ms) return h + `<div class="dstrip" style="height:50px"></div>` + skeleton(4);
   // Group by 竞彩 issue date (businessDate), not kickoff calendar date.
@@ -2021,8 +2112,9 @@ function pagePredictHub() {
 function pagePredict() {
   const ms = S.matches;
   const lane = S.prLane || 'hub';
-  let h = hdr('预测', { back: false, right: lane === 'platform' ? `<button type="button" class="ic-btn" data-act="prHub" aria-label="切换">切换</button>` : srcPill() });
-  if (!ms) return h + (lane === 'hub' ? pagePredictHub() : `<div class="hdr-ext kb-hdr-sp"></div>` + skeleton(4));
+  const prRight = lane === 'platform' ? `<button type="button" class="shell-link" data-act="prHub">切换</button>` : srcPill();
+  let h = `<div class="shell-tools"><span class="shell-title">预测</span>${prRight}</div>`;
+  if (!ms) return h + (lane === 'hub' ? pagePredictHub() : skeleton(4));
   if (lane === 'hub') {
     h += pagePredictHub();
     return h + foot();
@@ -2032,7 +2124,6 @@ function pagePredict() {
   const nSpeak = all.filter(x => isSpeakPr(x.pr)).length;
   const nPending = all.filter(x => isPendingPr(x.pr)).length;
   const nWatch = all.length - nSpeak - nPending;
-  h += `<div class="hdr-ext kb-hdr-sp"></div>`;
   const filters = [
     ['全部', all.length],
     ['表态', nSpeak],
@@ -2344,7 +2435,7 @@ function pageData() {
   const lg = dataLeagueOf();
   const kind = dataKindOf();
   const leagues = (S.dataLeagues && S.dataLeagues.length) ? S.dataLeagues : DATA_LEAGUES_FALLBACK;
-  let h = hdr('数据', { back: false, right: `<button class="ic-btn" data-act="dataRefresh" aria-label="刷新">${I.refresh}</button>` });
+  let h = `<div class="shell-tools"><span class="shell-title">数据中心</span><button type="button" class="shell-link" data-act="dataRefresh" aria-label="刷新">${I.refresh} 刷新</button></div>`;
   h += `<div class="dc-sub"><button class="linkish" data-go="#/results">${I.cup}<span>开奖结果</span>${I.arr}</button>
     <span class="dc-tip">积分 / 射手 / 身价 · 无下注</span></div>`;
   h += `<div class="chips dc-leagues" id="dcLeagues">${leagues.map(l =>
@@ -3060,8 +3151,8 @@ function resultsBodyHtml(list) {
 }
 
 function pageResults() {
-  let h = hdr('开奖', { right: srcPill() });
-  if (!S.results) return h + `<div class="dstrip" style="height:50px"></div>` + skeleton(4);
+  let h = `<div class="shell-tools shell-tools--compact"><span class="shell-title">开奖</span>${srcPill()}</div>`;
+  if (!S.results) return h + `<div class="dstrip light" style="height:50px"></div>` + skeleton(4);
   const model = resultsDayModel();
   if (!model || model.emptyAll) return h + empty('官方开奖数据暂未同步，请稍后下拉刷新。', '', '暂无开奖') + foot();
   h += dateStrip(model.dates, S.rsDate, 'rdate');
@@ -5947,7 +6038,7 @@ function pageNews(arg) {
   S.newsQ = q;
   const tab = newsTabOf();
   S.newsTab = tab;
-  let h = hdr(q ? ('体坛资讯 · ' + q) : '体坛资讯', { right: srcPill() });
+  let h = q ? `<div class="shell-tools shell-tools--compact"><span class="shell-title">搜索 · ${esc(q)}</span>${srcPill()}</div>` : '';
   h += `<div class="dtabs news-tabs">
     <button type="button" class="${tab === 'cn' ? 'on' : ''}" data-act="newsTab" data-tab="cn">国内</button>
     <button type="button" class="${tab === 'en' ? 'on' : ''}" data-act="newsTab" data-tab="en">外网</button>
@@ -6751,21 +6842,9 @@ function pageKbPredict(matchId) {
   return h + foot();
 }
 
-// ======================= 我的 =======================
+// ======================= 我的（1.9.143 侧栏抽屉；#/me 重定向到部落并打开抽屉） =======================
 function pageMe() {
-  const u = S.user; const li = loggedIn();
-  const mem = isMember();
-  const until = (S.membership && S.membership.memberUntil) || (u && u.memberUntil);
-  const daysLeft = (S.membership && S.membership.daysLeft) || (u && u.memberDaysLeft) || 0;
-  let h = `<div class="me-hd"><div class="me-row" data-go="${li ? '#/profile' : '#/login'}"><div class="av">${avatarSvg(li ? u?.avatar : 'a8')}</div>
-    <div><div class="nm">${li ? esc(u?.nickname || '球迷') : '登录 / 注册'}${mem ? '<span class="vip-chip">会员</span>' : ''}</div><div class="sub">${li ? esc(u?.phone || '') + (mem ? ' · 会员至 ' + esc(fmtMemberUntil(until)) : ' · 方案与关注已云端同步') : '游客浏览中 · 登录后同步方案与关注'}</div><span class="me-ver">v${esc(CFG.version || '1.9.67')} · 资讯预测</span></div><span class="go" style="width:20px;height:20px">${I.arr}</span></div></div>`;
-  h += `<div class="me-stats"><button data-go="#/plans"><b class="num">${S.plans.length}</b>我的方案</button><button data-go="#/favs"><b class="num">${S.favs.length}</b>我的关注</button><button data-go="#/predict"><b class="num">${S.matches ? S.matches.filter(m => { const p = effectivePredict(m); return p && isSpeakPr(p) && p.lvl && p.lvl[1] === '稳胆'; }).length : '-'}</b>今日稳胆</button></div>`;
-  // membership promo card
-  h += `<div class="vip-card" data-go="#/membership"><div class="vip-card-bg"></div><div class="vip-card-ic">${I.vip}</div><div class="vip-card-body"><div class="vip-card-title">${mem ? '会员中心' : '开通资讯会员'}</div><div class="vip-card-sub">${mem ? `剩余约 ${esc(String(daysLeft))} 天 · 点此续费或查看权益` : '高级预测简报 · 数据中心完整 · 无广告浏览'}</div></div><span class="vip-card-cta">${mem ? '续费' : '开通'}</span></div>`;
-  const mi = (g, ic, bg, title, val = '') => `<button data-go="${g}"><span class="mic" style="background:${bg}">${ic}</span><span class="sp">${title}</span><span class="val">${val}</span>${I.arr}</button>`;
-  h += `<div class="menu">${mi('#/membership', I.vip, 'linear-gradient(135deg,#f5b942,#e08a1a)', '会员中心', mem ? '已开通' : '未开通')}${mi('#/orders', I.doc, '#1a62f0', '会员订单', '')}${mi('#/plans', I.doc, '#1565e0', '我的方案', S.plans.length + ' 个')}${mi('#/favs', I.star, '#f5a524', '我的关注', S.favs.length + ' 场')}${mi('#/kb', I.doc, '#1a62f0', '我的知识库', '个人预测')}${mi('#/column', I.column, '#c2185b', '球迷专栏', '真实观点')}${mi('#/column/wallet', I.vip, '#e08a1a', '云朵钱包', (S.user && S.user.coinBalance != null) ? (S.user.coinBalance + ' 朵') : '充值解锁')}${mi('#/news', I.news, '#6d28d9', '体坛资讯', newsTabOf() === 'en' ? '外网' : '国内')}</div>`;
-  h += `<div class="menu">${li ? mi('#/profile', I.pen, '#12a150', '个人资料') + mi('#/password', I.lock, '#7b4ce0', '修改密码') : mi('#/login', I.nick, '#12a150', '登录 / 注册')}${mi('#/settings', I.gear, '#546e7a', '设置 / 外观', THEME_LABEL[homeTheme()])}${mi('#/about', I.info, '#0aa5b8', '关于我们', 'v' + esc(CFG.version))}</div>`;
-  return h + foot();
+  return pageHome();
 }
 
 function memberBenefitsHtml(benefits) {
@@ -7798,7 +7877,7 @@ function syncAndroidChrome(routeName) {
     if (window.JingcaiChrome && typeof window.JingcaiChrome.refreshSafeArea === 'function') {
       window.JingcaiChrome.refreshSafeArea();
     }
-    const lightHdr = routeName === 'search'; // white search chrome → dark icons
+    const lightHdr = isShellTab(routeName) || routeName === 'search';
     if (window.JingcaiChrome && typeof window.JingcaiChrome.statusBarStyle === 'function') {
       window.JingcaiChrome.statusBarStyle(lightHdr ? 'dark' : 'light');
     }
@@ -7861,8 +7940,7 @@ function softPatchLiveScoreCards() {
 const PAGES = { home: pageHome, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs,
   news: pageNews, login: pageLogin, register: pageRegister, profile: pageProfile, password: pagePassword, delete: pageDelete, settings: pageSettings, about: pageAbout, terms: pageTerms, privacy: pagePrivacy,
   membership: pageMembership, pay: pagePay, orders: pageOrders, 'member-terms': pageMemberTerms, column: pageColumn, kb: pageKb };
-const TAB_DEF = [['home', '首页', I.home], ['schedule', '赛程', I.cal], ['predict', '预测', I.chart], ['data', '数据', I.data], ['me', '我的', I.user]];
-const TITLES = { home: '首页', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库' };
+const TITLES = { home: '部落', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库' };
 
 /** In-memory keep-alive for bottom-tab pages — restore DOM HTML instead of wiping to skeleton. */
 const TAB_KEEP = Object.create(null);
@@ -7906,15 +7984,22 @@ function tabContentSig(name) {
       const stamp = c ? String(c.updatedAt || c.fetchedAt || (c.fromCache ? 'c' : '') || '') : 'miss';
       return 'd:' + lg + ':' + kind + ':' + stamp + ':' + (c && c.ok === false ? 'e' : (c ? 'ok' : '0'));
     }
-    if (name === 'me') {
-      return 'me:' + (loggedIn() ? String((S.user && (S.user.id || S.user.phone)) || '1') : '0') + ':' + ((S.plans && S.plans.length) || 0) + ':' + ((S.favs && S.favs.length) || 0) + ':' + homeTheme() + ':' + ((S.membership && (S.membership.tier || S.membership.planId || S.membership.active)) || '');
+    if (name === 'news') {
+      const tab = newsTabOf();
+      const q = String((route().query && route().query.q) || S.newsQ || '').trim();
+      const n = (S.newsList && S.newsList.items && S.newsList.items.length) || (S.newsCache && S.newsCache.items && S.newsCache.items.length) || 0;
+      return 'news:' + tab + ':' + q + ':' + n;
+    }
+    if (name === 'results') {
+      const n = (S.results && S.results.length) || 0;
+      return 'rs:' + n + ':' + (S.rsDate || '') + ':' + (S.rsLeague || '');
     }
   } catch (_) {}
   return String(name || '') + ':x';
 }
 
 function saveTabKeep(name, viewEl) {
-  if (!name || !TABS.includes(name) || !viewEl) return;
+  if (!name || !isShellTab(name) || !viewEl) return;
   try {
     const html = viewEl.innerHTML;
     if (!html || html.length < 120) return;
@@ -7997,9 +8082,9 @@ function predictPlatformWrapActive(r, viewEl) {
 
 /** Tab/sub view class + optional navy wrap (开奖 rs-wrap / 预测 platform pr-wrap). */
 function viewWrapClass(r, viewEl) {
-  const isTab = TABS.includes(r.name);
+  const isTab = isShellTab(r.name);
   const prPlat = predictPlatformWrapActive(r, viewEl);
-  let wrap = r.name === 'results' ? ' rs-wrap' : (r.name === 'match' ? ' md-wrap' : (prPlat ? ' pr-wrap' : ''));
+  let wrap = r.name === 'match' ? ' md-wrap' : (prPlat ? ' pr-wrap' : '');
   // 1.9.137: 赛后复盘 — no layered card shell on content pane (wide tables must not clip)
   if (r.name === 'match' && detailTabOf(String(r.arg || '')) === 'review') wrap += ' md-wrap--review';
   if (r.name === 'kb') {
@@ -8034,11 +8119,23 @@ function prTeamsQuietRow(m) {
 function render(opts) {
   opts = opts || {};
   applyHomeTheme(homeTheme());
-  const r = route();
+  let r = route();
+  if (r.name === 'me') {
+    openMeDrawer();
+    if (location.hash !== '#/home') {
+      history.replaceState(null, '', '#/home');
+      navNote('#/home');
+    }
+    r = route();
+  }
   if (!PAGES[r.name]) return go('#/home', true);
   if (PROTECTED.includes(r.name) && !loggedIn()) return go('#/login', true);
-  if ((r.name === 'login' || r.name === 'register') && loggedIn()) return go('#/me', true);
-  const isTab = TABS.includes(r.name);
+  if ((r.name === 'login' || r.name === 'register') && loggedIn()) {
+    go('#/home', true);
+    openMeDrawer();
+    return;
+  }
+  const isTab = isShellTab(r.name);
   const v = $('#view');
   if (!v) return;
   const same = render.last === location.hash;
@@ -8076,14 +8173,16 @@ function render(opts) {
 
   // No-op: same route + same content signature (boot double-render / 3min poll)
   if (!opts.force && same && render.lastSig === curSig && v.childNodes.length) {
+    syncTopChrome(r.name);
     syncTabbar(r.name, isTab);
     applyViewWrapClass(v, r);
+    if (meDrawerOpen()) syncMeDrawer();
     renderPlanBar();
     return;
   }
 
   const prevTab = render.lastTab || null;
-  const switchingTab = isTab && prevTab && prevTab !== r.name && TABS.includes(prevTab);
+  const switchingTab = isTab && prevTab && prevTab !== r.name && isShellTab(prevTab);
 
   // Stash leaving tab before wipe
   if (switchingTab) saveTabKeep(prevTab, v);
@@ -8129,7 +8228,9 @@ function render(opts) {
       if (on) nds.scrollLeft = on.offsetLeft - nds.clientWidth / 2 + on.clientWidth / 2;
     }
   }
+  syncTopChrome(r.name);
   syncTabbar(r.name, isTab);
+  if (meDrawerOpen()) syncMeDrawer();
   renderPlanBar();
   const payPhase = (S.payUi && S.payUi.phase) || 'form';
   const hasVip = (r.name === 'membership' && loggedIn()) || (r.name === 'pay' && payPhase === 'form');
@@ -8156,9 +8257,6 @@ function render(opts) {
   }
   if (r.name === 'orders' && S.orders == null) {
     loadOrders().then(() => { if (route().name === 'orders') render({ force: true }); });
-  }
-  if (r.name === 'me' && loggedIn() && !S.membership) {
-    api('/membership/status').then(ms => { S.membership = ms; if (route().name === 'me') render({ force: true }); }).catch(() => {});
   }
   if (r.name === 'player-db') {
     syncPlayerDbKeyFromRoute();
@@ -8196,7 +8294,11 @@ document.addEventListener('click', async e => {
     return;
   }
   const el = e.target.closest('[data-act],[data-go],[data-key],[data-type],[data-mult],[data-sdate],[data-slg],[data-rdate],[data-rlg],[data-pf],[data-av]');
-  if (!el) { if (e.target.id === 'sheet') closeSheet(); return; }
+  if (!el) {
+    if (e.target.id === 'sheet') closeSheet();
+    if (e.target.id === 'me-drawer-mask') closeMeDrawer();
+    return;
+  }
   const d = el.dataset;
   if (d.key) return toggleSel(d.mid, d.key);
   if (d.type) { const n = +d.type; S.types = S.types.includes(n) ? S.types.filter(x => x !== n) : [...S.types, n]; if (!S.types.length) S.types = [n]; return openPlanSheet(); }
@@ -8861,6 +8963,8 @@ document.addEventListener('click', async e => {
       })();
       return;
     }
+    case 'openMe': return openMeDrawer();
+    case 'closeMe': return closeMeDrawer();
     case 'guest': S.guest = true; LS.set('jc_guest', true); return go('#/home', true);
     case 'forgot': return confirmDlg('忘记密码', '当前版本暂未接入短信验证码，无法自助找回密码。<br>如需重置，请联系运营方客服协助处理。', '知道了');
     case 'logout': {
@@ -8916,7 +9020,8 @@ async function afterAuth(res, isNew) {
   try { S.membership = await api('/membership/status'); } catch { S.membership = null; }
   S.memberCatalog = null;
   toast(isNew ? '注册成功，欢迎你！' : `欢迎回来，${res.user.nickname}` + (lp.length || lf.length ? '（本机数据已同步）' : ''));
-  go('#/me', true);
+  go('#/home', true);
+  openMeDrawer();
 }
 document.addEventListener('submit', async e => {
   e.preventDefault(); const f = e.target;
@@ -9015,7 +9120,7 @@ document.addEventListener('submit', async e => {
 (() => {
   const ptr = $('#ptr'); let y0 = null, dy = 0, busy = false;
   const txt = t => (ptr.querySelector('span').textContent = t);
-  addEventListener('touchstart', e => { y0 = null; if (busy || window.__fbBusy || window.scrollY > 0 || !TABS.includes(route().name) || !$('#sheet').classList.contains('hidden')) return; y0 = e.touches[0].clientY; dy = 0; }, { passive: true });
+  addEventListener('touchstart', e => { y0 = null; if (busy || window.__fbBusy || window.scrollY > 0 || !isShellTab(route().name) || !$('#sheet').classList.contains('hidden')) return; y0 = e.touches[0].clientY; dy = 0; }, { passive: true });
   addEventListener('touchmove', e => {
     if (y0 === null) return; dy = e.touches[0].clientY - y0; if (dy <= 0) return;
     const d = Math.min(dy * 0.5, 90); ptr.style.transition = 'none'; ptr.style.transform = `translate(-50%, ${d - 50}px)`;
