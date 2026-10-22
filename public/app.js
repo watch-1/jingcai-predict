@@ -1593,6 +1593,11 @@ function ring(v, opts) {
   const cls = muted ? 'ring ring-muted' : 'ring';
   return `<div class="${cls}"><svg viewBox="0 0 54 54"><circle cx="27" cy="27" r="23" stroke="#e9f0ff" stroke-width="5" fill="none"/><circle cx="27" cy="27" r="23" stroke="${stroke}" stroke-width="5" fill="none" stroke-linecap="round" stroke-dasharray="${(c * v).toFixed(1)} ${c.toFixed(1)}"/></svg><span class="num">${Math.round(v * 100)}</span></div>`;
 }
+function ringCluster(v, opts) {
+  const muted = !!(opts && opts.muted);
+  const lab = (opts && opts.label != null) ? opts.label : '信心';
+  return `<div class="pr-conf-cluster${muted ? ' muted' : ''}"><span class="pr-conf-lab">${esc(lab)}</span>${ring(v, opts)}</div>`;
+}
 
 function shortReason(m, pr) {
   const rep = S.predictCache && S.predictCache[String(m.id)];
@@ -1663,15 +1668,17 @@ function predCardHtml(m, pr, i, opts) {
   const cardCls = (isPending ? ' pr-pending' : (isWatch ? ' pr-watch' : ' pr-speak')) + (edged ? ' pr-edge' : '') + (upset ? ' pr-upset' : '') + (agree ? ' pr-agree' : '');
   if (quiet) {
     const qCls = (isPending ? ' pr-pending' : (isWatch ? ' pr-watch' : '')) + (m.sample ? ' pr-sample' : '');
+    const confLab = isPending ? '参考' : (isWatch ? '观望' : '信心');
     return `<div class="card pr-card pr-list-quiet${qCls}" data-go="#/match/${encodeURIComponent(m.id)}">
-    <div class="pr-hd"><span class="rank ${i < 3 && !isWatch && !isPending ? 'r' + (i + 1) : ''} num">${i + 1}</span>
-      <div class="pr-hd-body">
-        <div class="pr-meta">${lgTag(m)}<span>${esc(m.num)} · ${esc(m.date.slice(5))} ${esc(m.time)}</span>${m.sample ? '<span class="sample-tag">示例</span>' : ''}</div>
-        <div class="pr-teams">${badge(m.home, 'sm', m.homeLogo)}<span class="nm">${esc(m.home)}</span><span class="vs">vs</span><span class="nm">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div>
-      </div>${ring(pr.conf, (isWatch || isPending) ? { muted: true } : null)}</div>
-    ${predOddsMini(m, pr)}
-    <div class="pr-cbar"><div class="lab"><span>${isPending ? '参考指数' : (isWatch ? '观望指数' : '信心指数')}</span><span class="num">${confPct}%</span></div>
-      <div class="track"><i style="width:${confPct}%;background:${barColor}"></i></div></div></div>`;
+    <div class="pr-quiet-head">
+      <span class="rank ${i < 3 && !isWatch && !isPending ? 'r' + (i + 1) : ''} num">${i + 1}</span>
+      <div class="pr-meta">${lgTag(m)}<span>${esc(m.num)} · ${esc(m.date.slice(5))} ${esc(m.time)}</span>${m.sample ? '<span class="sample-tag">示例</span>' : ''}</div>
+      ${ringCluster(pr.conf, { muted: isWatch || isPending, label: confLab })}
+    </div>
+    <div class="pr-quiet-body">
+      <div class="pr-teams">${badge(m.home, 'sm', m.homeLogo)}<span class="nm">${esc(m.home)}</span><span class="vs">vs</span><span class="nm">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div>
+      <div class="pr-quiet-odds">${predOddsMini(m, pr)}</div>
+    </div></div>`;
   }
   return `<div class="card pr-card${cardCls}" data-go="#/match/${encodeURIComponent(m.id)}">
     <div class="pr-hd"><span class="rank ${i < 3 && !isWatch && !isPending ? 'r' + (i + 1) : ''} num">${i + 1}</span>
@@ -1851,35 +1858,47 @@ function usefulnessStripHtml() {
 function pagePredictHub() {
   const ms = S.matches;
   const n = ms ? ms.length : 0;
-  return `<div class="pred-gate-wrap">
-    <p class="pred-gate-lead">选择预测来源：平台简报与私有知识相互独立，个人预测不会写入平台缓存。</p>
-    <button type="button" class="pred-gate card" data-act="prLane" data-lane="platform">
-      <span class="pred-gate-ico pri">平</span>
-      <div class="pred-gate-body">
+  const kbMeta = loggedIn() ? '仅本机与账号私有' : '登录后可用';
+  return `<div class="pred-hub">
+    <div class="pred-hub-hero">
+      <div class="pred-hub-hero-ic">${I.chart}</div>
+      <h2 class="pred-hub-title">选择预测来源</h2>
+      <p class="pred-hub-sub">平台简报与个人知识相互独立，私有预测不写入平台缓存。</p>
+    </div>
+    <div class="pred-hub-stack">
+      <button type="button" class="pred-hub-card pri" data-act="prLane" data-lane="platform">
+        <div class="pred-hub-card-hd">
+          <span class="pred-hub-ic pri">${I.chart}</span>
+          <span class="pred-hub-pill">主入口</span>
+        </div>
         <h3>平台预测</h3>
         <p>站内模型与情报简报，按场次查看信心指数与完整分析。</p>
-        <span class="pred-gate-meta">${n ? `在售约 ${n} 场` : '加载场次中…'}</span>
-      </div>
-      <span class="pred-gate-arr">›</span>
-    </button>
-    <button type="button" class="pred-gate card" data-act="prLane" data-lane="kb">
-      <span class="pred-gate-ico kb">私</span>
-      <div class="pred-gate-body">
+        <div class="pred-hub-foot">
+          <span class="pred-hub-stat">${n ? `在售 ${n} 场` : '加载场次…'}</span>
+          <span class="pred-hub-go">进入<span class="go-ic">${I.arr}</span></span>
+        </div>
+      </button>
+      <button type="button" class="pred-hub-card sec" data-act="prLane" data-lane="kb">
+        <div class="pred-hub-card-hd">
+          <span class="pred-hub-ic sec">${I.doc}</span>
+        </div>
         <h3>私有知识预测</h3>
-        <p>管理你的知识包与笔记，在单场中勾选条目生成个人参考概率。</p>
-        <span class="pred-gate-meta">${loggedIn() ? '用户私有数据' : '登录后可用'}</span>
-      </div>
-      <span class="pred-gate-arr">›</span>
-    </button>
+        <p>管理知识包与笔记，在单场勾选条目生成个人参考概率。</p>
+        <div class="pred-hub-foot">
+          <span class="pred-hub-stat">${kbMeta}</span>
+          <span class="pred-hub-go">管理<span class="go-ic">${I.arr}</span></span>
+        </div>
+      </button>
+    </div>
   </div>`;
 }
 function pagePredict() {
   const ms = S.matches;
   const lane = S.prLane || 'hub';
   let h = hdr('预测', { back: false, right: lane === 'platform' ? `<button type="button" class="ic-btn" data-act="prHub" aria-label="切换">切换</button>` : srcPill() });
-  if (!ms) return h + `<div class="hdr-ext kb-hdr-sp"></div>` + (lane === 'hub' ? pagePredictHub() : skeleton(4));
+  if (!ms) return h + (lane === 'hub' ? pagePredictHub() : `<div class="hdr-ext kb-hdr-sp"></div>` + skeleton(4));
   if (lane === 'hub') {
-    h += `<div class="hdr-ext kb-hdr-sp"></div>` + pagePredictHub();
+    h += pagePredictHub();
     return h + foot();
   }
   const all = ms.map(m => ({ m, pr: effectivePredict(m) })).filter(x => x.pr)
@@ -7816,7 +7835,8 @@ function render(opts) {
   } else {
     const nextHtml = PAGES[r.name](r.arg);
     // 1.9.129: rs-wrap / md-wrap = intentional navy list bg (match-detail hero #1B2A4A)
-    const wrap = r.name === 'results' ? ' rs-wrap' : (r.name === 'match' ? ' md-wrap' : '');
+    const prPlat = r.name === 'predict' && (S.prLane || 'hub') === 'platform';
+    const wrap = r.name === 'results' ? ' rs-wrap' : (r.name === 'match' ? ' md-wrap' : (prPlat ? ' pr-wrap' : ''));
     v.className = 'view' + (isTab ? '' : ' sub') + wrap;
     const softSame = !!(same && hasPrev && !switchingTab);
     applyViewHtml(v, nextHtml, { isTab, hasPrev, cold, softSame });
