@@ -1079,7 +1079,7 @@ function homeQuick(theme) {
     `<button type="button" data-go="${g}"><span class="qi frost">${ic}</span>${t}</button>`).join('')}</div>`;
 }
 
-/** 1.9.138: home 「比赛态度」 feed — platform predictions, OK严选-style cards (no marketplace chrome). */
+/** 1.9.139: home 「比赛态度」 — same column_posts as match 态度 tab (平台简报). */
 function homeAttitudeWhen(m) {
   const t = (m.time || '').slice(0, 5);
   return `${dayName(m.date)} ${t}`;
@@ -1095,57 +1095,97 @@ function homeAttitudeRows(ms) {
     })
     .slice(0, 12);
 }
-function homeAttitudeCard({ m, pr }) {
-  const pending = isPendingPr(pr);
-  const watch = !pending && !isSpeakPr(pr);
-  const confPct = Math.round(pr.conf * 100);
+function homeAttitudeCardFromPost(p, m) {
+  const pr = m ? effectivePredict(m) : null;
+  const pending = pr && isPendingPr(pr);
+  const watch = pr && !pending && !isSpeakPr(pr);
+  const confPct = p && /信心\s*(\d+)\s*%/.test(p.title || '')
+    ? parseInt((p.title || '').replace(/.*信心\s*(\d+)\s*%.*/, '$1'), 10)
+    : (pr ? Math.round(pr.conf * 100) : 0);
   const confLab = pending ? '参考' : (watch ? '观望' : '信心指数');
-  const pickLab = pending ? (pr.speakLabel || '情报加载中…') : (watch ? (pr.speakLabel || pr.text) : (pr.pickText || pr.text));
+  const pickLab = (p && p.pickLabel) || (pending ? (pr.speakLabel || '情报加载中…') : (watch ? (pr.speakLabel || pr.text) : (pr && (pr.pickText || pr.text)) || '—'));
   const leftLab = pending ? '状态' : (watch ? '表态' : '推荐');
-  const teaser = shortReason(m, pr);
-  const title = `【${m.league || '赛事'}】${m.home} VS ${m.away}`;
-  const teaserShort = teaser.length > 80 ? teaser.slice(0, 78) + '…' : teaser;
-  const speakTag = (!pending && !watch && pr.multiFactor) ? '<span class="ha-tag">表态</span>' : '';
-  const pickCls = (!pending && !watch && pr.lean && (pr.lean === 'h' || pr.lean === 'd' || pr.lean === 'a'))
-    ? ` pick-${pr.lean}` : '';
-  return `<button type="button" class="ha-card" data-go="#/match/${encodeURIComponent(m.id)}">
+  const locked = !!(p && p.locked);
+  const bodyTeaser = locked
+    ? (p.bodyPreview || '付费内容 · 解锁后查看完整分析')
+    : sanitizeBanCopy((p && p.body) || (m && pr ? shortReason(m, pr) : '') || '');
+  const teaserShort = bodyTeaser.length > 80 ? bodyTeaser.slice(0, 78) + '…' : bodyTeaser;
+  const title = (p && p.title) || (m ? `【${m.league || '赛事'}】${m.home} VS ${m.away}` : '平台简报');
+  const lvl = pr && pr.lvl ? pr.lvl : ['l0', '简报'];
+  const speakTag = (!pending && !watch && pr && pr.multiFactor) ? '<span class="ha-tag">表态</span>' : '';
+  const pickCls = pr && pr.top && (pr.top === 'h' || pr.top === 'd' || pr.top === 'a') ? ` pick-${pr.top}` : '';
+  const st = (p && p.author && p.author.stats) || null;
+  const price = Number(p && p.priceCoins) || 0;
+  const bought = Number(p && p.purchaseCount) || 0;
+  const mid = (p && p.matchId) || (m && m.id) || '';
+  const matchBar = m
+    ? `${esc(homeAttitudeWhen(m))} · 【${esc(m.league || '联赛')}】 ${esc(m.home)} VS ${esc(m.away)} · 单场`
+    : (p && p.matchLabel ? esc(p.matchLabel) + ' · 单场' : '单场');
+  const go = mid ? `#/match/${encodeURIComponent(mid)}` : (p && p.id ? `#/column/post/${p.id}` : '#/predict');
+  return `<button type="button" class="ha-card" data-go="${go}">
     <div class="ha-hd">
       <div class="ha-brand">
         <span class="ha-av" aria-hidden="true">${I.chart}</span>
         <div class="ha-id">
           <span class="ha-name">平台简报</span>
-          <span class="ha-badges"><span class="lvl ${pr.lvl[0]}">${esc(pr.lvl[1])}</span>${speakTag}</span>
+          <span class="ha-badges"><span class="lvl ${lvl[0]}">${esc(lvl[1])}</span>${speakTag}${colStatsBadges(st)}</span>
         </div>
       </div>
-      <div class="ha-conf">
-        <small>${esc(confLab)}</small>
-        <b class="num">${confPct}<span class="ha-pct">%</span></b>
-      </div>
+      <div class="ha-conf">${colHitPct(st) || `<small>${esc(confLab)}</small><b class="num">${confPct}<span class="ha-pct">%</span></b>`}</div>
     </div>
     <p class="ha-teaser"><strong>${esc(title)}</strong> ${esc(teaserShort)}</p>
-    <div class="ha-match-bar">${esc(homeAttitudeWhen(m))} · 【${esc(m.league || '联赛')}】 ${esc(m.home)} VS ${esc(m.away)} · 单场</div>
-    <div class="ha-ft"><span class="ha-pick">${esc(leftLab)} <b class="${pickCls.trim()}">${esc(pickLab)}</b></span></div>
+    <div class="ha-match-bar">${matchBar}</div>
+    <div class="ha-ft">
+      <span class="ha-pick">${esc(leftLab)} <b class="${pickCls.trim()}">${esc(pickLab)}</b></span>
+      ${price > 0 ? `<span class="ha-meta"><span class="col-bought">${bought}人已购</span><span class="col-price-tag"><span class="col-single">单场</span>${COL_COIN_ICO}<b>${price}</b></span></span>` : ''}
+    </div>
   </button>`;
+}
+function homeAttitudeCard({ m, pr }) {
+  return homeAttitudeCardFromPost(null, m);
 }
 function homeAttitudeSection(ms) {
   let h = `<div class="ha-sec-h"><h2>比赛态度</h2><button type="button" class="more" data-go="#/predict">全部预测 ${I.arr}</button></div>`;
-  const sk = `<div class="ha-feed">${[1, 2, 3].map(() =>
+  const sk = `<div class="ha-feed" id="homeAttitudeFeed">${[1, 2, 3].map(() =>
     '<div class="ha-card ha-skel"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line" style="height:36px;margin-top:10px"></div><div class="sk sk-line" style="width:90%;margin-top:8px"></div></div>').join('')}</div>`;
   h += `<div id="homeAttitudeWrap" class="home-attitude-wrap" style="--ha-p:0;--ha-diag:0%">`;
   h += '<div class="ha-pastel" aria-hidden="true"></div><div class="ha-shell" aria-hidden="true"></div>';
-  if (!ms) {
-    h += sk + '</div>';
-    return h;
-  }
-  const rows = homeAttitudeRows(ms);
-  h += '<div class="ha-feed">';
-  if (rows.length) h += rows.map(homeAttitudeCard).join('');
-  else {
-    h += empty('今日暂无可展示的未开赛预测场次，开售后将按信心指数排序出现在这里。',
-      '<button type="button" class="btn ghost sm" data-go="#/results">查看最新开奖</button>', '暂无场次');
-  }
-  h += '</div></div>';
+  h += sk + '</div>';
   return h;
+}
+async function fillHomePlatformAttitude() {
+  const feedEl = document.getElementById('homeAttitudeFeed');
+  if (!feedEl || route().name !== 'home') return;
+  const ms = S.matches;
+  try {
+    const j = await api('/column/feed?tab=attitude&author=platform&limit=12', { timeout: 14000 });
+    if (!feedEl.isConnected) return;
+    const posts = (j && j.posts) || [];
+    if (!posts.length) {
+      if (!ms) return;
+      const rows = homeAttitudeRows(ms);
+      if (!rows.length) {
+        feedEl.innerHTML = empty('今日暂无可展示的未开赛预测场次，开售后将按信心指数排序出现在这里。',
+          '<button type="button" class="btn ghost sm" data-go="#/results">查看最新开奖</button>', '暂无场次');
+      } else {
+        feedEl.innerHTML = rows.map(homeAttitudeCard).join('');
+      }
+      return;
+    }
+    const byId = new Map((ms || []).map(m => [String(m.id), m]));
+    feedEl.innerHTML = posts.map((p) => {
+      const m = byId.get(String(p.matchId)) || null;
+      return homeAttitudeCardFromPost(p, m);
+    }).join('');
+  } catch (e) {
+    if (!feedEl.isConnected) return;
+    if (ms) {
+      const rows = homeAttitudeRows(ms);
+      feedEl.innerHTML = rows.length
+        ? rows.map(homeAttitudeCard).join('')
+        : empty('加载失败，请稍后重试', `<button type="button" class="btn ghost sm" data-act="reload">重试</button>`, '暂无场次');
+    }
+  }
 }
 let homeAttitudeScrollHooked = false;
 function syncHomeAttitudeScroll() {
@@ -1201,7 +1241,7 @@ function pageHome() {
   h += `<div class="sec-h"><h2>体坛资讯</h2><button class="more" data-go="#/news">更多资讯 ${I.arr}</button></div>`;
   h += `<div id="home-news" class="news-home">${skeletonNews(2)}</div>`;
   setTimeout(() => {
-    fillHomeBanners(); fillHomeNews(); fillHomeColumnAuthors();
+    fillHomeBanners(); fillHomeNews(); fillHomeColumnAuthors(); fillHomePlatformAttitude();
     // 1.9.123: warm live-scores without full home wipe (was blanking page under float-ball)
     const ids = (S.matches || []).slice(0, 40).map(m => String(m.id)).filter(Boolean);
     if (ids.length) {
@@ -4242,7 +4282,10 @@ async function prefetchPredictReports(ms, { concurrency = 3 } = {}) {
     const r = route();
     if (r.name === 'predict' || r.name === 'home') {
       render();
-      if (r.name === 'home') { try { persistHomeSnap(document.getElementById('view')); } catch (_) {} }
+      if (r.name === 'home') {
+        try { persistHomeSnap(document.getElementById('view')); } catch (_) {}
+        fillHomePlatformAttitude();
+      }
     }
   }
   return changed;
@@ -6966,15 +7009,19 @@ function colTime(ms) {
   return `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
 }
 function colStatsBadges(st) {
-  if (!st || (!st.recentLabel && !st.streakLabel && !st.hitPctLabel)) return '';
+  if (!st) return '';
+  if (st.insufficient && st.recentLabel) {
+    return `<span class="col-badges"><span class="col-badge muted">${esc(st.recentLabel)}</span></span>`;
+  }
+  if (!st.recentLabel && !st.streakLabel && !st.hitPctLabel) return '';
   const bits = [];
   if (st.streakLabel) bits.push(`<span class="col-badge streak">${esc(st.streakLabel)}</span>`);
-  if (st.recentLabel) bits.push(`<span class="col-badge recent">${esc(st.recentLabel)}</span>`);
-  return `<div class="col-badges">${bits.join('')}</div>`;
+  if (st.recentLabel && !st.insufficient) bits.push(`<span class="col-badge recent">${esc(st.recentLabel)}</span>`);
+  return `<span class="col-badges">${bits.join('')}</span>`;
 }
 function colHitPct(st) {
-  if (!st || !st.hitPctLabel) return '';
-  return `<span class="col-hitpct">${esc(st.hitPctLabel)}</span>`;
+  if (!st || st.insufficient || !st.hitPctLabel) return '';
+  return `<span class="col-hitpct"><small>单选比例</small><b>${esc(st.hitPctLabel)}</b></span>`;
 }
 function colAuthorCard(a) {
   const tags = (a.tags || []).slice(0, 3).map(colTopicChip).join('') || '<span class="col-tag muted">未设话题</span>';
@@ -7225,7 +7272,7 @@ function matchAttitudeTabHtml(x) {
     : `<button type="button" class="btn pri sm" data-go="#/login">登录后发表态度</button>`;
   return `<div class="dsec match-attitude-sec" id="match-attitude-${esc(mid)}">
     <div class="match-att-hd"><h3>态度</h3><div class="match-att-actions">${actions}</div></div>
-    <p class="note">本场真实用户观点 · 完场结算连红 · 付费帖用云朵解锁。</p>
+    <p class="note">平台简报与用户观点同列展示 · 完场按赛果结算战绩 · 付费帖用云朵解锁。</p>
     <div id="match-attitude-list-${esc(mid)}" class="match-att-list">${skeletonNews(2)}</div>
   </div>`;
 }
@@ -7262,6 +7309,7 @@ function colMatchAttitudeCard(p) {
   if (!p) return '';
   const a = p.author || {};
   const st = a.stats || null;
+  const plat = !!p.isPlatformBrief;
   const locked = !!p.locked;
   const bodyText = sanitizeBanCopy(p.body || '');
   const preview = locked
@@ -7281,16 +7329,19 @@ function colMatchAttitudeCard(p) {
     ? `<div class="col-att-foot"><span class="col-bought">${bought}人已购</span>
         <span class="col-price-tag"><span class="col-single">单场</span>${COL_COIN_ICO}<b>${price}</b></span></div>`
     : `<div class="col-att-foot"><span class="col-eng">${Number(p.reads) || 0} 阅读 · ${Number(p.likes) || 0} 赞</span>${pickBit}</div>`;
-  return `<article class="col-macard ${p.paid ? 'paid' : ''} ${locked ? 'is-locked' : ''}" data-post="${p.id}">
-    <header class="col-macard-hd">
-      <button type="button" class="col-pauth" data-go="#/column/author/${a.userId}">
+  const authHead = plat
+    ? `<span class="col-pauth col-pauth-plat"><span class="ha-av sm" aria-hidden="true">${I.chart}</span><span class="col-anm">${esc(a.nickname || '平台简报')}</span></span>`
+    : `<button type="button" class="col-pauth" data-go="#/column/author/${a.userId}">
         <span class="col-av sm">${avatarSvg(a.avatar || 'a1')}</span>
         <span class="col-anm">${esc(a.nickname || '球迷')}</span>
-      </button>
+      </button>`;
+  return `<article class="col-macard ${p.paid ? 'paid' : ''} ${locked ? 'is-locked' : ''} ${plat ? 'platform-brief' : ''}" data-post="${p.id}">
+    <header class="col-macard-hd">
+      ${authHead}
       ${colStatsBadges(st)}
       ${colHitPct(st)}
     </header>
-    ${p.title ? `<h3 class="col-ptitle">${esc(p.title)}${p.paid ? '<span class="col-paid-chip">收费</span>' : ''}</h3>` : (p.paid ? `<h3 class="col-ptitle"><span class="col-paid-chip">收费</span></h3>` : '')}
+    ${p.title ? `<h3 class="col-ptitle">${esc(p.title)}</h3>` : ''}
     <div class="col-macard-body ${locked ? 'col-locked' : ''}">${esc(preview)}</div>
     ${unlock ? `<div class="col-macard-unlock">${unlock}</div>` : ''}
     ${footPaid}

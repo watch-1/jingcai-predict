@@ -680,6 +680,10 @@ async function getData(kind) {
           const r = require('./lib/crest-autofill').sweepMatches(data);
           if (r && r.queued) console.log('[crest-autofill] sweep', kind, 'queued', r.queued);
         } catch { /* optional */ }
+        try {
+          const n = platformAttitude.syncUpcomingFromCachedReports(data, { limit: 24 });
+          if (n) console.log('[platform-attitude] synced briefs', n);
+        } catch (e) { console.warn('[platform-attitude]', e.message); }
       }
       return payload;
     } catch (e) { errors.push(`${ep.split('?')[0]}: ${e.message}`); }
@@ -1871,6 +1875,39 @@ columnApi.configure({
       return /^[HDA]$/.test(flag) ? flag : null;
     } catch { return null; }
   },
+});
+function matchFromCaches(matchId) {
+  const id = String(matchId);
+  for (const kind of ['matches', 'schedule']) {
+    try {
+      const pack = cache[kind] && cache[kind].payload;
+      const m = (pack && pack.data || []).find((x) => String(x.id) === id);
+      if (m) return m;
+    } catch { /* */ }
+  }
+  return null;
+}
+function upcomingMatchesFromCache() {
+  const out = [];
+  const seen = new Set();
+  for (const kind of ['matches', 'schedule']) {
+    try {
+      const pack = cache[kind] && cache[kind].payload;
+      for (const m of (pack && pack.data) || []) {
+        if (!m || m.id == null) continue;
+        const id = String(m.id);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(m);
+      }
+    } catch { /* */ }
+  }
+  return out;
+}
+const platformAttitude = require('./lib/platform-attitude');
+platformAttitude.configure({
+  lookupMatch: matchFromCaches,
+  listMatches: upcomingMatchesFromCache,
 });
 app.use('/api', require('./lib/deepseek-match-chat'));
 app.use('/api', require('./lib/player-db-api'));
