@@ -5306,9 +5306,6 @@ function matchHero(x, m, r) {
     <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo)}<span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small></div>
     <div class="mid">${mid}</div>
     <div class="tm">${badge(x.away, 'lg', x.awayLogo)}<span>${esc(x.away)}</span><small>客队 ${esc(x.awayRank || '')}</small></div></div></div>`;
-  if (r) {
-    h += `<div class="dsec"><h3>赛果</h3><dl class="kv"><dt>全场</dt><dd>${esc(r.full || '-')}</dd><dt>半场</dt><dd>${esc(r.half || '-')}</dd><dt>让球</dt><dd>${esc(r.goalLine || '-')}</dd></dl>${resultTags(r)}</div>`;
-  }
   return h;
 }
 
