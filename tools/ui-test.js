@@ -65,6 +65,20 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     ok(!(await p.$('.sch-channels')), 'schedule: no 热门/关注/全部 channel row');
     ok(!(await p.$('.ls-status')), 'schedule: no legacy status pill row');
     ok(await p.$$eval('.dstrip button', l => l.length) > 0 && await p.$$eval('.chips button', l => l.length) > 0, 'schedule: date strip + league chips');
+    const leagueSel = await p.evaluate(() => {
+      const leagueBtn = [...document.querySelectorAll('.league-chips button[data-slg]')].find(b => b.dataset.slg !== '全部');
+      if (!leagueBtn) return null;
+      return `[data-slg="${leagueBtn.dataset.slg.replace(/"/g, '\\"')}"]`;
+    });
+    if (leagueSel) {
+      const lgName = await p.$eval(leagueSel, e => e.dataset.slg);
+      await tap(leagueSel);
+      ok(await p.$eval(leagueSel, e => e.classList.contains('on')), `schedule: tap ${lgName} highlights league pill`);
+      ok(!(await p.$eval('.league-chips button[data-slg="全部"]', e => e.classList.contains('on'))), `schedule: 全部 off when ${lgName} selected`);
+      await tap(leagueSel);
+      ok(await p.$eval('.league-chips button[data-slg="全部"]', e => e.classList.contains('on')), `schedule: tap ${lgName} again returns to 全部`);
+      ok(!(await p.$eval(leagueSel, e => e.classList.contains('on'))), `schedule: ${lgName} off after second tap`);
+    } else ok(true, 'schedule: league pill toggle (no league chip to test)');
     await tap('#top-chrome [data-act="schMode"][data-mode="已结束"]'); await sleep(300);
     ok(!!(await p.$('#top-chrome .tc-tab--sch.on[data-mode="已结束"]')), 'schedule: tap 已结束 updates top chrome highlight');
     await tap('#top-chrome [data-act="schMode"][data-mode="未开始"]'); await sleep(200);
