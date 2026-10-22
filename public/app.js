@@ -762,6 +762,32 @@ const foot = () => ''; // 1.9.96: no data-source / disclaimer footer in end-user
 const TOP_TAB_DEF = [['home', '部落'], ['news', '头条'], ['results', '开奖']];
 const TAB_DEF = [['schedule', '赛程', I.cal], ['predict', '预测', I.chart], ['data', '数据', I.data]];
 
+/** 1.9.144: bottom tool tabs keep last 部落/头条/开奖 underline so feed switch stays visible. */
+function feedTopTabOf(rName) {
+  if (TOP_TABS.includes(rName)) {
+    S.feedTop = rName;
+    try { localStorage.setItem('jc_feed_top', rName); } catch (_) {}
+    return rName;
+  }
+  if (!S.feedTop) {
+    try { S.feedTop = localStorage.getItem('jc_feed_top') || 'home'; } catch (_) { S.feedTop = 'home'; }
+  }
+  if (!TOP_TABS.includes(S.feedTop)) S.feedTop = 'home';
+  return S.feedTop;
+}
+
+function matchFavBtn(x) {
+  if (!x || x.afShell) return '<span class="ph"></span>';
+  return `<button type="button" class="fav-btn ${isFav(x.id) ? 'on' : ''}" data-act="fav" data-id="${esc(x.id)}">${isFav(x.id) ? I.star + '已关注' : I.starO + '关注'}</button>`;
+}
+
+function matchEdgeNavBar(rightHtml) {
+  return `<div class="hero-edge-nav" aria-label="赛事导航">
+    <button type="button" class="ic-btn hero-ic" data-act="back" aria-label="返回">${I.back}</button>
+    <div class="hero-edge-r">${rightHtml || '<span class="ph"></span>'}</div>
+  </div>`;
+}
+
 function meDrawerOpen() {
   const dr = $('#me-drawer');
   return !!(dr && dr.classList.contains('open'));
@@ -830,17 +856,16 @@ function syncTopChrome(rName) {
   el.classList.toggle('hidden', !show);
   app.classList.toggle('has-top-chrome', show);
   if (!show) return;
-  const activeTop = TOP_TABS.includes(rName) ? rName : '';
+  const activeTop = feedTopTabOf(rName);
   const li = loggedIn();
   const av = avatarSvg(li ? (S.user && S.user.avatar) || 'a1' : 'a8');
   const msgDot = (S.plans && S.plans.length) ? '<i class="tc-dot" aria-hidden="true"></i>' : '';
   const tabs = TOP_TAB_DEF.map(([k, lab]) =>
-    `<button type="button" class="tc-tab${k === activeTop ? ' on' : ''}" data-go="#/${k}">${esc(lab)}</button>`
+    `<button type="button" class="tc-tab${k === activeTop ? ' on' : ''}" data-go="#/${k}"${k === activeTop ? ' aria-current="page"' : ''}>${esc(lab)}</button>`
   ).join('');
   const want = `<button type="button" class="tc-avatar" data-act="openMe" aria-label="我的">${av}</button>
     <nav class="tc-tabs" aria-label="内容">${tabs}</nav>
     <div class="tc-actions">
-      <button type="button" class="tc-ic" data-go="#/search" aria-label="搜索">${I.search}</button>
       <button type="button" class="tc-ic" data-go="#/plans" aria-label="我的消息">${I.mail}${msgDot}</button>
     </div>`;
   if (el.innerHTML !== want) el.innerHTML = want;
@@ -1628,7 +1653,7 @@ function ensureLiveScorePoll(ids, hasLive) {
 }
 
 function pageSchedule() {
-  let h = `<div class="shell-tools"><span class="shell-title">赛程</span>${srcPill()}</div>`;
+  let h = '';
   const ms = (S.schedule && S.schedule.length) ? S.schedule : S.matches, rs = S.results;
   if (!ms) return h + `<div class="dstrip" style="height:50px"></div>` + skeleton(4);
   // Group by 竞彩 issue date (businessDate), not kickoff calendar date.
@@ -2112,8 +2137,9 @@ function pagePredictHub() {
 function pagePredict() {
   const ms = S.matches;
   const lane = S.prLane || 'hub';
-  const prRight = lane === 'platform' ? `<button type="button" class="shell-link" data-act="prHub">切换</button>` : srcPill();
-  let h = `<div class="shell-tools"><span class="shell-title">预测</span>${prRight}</div>`;
+  let h = lane === 'platform'
+    ? `<div class="shell-tools shell-tools--bare"><button type="button" class="shell-link" data-act="prHub">切换</button></div>`
+    : '';
   if (!ms) return h + (lane === 'hub' ? pagePredictHub() : skeleton(4));
   if (lane === 'hub') {
     h += pagePredictHub();
@@ -2435,7 +2461,7 @@ function pageData() {
   const lg = dataLeagueOf();
   const kind = dataKindOf();
   const leagues = (S.dataLeagues && S.dataLeagues.length) ? S.dataLeagues : DATA_LEAGUES_FALLBACK;
-  let h = `<div class="shell-tools"><span class="shell-title">数据中心</span><button type="button" class="shell-link" data-act="dataRefresh" aria-label="刷新">${I.refresh} 刷新</button></div>`;
+  let h = `<div class="shell-tools shell-tools--bare"><button type="button" class="shell-link" data-act="dataRefresh" aria-label="刷新">${I.refresh} 刷新</button></div>`;
   h += `<div class="dc-sub"><button class="linkish" data-go="#/results">${I.cup}<span>开奖结果</span>${I.arr}</button>
     <span class="dc-tip">积分 / 射手 / 身价 · 无下注</span></div>`;
   h += `<div class="chips dc-leagues" id="dcLeagues">${leagues.map(l =>
@@ -3151,7 +3177,7 @@ function resultsBodyHtml(list) {
 }
 
 function pageResults() {
-  let h = `<div class="shell-tools shell-tools--compact"><span class="shell-title">开奖</span>${srcPill()}</div>`;
+  let h = '';
   if (!S.results) return h + `<div class="dstrip light" style="height:50px"></div>` + skeleton(4);
   const model = resultsDayModel();
   if (!model || model.emptyAll) return h + empty('官方开奖数据暂未同步，请稍后下拉刷新。', '', '暂无开奖') + foot();
@@ -5030,7 +5056,7 @@ async function loadLiveStats(x, { force } = {}) {
         if (hero && route().name === 'match' && String(route().arg) === key) {
           const m = (S.matches || []).find(z => String(z.id) === key) || x;
           const r = (S.results || []).find(z => String(z.id) === key);
-          hero.outerHTML = matchHero(m || x, m, r);
+          hero.outerHTML = matchHero(m || x, m, r, { favBtn: matchFavBtn(m || x) });
         }
         if (route().name === 'schedule') render();
         else if (route().name === 'home') { if (!softPatchLiveScoreCards()) render(); }
@@ -5485,7 +5511,7 @@ function dataTabHtml(x, m, stats) {
   h += nextFixturesCard(x);
   return h;
 }
-function matchHero(x, m, r) {
+function matchHero(x, m, r, { favBtn = '' } = {}) {
   const started = !!(m && Date.now() > kickoff(m)) || !!(x && Date.now() > kickoff(x));
   const id = String(x.id || '');
   const live = (S.liveStatsCache && S.liveStatsCache[id]) || null;
@@ -5519,7 +5545,8 @@ function matchHero(x, m, r) {
   const mid = (hg != null && ag != null)
     ? `<div class="score num">${esc(hg)} : ${esc(ag)}</div><small>${half ? '半场 ' + esc(half) + ' · ' : ''}${esc(statusLab || (finished ? '完场' : '进行中'))}</small>`
     : `<div class="vs">VS</div><small>${started ? (finished ? '完场' : '已开赛 · 待开奖') : esc(x.time) + ' 开赛'}</small>`;
-  let h = `<div class="hero" id="match-hero-${esc(id)}"><div class="meta">${lgTag(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
+  const nav = matchEdgeNavBar(favBtn);
+  let h = `<div class="hero hero--edge" id="match-hero-${esc(id)}">${nav}<div class="meta">${lgTag(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
     <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo)}<span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small></div>
     <div class="mid">${mid}</div>
     <div class="tm">${badge(x.away, 'lg', x.awayLogo)}<span>${esc(x.away)}</span><small>客队 ${esc(x.awayRank || '')}</small></div></div></div>`;
@@ -5733,10 +5760,14 @@ function pageMatch(id) {
   const m = findMatch(id); const r = !m && (S.results || []).find(x => x.id === String(id));
   const shell = !m && !r && loadFxShell(id);
   const x = m || r || shell || null;
-  const favBtn = x && !x.afShell ? `<button class="fav-btn ${isFav(x.id) ? 'on' : ''}" data-act="fav" data-id="${esc(x.id)}">${isFav(x.id) ? I.star + '已关注' : I.starO + '关注'}</button>` : '<span class="ph"></span>';
-  let h = hdr('赛事详情', { right: favBtn });
-  if (!S.matches && !shell) return h + '<div class="spinner"></div>';
-  if (!x) return h + empty('该场比赛已结束或已下架', '<button class="btn ghost sm" data-go="#/results">查看开奖</button>') + foot();
+  const favBtn = matchFavBtn(x);
+  if (!S.matches && !shell) {
+    return `<div class="hero hero--edge hero--edge-min">${matchEdgeNavBar()}<div class="spinner" style="margin:24px auto"></div></div>`;
+  }
+  if (!x) {
+    return `<div class="hero hero--edge hero--edge-min">${matchEdgeNavBar()}</div>`
+      + empty('该场比赛已结束或已下架', '<button class="btn ghost sm" data-go="#/results">查看开奖</button>') + foot();
+  }
   let tab = detailTabOf(x.id);
   const tabs = detailTabsFor(x);
   if (!tabs.some(tt => tt[0] === tab)) {
@@ -5744,7 +5775,7 @@ function pageMatch(id) {
     S.detailTab = S.detailTab || {};
     S.detailTab[x.id] = tab;
   }
-  h += matchHero(x, m, r);
+  let h = matchHero(x, m, r, { favBtn });
   h += `<div class="dtabs" data-mid="${esc(x.id)}">${tabs.map(([k, lab]) =>
     `<button type="button" class="${tab === k ? 'on' : ''}" data-act="detailTab" data-id="${esc(x.id)}" data-tab="${k}">${lab}</button>`
   ).join('')}</div>`;
@@ -5773,7 +5804,7 @@ function refreshDetailTabs(x) {
     const m = findMatch(x.id);
     const r = !m && (S.results || []).find(z => z.id === String(x.id));
     const wrap = document.createElement('div');
-    wrap.innerHTML = matchHero(x, m, r);
+    wrap.innerHTML = matchHero(x, m, r, { favBtn: matchFavBtn(x) });
     const next = wrap.firstElementChild;
     if (next) hero.replaceWith(next);
   }
@@ -7886,9 +7917,9 @@ function syncAndroidChrome(routeName) {
     if (window.JingcaiChrome && typeof window.JingcaiChrome.refreshSafeArea === 'function') {
       window.JingcaiChrome.refreshSafeArea();
     }
-    const lightHdr = isShellTab(routeName) || routeName === 'search';
+    const darkIcons = isShellTab(routeName);
     if (window.JingcaiChrome && typeof window.JingcaiChrome.statusBarStyle === 'function') {
-      window.JingcaiChrome.statusBarStyle(lightHdr ? 'dark' : 'light');
+      window.JingcaiChrome.statusBarStyle(darkIcons ? 'dark' : 'light');
     }
   } catch (_) {}
 }
@@ -8141,6 +8172,7 @@ function render(opts) {
     }
     r = route();
   }
+  if (r.name === 'search') return go('#/home', true);
   if (!PAGES[r.name]) return go('#/home', true);
   if (PROTECTED.includes(r.name) && !loggedIn()) return go('#/login', true);
   if ((r.name === 'login' || r.name === 'register') && loggedIn()) {
