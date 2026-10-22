@@ -1078,6 +1078,104 @@ function homeQuick(theme) {
   return `<div class="quick quick-pitch">${items.map(([g, t, ic]) =>
     `<button type="button" data-go="${g}"><span class="qi frost">${ic}</span>${t}</button>`).join('')}</div>`;
 }
+
+/** 1.9.138: home 「比赛态度」 feed — platform predictions, OK严选-style cards (no marketplace chrome). */
+function homeAttitudeWhen(m) {
+  const t = (m.time || '').slice(0, 5);
+  return `${dayName(m.date)} ${t}`;
+}
+function homeAttitudeRows(ms) {
+  return ms.map(m => ({ m, pr: effectivePredict(m) }))
+    .filter(x => x.pr && Date.now() < kickoff(x.m))
+    .sort((a, b) => {
+      const as = isSpeakPr(a.pr) ? 2 : (isPendingPr(a.pr) ? 0 : 1);
+      const bs = isSpeakPr(b.pr) ? 2 : (isPendingPr(b.pr) ? 0 : 1);
+      if (bs !== as) return bs - as;
+      return b.pr.conf - a.pr.conf;
+    })
+    .slice(0, 12);
+}
+function homeAttitudeCard({ m, pr }) {
+  const pending = isPendingPr(pr);
+  const watch = !pending && !isSpeakPr(pr);
+  const confPct = Math.round(pr.conf * 100);
+  const confLab = pending ? '参考' : (watch ? '观望' : '信心指数');
+  const pickLab = pending ? (pr.speakLabel || '情报加载中…') : (watch ? (pr.speakLabel || pr.text) : (pr.pickText || pr.text));
+  const leftLab = pending ? '状态' : (watch ? '表态' : '推荐');
+  const teaser = shortReason(m, pr);
+  const title = `【${m.league || '赛事'}】${m.home} VS ${m.away}`;
+  const teaserShort = teaser.length > 80 ? teaser.slice(0, 78) + '…' : teaser;
+  const speakTag = (!pending && !watch && pr.multiFactor) ? '<span class="ha-tag">表态</span>' : '';
+  const pickCls = (!pending && !watch && pr.lean && (pr.lean === 'h' || pr.lean === 'd' || pr.lean === 'a'))
+    ? ` pick-${pr.lean}` : '';
+  return `<button type="button" class="ha-card" data-go="#/match/${encodeURIComponent(m.id)}">
+    <div class="ha-hd">
+      <div class="ha-brand">
+        <span class="ha-av" aria-hidden="true">${I.chart}</span>
+        <div class="ha-id">
+          <span class="ha-name">平台简报</span>
+          <span class="ha-badges"><span class="lvl ${pr.lvl[0]}">${esc(pr.lvl[1])}</span>${speakTag}</span>
+        </div>
+      </div>
+      <div class="ha-conf">
+        <small>${esc(confLab)}</small>
+        <b class="num">${confPct}<span class="ha-pct">%</span></b>
+      </div>
+    </div>
+    <p class="ha-teaser"><strong>${esc(title)}</strong> ${esc(teaserShort)}</p>
+    <div class="ha-match-bar">${esc(homeAttitudeWhen(m))} · 【${esc(m.league || '联赛')}】 ${esc(m.home)} VS ${esc(m.away)} · 单场</div>
+    <div class="ha-ft"><span class="ha-pick">${esc(leftLab)} <b class="${pickCls.trim()}">${esc(pickLab)}</b></span></div>
+  </button>`;
+}
+function homeAttitudeSection(ms) {
+  let h = `<div class="ha-sec-h"><h2>比赛态度</h2><button type="button" class="more" data-go="#/predict">全部预测 ${I.arr}</button></div>`;
+  const sk = `<div class="ha-feed">${[1, 2, 3].map(() =>
+    '<div class="ha-card ha-skel"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line" style="height:36px;margin-top:10px"></div><div class="sk sk-line" style="width:90%;margin-top:8px"></div></div>').join('')}</div>`;
+  h += `<div id="homeAttitudeWrap" class="home-attitude-wrap" style="--ha-p:0;--ha-diag:0%">`;
+  h += '<div class="ha-pastel" aria-hidden="true"></div><div class="ha-shell" aria-hidden="true"></div>';
+  if (!ms) {
+    h += sk + '</div>';
+    return h;
+  }
+  const rows = homeAttitudeRows(ms);
+  h += '<div class="ha-feed">';
+  if (rows.length) h += rows.map(homeAttitudeCard).join('');
+  else {
+    h += empty('今日暂无可展示的未开赛预测场次，开售后将按信心指数排序出现在这里。',
+      '<button type="button" class="btn ghost sm" data-go="#/results">查看最新开奖</button>', '暂无场次');
+  }
+  h += '</div></div>';
+  return h;
+}
+let homeAttitudeScrollHooked = false;
+function syncHomeAttitudeScroll() {
+  const wrap = document.getElementById('homeAttitudeWrap');
+  if (!wrap || route().name !== 'home') return;
+  const apply = () => {
+    const el = document.getElementById('homeAttitudeWrap');
+    if (!el || route().name !== 'home') return;
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight || 640;
+    const start = el.offsetTop - Math.min(120, vh * 0.14);
+    const range = Math.max(260, el.offsetHeight * 0.65, vh * 0.35);
+    const y = window.scrollY || document.documentElement.scrollTop || 0;
+    const p = Math.min(1, Math.max(0, (y - start) / range));
+    el.style.setProperty('--ha-p', p.toFixed(3));
+    el.style.setProperty('--ha-diag', (p * 100).toFixed(1) + '%');
+  };
+  apply();
+  if (!homeAttitudeScrollHooked) {
+    homeAttitudeScrollHooked = true;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; apply(); });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+  }
+}
+
 function pageHome() {
   const theme = homeTheme();
   const ms = S.matches;
@@ -1097,36 +1195,7 @@ function pageHome() {
     h += `<div class="focus-pitch-wrap">${ms ? (focus[0] ? focusCardPitch(focus[0]) : '<div class="focus-empty note">暂无焦点赛事</div>') : '<div class="focus-bar skel"></div>'}</div>`;
   }
   h += warnBar();
-  h += `<div class="sec-h"><h2>今日高信心预测</h2><button class="more" data-go="#/predict">全部预测 ${I.arr}</button></div>`;
-  if (!ms) h += `<div class="hc">${[1, 2].map(() => '<div class="hc-item"><div class="sk sk-line" style="width:60%"></div><div class="sk sk-line" style="width:90%;height:18px"></div><div class="sk sk-line" style="width:40%"></div></div>').join('')}</div>`;
-  else {
-    const top = ms.map(m => ({ m, pr: effectivePredict(m) })).filter(x => x.pr && Date.now() < kickoff(x.m))
-      .sort((a, b) => {
-        const as = isSpeakPr(a.pr) ? 2 : (isPendingPr(a.pr) ? 0 : 1);
-        const bs = isSpeakPr(b.pr) ? 2 : (isPendingPr(b.pr) ? 0 : 1);
-        if (bs !== as) return bs - as;
-        return b.pr.conf - a.pr.conf;
-      }).slice(0, 5);
-    h += top.length ? `<div class="hc">${top.map(({ m, pr }) => {
-      const pending = isPendingPr(pr);
-      const watch = !pending && !isSpeakPr(pr);
-      const lab = pending ? (pr.speakLabel || '情报加载中…') : (watch ? (pr.speakLabel || pr.text) : (pr.pickText || pr.text));
-      const left = pending ? '状态' : (watch ? '表态' : '推荐');
-      const pickCls = (!pending && !watch && pr.lean && (pr.lean === 'h' || pr.lean === 'd' || pr.lean === 'a')) ? ` pick-${pr.lean}` : '';
-      return `<button class="hc-item" data-go="#/match/${encodeURIComponent(m.id)}">
-      <div class="hc-top">${lgTag(m)}<span>${esc(m.num)} · ${esc(m.date.slice(5))} ${esc(m.time)}</span></div>
-      <div class="hc-teams">${badge(m.home, 'sm', m.homeLogo)}<span class="nm">${esc(m.home)}</span><span class="vs">vs</span><span class="nm">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div>
-      <div class="hc-bot"><div class="hc-pick">${left}<b class="${pickCls.trim()}">${esc(lab)}</b> <span class="lvl ${pr.lvl[0]}">${esc(pr.lvl[1])}</span></div><div class="hc-conf"><span class="num">${Math.round(pr.conf * 100)}</span>%<small>${pending ? '参考' : (watch ? '观望' : '信心')}指数</small></div></div>
-      <div class="hc-blurb">${esc(shortReason(m, pr))}</div></button>`;
-    }).join('')}</div>`
-      : empty('今日暂无可展示的未开赛预测场次，开售后将按信心指数排序出现在这里。', '<button class="btn ghost sm" data-go="#/results">查看最新开奖</button>', '暂无高信心场次');
-  }
-  h += `<div class="sec-h"><h2>热门赛事</h2><button class="more" data-go="#/schedule">全部赛程 ${I.arr}</button></div>`;
-  if (!ms) h += skeleton(2);
-  else {
-    const hot = ms.filter(m => Date.now() < kickoff(m) + 2 * 3600e3).sort((a, b) => prio(a.league) - prio(b.league) || kickoff(a) - kickoff(b)).slice(0, 6);
-    h += hot.length ? `<div class="grid">${hot.map(m => matchCard(m)).join('')}</div>` : empty('当前没有在售或临近开赛的热门联赛场次。', '<button class="btn ghost sm" data-go="#/results">查看开奖</button>', '暂无热门赛事');
-  }
+  h += homeAttitudeSection(ms);
   h += `<div class="sec-h"><h2>专栏作者</h2><button class="more" data-go="#/column">进入专栏 ${I.arr}</button></div>`;
   h += `<div id="home-column-authors" class="col-wall">${skeletonNews(1)}</div>`;
   h += `<div class="sec-h"><h2>体坛资讯</h2><button class="more" data-go="#/news">更多资讯 ${I.arr}</button></div>`;
@@ -7919,6 +7988,7 @@ function render(opts) {
   v.classList.toggle('has-vip', !!hasVip);
   if (r.name === 'home' && !canRestore) initBanner();
   else if (r.name === 'home' && canRestore && $('#bnTrack')) initBanner();
+  if (r.name === 'home') setTimeout(syncHomeAttitudeScroll, 0);
   if (r.name !== 'schedule') stopLiveScorePoll();
   document.title = (TITLES[r.name] ? TITLES[r.name] + ' · ' : '') + '竞彩预测';
   try { if (window.JCFloatBall) window.JCFloatBall.syncRoute(r.name); } catch (_) {}
