@@ -5501,7 +5501,9 @@ function softPatchDetailTab(id, tab) {
     }
     const pane = document.getElementById('detail-pane-' + id);
     if (!pane) return false;
+    pane.className = detailPaneClass(tab);
     pane.innerHTML = detailPaneInnerHtml(x, tab);
+    syncViewWrapClass();
     try {
       render.lastSig = 'match:' + String(id) + ':' + tab + ':' + ((S.squadTab && S.squadTab[id]) || '') + ':' + JSON.stringify((route().query) || {});
       render.last = location.hash;
@@ -5529,7 +5531,7 @@ function pageMatch(id) {
   h += `<div class="dtabs" data-mid="${esc(x.id)}">${tabs.map(([k, lab]) =>
     `<button type="button" class="${tab === k ? 'on' : ''}" data-act="detailTab" data-id="${esc(x.id)}" data-tab="${k}">${lab}</button>`
   ).join('')}</div>`;
-  h += `<div id="detail-pane-${esc(x.id)}" class="detail-pane">${detailPaneInnerHtml(x, tab)}</div>`;
+  h += `<div id="detail-pane-${esc(x.id)}" class="${detailPaneClass(tab)}">${detailPaneInnerHtml(x, tab)}</div>`;
   return h + foot();
 }
 /** Refresh only the detail tab bar when FT becomes known (avoid full-page flash when possible). */
@@ -7797,13 +7799,27 @@ function predictPlatformWrapActive(r, viewEl) {
 function viewWrapClass(r, viewEl) {
   const isTab = TABS.includes(r.name);
   const prPlat = predictPlatformWrapActive(r, viewEl);
-  const wrap = r.name === 'results' ? ' rs-wrap' : (r.name === 'match' ? ' md-wrap' : (prPlat ? ' pr-wrap' : ''));
+  let wrap = r.name === 'results' ? ' rs-wrap' : (r.name === 'match' ? ' md-wrap' : (prPlat ? ' pr-wrap' : ''));
+  // 1.9.137: 赛后复盘 — no layered card shell on content pane (wide tables must not clip)
+  if (r.name === 'match' && detailTabOf(String(r.arg || '')) === 'review') wrap += ' md-wrap--review';
   return 'view' + (isTab ? '' : ' sub') + wrap;
 }
 
 function applyViewWrapClass(v, r) {
   if (!v) return;
   v.className = viewWrapClass(r, v);
+}
+
+function detailPaneClass(tab) {
+  return 'detail-pane' + (tab === 'review' ? ' detail-pane--review' : '');
+}
+
+function syncViewWrapClass() {
+  const v = $('#view');
+  if (!v) return;
+  const r = route();
+  if (r.name !== 'match') return;
+  applyViewWrapClass(v, r);
 }
 
 /** Quiet predict list team row — same ends-flush layout as 开奖 mc-teams (名+徽 … vs … 徽+名). */
