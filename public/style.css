@@ -262,6 +262,98 @@ html[data-ready="1"] .app {
 .hc-conf .num { font-size: 26px; font-weight: 700; color: var(--pri); line-height: 1; }
 .hc-conf small { display: block; font-size: 11px; color: var(--t3); }
 
+/* ---------- 1.9.138 home 「比赛态度」 + scroll navy wrap ---------- */
+.ha-sec-h {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 18px 14px 8px; gap: 8px;
+}
+.ha-sec-h h2 {
+  margin: 0; font-size: 16px; font-weight: 800; color: var(--t1);
+  padding-bottom: 6px; border-bottom: 3px solid var(--orange, #f0861a);
+  display: inline-block;
+}
+.ha-sec-h .more { color: var(--t3); font-size: 12.5px; display: flex; align-items: center; white-space: nowrap; }
+.home-attitude-wrap {
+  position: relative; margin: 0 0 6px; padding: 6px 0 14px;
+  --ha-p: 0; --ha-diag: 0%;
+}
+.home-attitude-wrap .ha-pastel {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 8% -5%, rgba(255, 200, 140, .45) 0%, transparent 52%),
+    radial-gradient(95% 65% at 96% 8%, rgba(180, 210, 255, .38) 0%, transparent 48%),
+    radial-gradient(85% 55% at 50% 100%, rgba(160, 230, 190, .28) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(255, 248, 240, .9) 0%, rgba(245, 247, 251, .4) 100%);
+  opacity: calc(1 - var(--ha-p) * .55);
+  transition: opacity .12s linear;
+}
+.home-attitude-wrap .ha-shell {
+  position: absolute; inset: -4px 0 0; z-index: 0; pointer-events: none;
+  background: var(--wrap-navy, #1B2A4A);
+  border-radius: 0 0 18px 18px;
+  opacity: calc(var(--ha-p) * .98);
+  -webkit-mask-image: linear-gradient(
+    to bottom right,
+    #000 0%,
+    #000 calc(var(--ha-diag, 0%) * 1.35),
+    transparent calc(var(--ha-diag, 0%) * 1.35 + 22%)
+  );
+  mask-image: linear-gradient(
+    to bottom right,
+    #000 0%,
+    #000 calc(var(--ha-diag, 0%) * 1.35),
+    transparent calc(var(--ha-diag, 0%) * 1.35 + 22%)
+  );
+  will-change: opacity, mask-image;
+}
+.home-attitude-wrap .ha-feed {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 0 12px;
+}
+.ha-card {
+  display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+  background: #fff; border-radius: 14px; border: 1px solid rgba(230, 235, 243, .95);
+  box-shadow: 0 2px 10px rgba(26, 35, 54, .06);
+  padding: 12px 13px 11px; cursor: pointer;
+}
+.ha-card:active { transform: scale(.995); }
+.ha-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ha-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ha-av {
+  width: 40px; height: 40px; flex: none; border-radius: 50%;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--pri-l), #fff);
+  color: var(--pri); box-shadow: 0 2px 8px rgba(47, 111, 237, .15);
+}
+.ha-av svg { width: 22px; height: 22px; display: block; }
+.ha-id { min-width: 0; }
+.ha-name { display: block; font-size: 14px; font-weight: 800; color: var(--t1); line-height: 1.25; }
+.ha-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 4px; }
+.ha-tag {
+  display: inline-flex; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600;
+  color: #c2185b; background: #fce4ec;
+}
+.ha-conf { flex: none; text-align: right; line-height: 1.1; }
+.ha-conf small { display: block; font-size: 10.5px; color: var(--t3); margin-bottom: 2px; }
+.ha-conf b {
+  font-size: 26px; font-weight: 800; color: #e85a24; letter-spacing: -.02em;
+}
+.ha-conf .ha-pct { font-size: 15px; font-weight: 700; }
+.ha-teaser {
+  margin: 10px 0 8px; font-size: 13.5px; line-height: 1.55; color: var(--t2);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ha-teaser strong { color: var(--t1); font-weight: 700; }
+.ha-match-bar {
+  font-size: 12px; color: #5a6478; background: #eef1f6; border-radius: 8px;
+  padding: 6px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ha-ft { margin-top: 8px; font-size: 12.5px; color: var(--t3); }
+.ha-pick b { color: var(--red); font-weight: 700; margin-left: 2px; }
+.ha-feed .empty { background: rgba(255,255,255,.92); border-radius: 14px; padding: 28px 16px; }
+.ha-skel { pointer-events: none; }
+
 /* ---------- match card ---------- */
 .mc { padding: 11px 13px; cursor: pointer; }
 .mc-top { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t3); }
