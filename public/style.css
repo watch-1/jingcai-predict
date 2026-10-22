@@ -191,6 +191,9 @@ html[data-ready="1"] .app {
   padding: 6px 8px 10px; font-size: 14px;
 }
 .top-chrome--schedule .tc-tab--sch.on::after { width: 18px; }
+.top-chrome--data .tc-tabs--data { gap: 8px; }
+.top-chrome--data .tc-tab--data { min-width: 3.2em; }
+.top-chrome--data .tc-tab--data.on::after { width: 22px; }
 .tc-actions { flex: none; display: flex; align-items: center; gap: 2px; }
 .tc-ic {
   position: relative; width: 36px; height: 36px; display: grid; place-items: center;
