@@ -1,6 +1,6 @@
 {
   "name": "tiicai-site",
-  "version": "1.9.135",
+  "version": "1.9.136",
   "description": "竞彩赛事资讯与赔率概率预测（用户端）。资讯会员 mock 订阅。仅供参考。",
   "main": "server.js",
   "private": true,
@@ -10,6 +10,7 @@
     "build:apk": "./android/build-apk.sh",
     "prefetch:en": "node tools/prefetch-en-news.js",
     "smoke:schedule": "node tools/smoke-schedule-filter.js",
+    "smoke:match-detail": "node tools/smoke-match-detail-no-saiguo.js",
     "prefetch:namezh": "node tools/prefetch-namezh.js"
   },
   "engines": {
