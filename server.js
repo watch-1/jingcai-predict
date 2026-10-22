@@ -1643,6 +1643,30 @@ app.get('/api/club-values', async (req, res) => {
   }
 });
 
+app.get('/api/player-values', async (req, res) => {
+  try {
+    const league = String(req.query.league || 'epl').trim();
+    const season = req.query.season;
+    const payload = await require('./lib/league-tables').getPlayerMarketValues({ league, season });
+    res.json(payload);
+  } catch (e) {
+    const code = e.code === 'no_key' ? 503 : 502;
+    res.status(code).json({ ok: false, reason: e.code || 'error', error: '球员身价榜暂时不可用', detail: e.message });
+  }
+});
+
+app.get('/api/topkeepers', async (req, res) => {
+  try {
+    const league = String(req.query.league || 'epl').trim();
+    const season = req.query.season;
+    const payload = await require('./lib/league-tables').getTopKeepers({ league, season });
+    res.json(payload);
+  } catch (e) {
+    const code = e.code === 'no_key' ? 503 : 502;
+    res.status(code).json({ ok: false, reason: e.code || 'error', error: '门神榜暂时不可用', detail: e.message });
+  }
+});
+
 // 1.9.119: global search — teams / players / matches → existing detail routes
 app.get('/api/search', async (req, res) => {
   try {

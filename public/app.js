@@ -325,6 +325,16 @@ async function api(path, { method = 'GET', body, timeout = 12000, headers: extra
 }
 
 // ======================= state =======================
+function initDataSectionEarly() {
+  try {
+    if (typeof localStorage === 'undefined') return 'team';
+    const saved = localStorage.getItem('jc_data_section');
+    if (saved === 'team' || saved === 'star') return saved;
+    const kind = localStorage.getItem('jc_data_kind') || 'standings';
+    if (kind === 'topscorers' || kind === 'topassists' || kind === 'topkeepers' || kind === 'playervalues') return 'star';
+    return 'team';
+  } catch { return 'team'; }
+}
 const S = {
   token: LS.get('jc_token', null), user: LS.get('jc_user', null), guest: LS.get('jc_guest', false),
   matches: null, schedule: null, results: null, msrc: null, ssrc: null, rsrc: null,
@@ -333,7 +343,7 @@ const S = {
   schDate: null, schLeague: '全部', schMode: initSchMode(),
   schHideFinished: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_hide_fin') === '1'),
   liveScores: null, liveScoresAt: 0, liveScorePoll: null, liveScoresLoading: false,
-  rsDate: null, rsLeague: '全部', prFilter: '全部', prLane: 'hub', dataLeague: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_lg')) || 'epl', dataKind: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_kind')) || 'standings', bannerIdx: 0, pendingAv: null,
+  rsDate: null, rsLeague: '全部', prFilter: '全部', prLane: 'hub', dataLeague: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_lg')) || 'epl', dataKind: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_kind')) || 'standings', dataSection: initDataSectionEarly(), bannerIdx: 0, pendingAv: null,
   detailTab: {}, voteCache: {}, statsCache: {}, statsUi: {}, liveStatsCache: {}, livePoll: null, predictCache: {}, reviewCache: {}, reviewListCache: null, usefulness: null, leanByMatch: {},
   chatCache: {}, chatPoll: null, chatEs: null, aiChatCache: {}, pitchAnimSeen: {},
   membership: null, orders: null, payUi: { planId: 'quarter', channel: 'wechat', agree: false, phase: 'form', orderId: null, err: '' },
@@ -852,6 +862,13 @@ function topChromeCenterHtml(rName) {
     ).join('');
     return `<nav class="tc-tabs tc-tabs--sch" aria-label="赛程筛选">${tabs}</nav>`;
   }
+  if (rName === 'data') {
+    const sec = dataSectionOf();
+    const tabs = [['team', '球队'], ['star', '球星']].map(([k, lab]) =>
+      `<button type="button" class="tc-tab tc-tab--data${sec === k ? ' on' : ''}" data-act="dataSection" data-sec="${k}"${sec === k ? ' aria-current="true"' : ''}>${esc(lab)}</button>`
+    ).join('');
+    return `<nav class="tc-tabs tc-tabs--data" aria-label="数据分类">${tabs}</nav>`;
+  }
   const activeTop = activeTopTab(rName);
   const tabs = TOP_TAB_DEF.map(([k, lab]) =>
     `<button type="button" class="tc-tab${k === activeTop ? ' on' : ''}" data-go="#/${k}"${k === activeTop ? ' aria-current="page"' : ''}>${esc(lab)}</button>`
@@ -866,6 +883,7 @@ function syncTopChrome(rName) {
   el.classList.toggle('hidden', !show);
   app.classList.toggle('has-top-chrome', show);
   el.classList.toggle('top-chrome--schedule', show && rName === 'schedule');
+  el.classList.toggle('top-chrome--data', show && rName === 'data');
   if (!show) return;
   const activeTop = activeTopTab(rName);
   if (activeTop) noteFeedTop(activeTop);
@@ -2277,7 +2295,23 @@ const DATA_LEAGUES_FALLBACK = [
   { key: 'seriea', nameZh: '意甲' }, { key: 'ligue1', nameZh: '法甲' }, { key: 'ucl', nameZh: '欧冠' },
   { key: 'csl', nameZh: '中超' }, { key: 'championship', nameZh: '英冠' }, { key: 'eredivisie', nameZh: '荷甲' },
 ];
-const DATA_KINDS = [['standings', '积分榜'], ['topscorers', '射手榜'], ['topassists', '助攻榜'], ['clubvalues', '身价榜']];
+const DATA_KINDS_TEAM = [['standings', '积分榜'], ['clubvalues', '身价榜']];
+const DATA_KINDS_STAR = [['topscorers', '射手榜'], ['topassists', '助攻榜'], ['topkeepers', '门神榜'], ['playervalues', '身价榜']];
+function dataSectionOf() {
+  return S.dataSection === 'star' ? 'star' : 'team';
+}
+function dataKindsForSection(sec) {
+  return sec === 'star' ? DATA_KINDS_STAR : DATA_KINDS_TEAM;
+}
+function setDataSection(sec) {
+  S.dataSection = sec === 'star' ? 'star' : 'team';
+  try { localStorage.setItem('jc_data_section', S.dataSection); } catch { }
+  const allowed = dataKindsForSection(S.dataSection).map(([k]) => k);
+  if (!allowed.includes(S.dataKind)) setDataKind(allowed[0]);
+}
+function defaultDataKindForSection(sec) {
+  return sec === 'star' ? 'topscorers' : 'standings';
+}
 
 function dataLeagueOf() {
   const k = S.dataLeague || 'epl';
@@ -2288,8 +2322,12 @@ function setDataLeague(k) {
   try { localStorage.setItem('jc_data_lg', k); } catch { }
 }
 function dataKindOf() {
-  const k = S.dataKind || 'standings';
-  return DATA_KINDS.some(([x]) => x === k) ? k : 'standings';
+  const sec = dataSectionOf();
+  const allowed = dataKindsForSection(sec).map(([x]) => x);
+  let k = S.dataKind || defaultDataKindForSection(sec);
+  if (k === 'clubvalues' && sec === 'star') k = 'playervalues';
+  if (!allowed.includes(k)) k = defaultDataKindForSection(sec);
+  return k;
 }
 function setDataKind(k) {
   S.dataKind = k;
@@ -2349,10 +2387,19 @@ function renderStandingsTable(payload) {
 
 function renderScorersList(payload, kind) {
   const rows = payload.rows || [];
+  if (kind === 'topkeepers') {
+    if (payload.preparing || !rows.length) {
+      const tip = payload.noteZh || '门神榜（零封 / 扑救）数据接入筹备中，可先查看射手榜与助攻榜。';
+      return empty(esc(tip), '', '筹备中');
+    }
+  }
   if (!rows.length) {
-    return empty(kind === 'topassists' ? '该联赛暂无助攻榜数据。' : '该联赛暂无射手榜数据。', '', '暂无榜单');
+    if (kind === 'topassists') return empty('该联赛暂无助攻榜数据。', '', '暂无榜单');
+    if (kind === 'playervalues') return empty('该联赛暂无球员身价数据。', '', '暂无身价榜');
+    return empty('该联赛暂无射手榜数据。', '', '暂无榜单');
   }
   const isAst = kind === 'topassists';
+  const isMv = kind === 'playervalues';
   const lg = payload.leagueKey || dataLeagueOf();
   let h = `<div class="dc-scorers">`;
   rows.forEach((r, i) => {
@@ -2362,10 +2409,14 @@ function renderScorersList(payload, kind) {
       ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><img alt="" width="88" height="88" decoding="async" src="${esc(API + '/api/logo?url=' + encodeURIComponent(r.photo))}" onerror="var p=this.parentNode;if(!p)return;if(p.dataset.alt&&!p.dataset.retried){p.dataset.retried=1;this.src='${esc(API)}/api/logo?url='+encodeURIComponent(p.dataset.alt);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');p.textContent=p.dataset.letter||'?';"></span>`
       : `<span class="dc-avatar letter">${initial}</span>`;
     const teamLogo = r.teamLogo ? badge(r.teamZh || r.team, 'sm', r.teamLogo) : badge(r.teamZh || r.team, 'sm');
-    const primary = isAst ? (r.assists ?? 0) : (r.goals ?? 0);
-    const secondary = isAst
-      ? `进球 ${r.goals ?? 0}`
-      : (r.assists != null ? `助攻 ${r.assists}` : '');
+    const primary = isMv
+      ? (r.labelZh || r.text || '暂无')
+      : (isAst ? (r.assists ?? 0) : (r.goals ?? 0));
+    const secondary = isMv
+      ? (r.teamZh || r.team || '')
+      : (isAst
+        ? `进球 ${r.goals ?? 0}`
+        : (r.assists != null ? `助攻 ${r.assists}` : ''));
     const href = r.playerId ? `#/aplayer/${encodeURIComponent(r.playerId)}?league=${encodeURIComponent(lg)}` : '';
     const teamHref = r.teamId ? `#/team/${encodeURIComponent(r.teamId)}?league=${encodeURIComponent(lg)}` : '';
     h += `<div class="dc-scorer${href ? ' dc-row-link' : ''}"${href ? ` data-go="${esc(href)}" role="link" tabindex="0"` : ''}>
@@ -2375,7 +2426,7 @@ function renderScorersList(payload, kind) {
         <div class="nm">${esc(r.playerZh || r.player)}${yiMark(r.playerZhAuto)}</div>
         <div class="sub"${teamHref ? ` data-go="${esc(teamHref)}"` : ''}>${teamLogo}<span>${esc(r.teamZh || r.team || '')}</span></div>
       </div>
-      <div class="dc-sc-stat"><b class="num">${primary}</b><small>${isAst ? '助攻' : '进球'}</small>${secondary ? `<span class="sec">${esc(secondary)}</span>` : ''}</div>
+      <div class="dc-sc-stat"><b class="num">${isMv ? esc(primary) : primary}</b><small>${isMv ? '身价' : (isAst ? '助攻' : '进球')}</small>${secondary && !isMv ? `<span class="sec">${esc(secondary)}</span>` : ''}</div>
     </div>`;
   });
   h += `</div>`;
@@ -2416,14 +2467,12 @@ function renderClubValuesTable(payload) {
 function pageData() {
   const lg = dataLeagueOf();
   const kind = dataKindOf();
+  const kinds = dataKindsForSection(dataSectionOf());
   const leagues = (S.dataLeagues && S.dataLeagues.length) ? S.dataLeagues : DATA_LEAGUES_FALLBACK;
-  let h = `<div class="shell-tools shell-tools--bare"><button type="button" class="shell-link" data-act="dataRefresh" aria-label="刷新">${I.refresh} 刷新</button></div>`;
-  h += `<div class="dc-sub"><button class="linkish" data-go="#/results">${I.cup}<span>开奖结果</span>${I.arr}</button>
-    <span class="dc-tip">积分 / 射手 / 身价 · 无下注</span></div>`;
-  h += `<div class="chips dc-leagues" id="dcLeagues">${leagues.map(l =>
+  let h = `<div class="chips dc-leagues" id="dcLeagues">${leagues.map(l =>
     `<button type="button" class="${lg === l.key ? 'on' : ''}" data-act="dataLeague" data-lg="${esc(l.key)}">${esc(l.nameZh)}</button>`
   ).join('')}</div>`;
-  h += `<div class="dtabs dc-kinds">${DATA_KINDS.map(([k, lab]) =>
+  h += `<div class="dtabs dc-kinds">${kinds.map(([k, lab]) =>
     `<button type="button" class="${kind === k ? 'on' : ''}" data-act="dataKind" data-kind="${k}">${lab}</button>`
   ).join('')}</div>`;
 
@@ -2440,11 +2489,15 @@ function pageData() {
     h += `<div class="dc-body" id="dcBody">${empty(cached.error || '加载失败，请稍后重试。', '<button class="btn ghost sm" data-act="dataRefresh">重新加载</button>', '暂时不可用')}${tip}</div>` + foot();
     return h;
   }
-  const srcLab = cached.source === 'espn' ? '日更/赛后刷新' : (cached.source === 'api-football' ? (cached.pastSeason ? '历史赛季' : '第三方') : '');
+  const srcLab = cached.source === 'espn' ? '日更/赛后刷新'
+    : (cached.source === 'market-value' ? '参考市值'
+      : (cached.source === 'api-football' ? (cached.pastSeason ? '历史赛季' : '第三方') : ''));
   const upd = formatUpdatedAt(cached.updatedAt || cached.fetchedAt);
   const countLab = kind === 'clubvalues'
     ? (cached.rows ? cached.rows.length + ' 队' : '')
-    : (cached.rows ? cached.rows.length + ' 人' : (cached.tables && cached.tables[0] ? cached.tables[0].rows.length + ' 队' : ''));
+    : (kind === 'standings'
+      ? (cached.tables && cached.tables[0] ? cached.tables[0].rows.length + ' 队' : '')
+      : (cached.rows ? cached.rows.length + ' 人' : ''));
   const right = [upd || (cached.refreshing ? '后台更新中' : (cached.stale ? '缓存' : (cached.cached ? '已缓存' : '刚更新'))), countLab].filter(Boolean).join(' · ');
   const meta = `<div class="list-meta dc-meta"><span>${esc(cached.leagueZh || '')} · ${esc(cached.seasonLabel || '')} 赛季${srcLab ? ' · ' + esc(srcLab) : ''}</span><span>${esc(right)}</span></div>`;
   const pastWarn = cached.pastSeason ? `<div class="warn-bar">⚠️ 正在查看历史赛季 ${esc(cached.seasonLabel || '')}，俱乐部归属以该赛季为准，非当前效力球队。</div>` : '';
@@ -2464,6 +2517,8 @@ async function loadDataCenter(lg, kind, { soft } = {}) {
   const path = kind === 'standings' ? '/standings'
     : kind === 'topassists' ? '/topassists'
     : kind === 'clubvalues' ? '/club-values'
+    : kind === 'playervalues' ? '/player-values'
+    : kind === 'topkeepers' ? '/topkeepers'
     : '/topscorers';
   try {
     if (!S.dataLeagues) {
@@ -2507,11 +2562,15 @@ function dataBodyInnerHtml(cached, kind) {
     const tip = cached.noteZh ? `<p class="note dc-note">${esc(cached.noteZh)}</p>` : '';
     return `${empty(cached.error || '加载失败，请稍后重试。', '<button class="btn ghost sm" data-act="dataRefresh">重新加载</button>', '暂时不可用')}${tip}`;
   }
-  const srcLab = cached.source === 'espn' ? '日更/赛后刷新' : (cached.source === 'api-football' ? (cached.pastSeason ? '历史赛季' : '第三方') : '');
+  const srcLab = cached.source === 'espn' ? '日更/赛后刷新'
+    : (cached.source === 'market-value' ? '参考市值'
+      : (cached.source === 'api-football' ? (cached.pastSeason ? '历史赛季' : '第三方') : ''));
   const upd = formatUpdatedAt(cached.updatedAt || cached.fetchedAt);
   const countLab = kind === 'clubvalues'
     ? (cached.rows ? cached.rows.length + ' 队' : '')
-    : (cached.rows ? cached.rows.length + ' 人' : (cached.tables && cached.tables[0] ? cached.tables[0].rows.length + ' 队' : ''));
+    : (kind === 'standings'
+      ? (cached.tables && cached.tables[0] ? cached.tables[0].rows.length + ' 队' : '')
+      : (cached.rows ? cached.rows.length + ' 人' : ''));
   const right = [upd || (cached.refreshing ? '后台更新中' : (cached.stale ? '缓存' : (cached.cached ? '已缓存' : '刚更新'))), countLab].filter(Boolean).join(' · ');
   const meta = `<div class="list-meta dc-meta"><span>${esc(cached.leagueZh || '')} · ${esc(cached.seasonLabel || '')} 赛季${srcLab ? ' · ' + esc(srcLab) : ''}</span><span>${esc(right)}</span></div>`;
   const pastWarn = cached.pastSeason ? `<div class="warn-bar">⚠️ 正在查看历史赛季 ${esc(cached.seasonLabel || '')}，俱乐部归属以该赛季为准，非当前效力球队。</div>` : '';
@@ -2578,7 +2637,7 @@ function prefetchDetailWarm(lg, payload, kind) {
       for (const r of rows.slice(0, 10)) {
         if (r && r.teamId) teams.push(r.teamId);
       }
-    } else if (kind === 'topscorers' || kind === 'topassists') {
+    } else if (kind === 'topscorers' || kind === 'topassists' || kind === 'playervalues') {
       for (const r of (payload.rows || []).slice(0, 8)) {
         if (r && r.playerId) players.push(r.playerId);
         if (r && r.teamId && teams.length < 6) teams.push(r.teamId);
@@ -7975,10 +8034,10 @@ function tabContentSig(name) {
       return 'kb:' + p.sub + ':' + p.id + ':' + nsel + ':' + lr + ':' + ((S.kb && S.kb.intervention) || 'medium') + ':' + np;
     }
     if (name === 'data') {
-      const lg = dataLeagueOf(), kind = dataKindOf();
+      const lg = dataLeagueOf(), kind = dataKindOf(), sec = dataSectionOf();
       const c = S.dataCache && S.dataCache[lg + ':' + kind];
       const stamp = c ? String(c.updatedAt || c.fetchedAt || (c.fromCache ? 'c' : '') || '') : 'miss';
-      return 'd:' + lg + ':' + kind + ':' + stamp + ':' + (c && c.ok === false ? 'e' : (c ? 'ok' : '0'));
+      return 'd:' + sec + ':' + lg + ':' + kind + ':' + stamp + ':' + (c && c.ok === false ? 'e' : (c ? 'ok' : '0'));
     }
     if (name === 'news') {
       const tab = newsTabOf();
@@ -8309,6 +8368,13 @@ document.addEventListener('click', async e => {
   if (d.av) { S.pendingAv = d.av; document.querySelectorAll('[data-av]').forEach(b => b.classList.toggle('on', b === el)); return; }
   if (d.go) { e.preventDefault(); return go(d.go); }
   switch (d.act) {
+    case 'dataSection': {
+      setDataSection(el.dataset.sec === 'star' ? 'star' : 'team');
+      syncTopChrome('data');
+      const lg = dataLeagueOf(), kind = dataKindOf();
+      if (!(S.dataCache && S.dataCache[lg + ':' + kind])) setTimeout(() => loadDataCenter(lg, kind), 0);
+      return render({ force: true });
+    }
     case 'schMode': {
       setSchMode(el.dataset.mode || '未开始');
       return render();

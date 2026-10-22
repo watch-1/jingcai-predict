@@ -136,6 +136,25 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await tap('.hero-ic[data-act="back"]'); await p.waitForFunction(() => location.hash === '#/schedule');
     await tap('.tabbar [data-go="#/predict"]'); await p.waitForSelector('.kb-entry'); await shot('predict');
     await tap('.tc-tab[data-go="#/results"]'); await p.waitForSelector('.dstrip button, .empty'); await shot('results');
+    // data center
+    await tap('.tabbar [data-go="#/data"]'); await p.waitForSelector('#dcLeagues');
+    ok(!(await p.$('[data-act="dataRefresh"]')), 'data: no refresh button');
+    ok(!(await p.$('.dc-sub')), 'data: no lottery / tip sub row');
+    ok(await p.$$eval('#top-chrome [data-act="dataSection"]', l => l.map(b => b.textContent).join(',')) === '球队,球星', 'data: top chrome 球队/球星');
+    ok(!!(await p.$('#top-chrome [data-act="dataSection"].on[data-sec="team"]')), 'data: 球队 highlighted by default');
+    ok(await p.$$eval('.dc-kinds [data-act="dataKind"]', l => l.map(b => b.textContent).join(',')) === '积分榜,身价榜', 'data team sub-tabs');
+    await tap('#top-chrome [data-act="dataSection"][data-sec="star"]'); await sleep(400);
+    ok(!!(await p.$('#top-chrome [data-act="dataSection"].on[data-sec="star"]')), 'data: 球星 highlighted after tap');
+    ok(await p.$$eval('.dc-kinds [data-act="dataKind"]', l => l.map(b => b.textContent).join(',')) === '射手榜,助攻榜,门神榜,身价榜', 'data star sub-tabs');
+    await tap('.dc-kinds [data-act="dataKind"][data-kind="topkeepers"]'); await sleep(400);
+    await p.waitForFunction(() => {
+      const t = document.querySelector('.empty-t');
+      return t && t.textContent.includes('筹备');
+    }, { timeout: 15000 });
+    ok((await p.$eval('.empty-t', e => e.textContent)).includes('筹备'), '门神榜 shows 筹备 placeholder');
+    await tap('.tabbar [data-go="#/home"]'); await sleep(300);
+    ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '部落,头条,开奖', 'leave data restores 部落/头条/开奖');
+    await shot('data');
     // me drawer
     await tap('[data-act="openMe"]'); await p.waitForSelector('.me-drawer.open');
     const stats = await p.$$eval('.md-stats b', l => l.map(x => x.textContent));
