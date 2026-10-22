@@ -58,30 +58,48 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await shot('home');
     // schedule
     await tap('.tabbar [data-go="#/schedule"]'); await p.waitForSelector('.dstrip button');
-    ok(!(await p.$('.tc-tab.on')), 'schedule: bottom tool page — no top tab green underline');
+    ok(await p.$$eval('#top-chrome [data-act="schMode"]', l => l.map(b => b.dataset.mode).join(',')) === '关注,未开始,已结束', 'schedule: top chrome 关注/未开始/已结束');
+    ok(!!(await p.$('#top-chrome .tc-tab--sch.on[data-mode="未开始"]')), 'schedule: 未开始 highlighted in top chrome');
+    ok(!(await p.$('.sch-mode')), 'schedule: no duplicate mode row under date');
     ok(!(await p.$('.sch-channels')), 'schedule: no 热门/关注/全部 channel row');
     ok(!(await p.$('.ls-status')), 'schedule: no legacy status pill row');
-    ok(await p.$$eval('[data-act="schMode"]', l => l.map(b => b.dataset.mode).join(',')) === '关注,未开始,已结束', 'schedule: 关注/未开始/已结束 mode buttons');
     ok(await p.$$eval('.dstrip button', l => l.length) > 0 && await p.$$eval('.chips button', l => l.length) > 0, 'schedule: date strip + league chips');
+    await tap('#top-chrome [data-act="schMode"][data-mode="已结束"]'); await sleep(300);
+    ok(!!(await p.$('#top-chrome .tc-tab--sch.on[data-mode="已结束"]')), 'schedule: tap 已结束 updates top chrome highlight');
+    await tap('#top-chrome [data-act="schMode"][data-mode="未开始"]'); await sleep(200);
     const hasMatch = await p.$('.ls-row[data-go^="#/match/"]');
     await shot('schedule');
     if (!hasMatch) { const d = await p.$$('.dstrip button'); for (const x of d) { await x.click(); await sleep(200); if (await p.$('.ls-row[data-go^="#/match/"]')) break; } }
     // detail
+    await tap('.tabbar [data-go="#/home"]'); await sleep(300);
+    ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '部落,头条,开奖', 'home: top chrome restores 部落/头条/开奖');
+    await tap('.tabbar [data-go="#/schedule"]'); await sleep(200);
     await tap('.ls-row[data-go^="#/match/"]'); await p.waitForSelector('.hero');
+    const heroNav = await p.$eval('.hero-edge-nav', el => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top, backH: el.querySelector('.hero-ic')?.getBoundingClientRect().height };
+    });
+    ok(heroNav.top <= 28 && heroNav.backH <= 34, `match detail compact nav (top=${heroNav.top}, back=${heroNav.backH})`);
+    await p.waitForSelector('.hero-edge-nav [data-act="fav"]');
+    await tap('.hero-edge-nav [data-act="fav"]');
+    await p.waitForFunction(() => document.querySelector('.hero-edge-nav [data-act="fav"]')?.textContent.includes('已关注'), { timeout: 8000 });
+    ok(true, '关注 button toggled');
+    await tap('[data-act="detailTab"][data-tab="intel"]'); await sleep(600);
     const hasOdds = await p.$('.otable button.cell');
     ok(!!hasOdds, 'match detail shows selectable 胜平负/让球 odds');
+    await tap('[data-act="detailTab"][data-tab="pred"]');
+    await p.waitForFunction(() => document.querySelectorAll('.reason p').length >= 3, { timeout: 15000 });
     ok((await p.$$eval('.reason p', l => l.length)) >= 3, 'match detail has odds-based reasoning');
-    await tap('[data-act="fav"]'); await sleep(500);
-    ok((await txt('[data-act="fav"]')).includes('已关注'), '关注 button toggled');
     await shot('match');
     // save plan
+    await tap('[data-act="detailTab"][data-tab="intel"]'); await sleep(400);
     await tap('.otable button.cell'); await p.waitForSelector('#planbar:not(.hidden)');
     await tap('[data-act="openPlan"]'); await p.waitForSelector('.sheet [data-act="savePlan"]');
     await shot('plan-sheet');
     await tap('.sheet [data-act="savePlan"]'); await sleep(600);
     ok((await txt('#toast')).includes('方案已保存并同步'), 'plan saved + synced: ' + await txt('#toast'));
     // predict / results
-    await tap('.hdr [data-act="back"]'); await p.waitForFunction(() => location.hash === '#/schedule');
+    await tap('.hero-ic[data-act="back"]'); await p.waitForFunction(() => location.hash === '#/schedule');
     await tap('.tabbar [data-go="#/predict"]'); await p.waitForSelector('.kb-entry'); await shot('predict');
     await tap('.tc-tab[data-go="#/results"]'); await p.waitForSelector('.dstrip button, .empty'); await shot('results');
     // me drawer
@@ -94,14 +112,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await shot('settings');
     await tap('[data-act="logout"]'); await tap('.dialog .ok'); await p.waitForFunction(() => location.hash === '#/login');
     ok(await p.evaluate(() => !localStorage.getItem('jc_token')), 'logout clears token');
+    await tap('[data-act="guest"]'); await p.waitForSelector('[data-act="openMe"]');
     await tap('[data-act="openMe"]'); await p.waitForSelector('.me-drawer.open');
     ok((await p.$$eval('.md-stats b', l => l.map(x => x.textContent))).slice(0, 3).join() === '0,0,0', 'after logout, guest drawer shows no account data');
     await p.evaluate(() => { location.hash = '#/login'; }); await p.waitForSelector('#fLogin');
     await p.$eval('#fLogin [name=phone]', e => (e.value = '')); await p.type('#fLogin [name=phone]', phone); await p.type('#fLogin [name=password]', pw);
-    await tap('#fLogin [type=submit]'); await p.waitForFunction(() => location.hash === '#/me', { timeout: 10000 });
-    await sleep(300);
-    const s2 = await p.$$eval('.me-stats b', l => l.map(x => x.textContent));
-    ok(s2[0] === '1' && s2[1] === '1', `relogin: plan + favorite restored from server (${s2})`);
+    await tap('#fLogin [type=submit]'); await p.waitForFunction(() => location.hash === '#/home', { timeout: 10000 });
+    await p.waitForSelector('.me-drawer.open .md-stats b', { timeout: 8000 });
+    const s2 = await p.$$eval('.md-stats b', l => l.map(x => x.textContent));
+    ok(s2[0] === '1' && s2[2] === '1', `relogin: plan + favorite restored from server (${s2})`);
     await p.evaluate(() => { location.hash = '#/plans'; }); await p.waitForSelector('.plan'); await shot('plans');
     // wide layout check (Android emulator ~1024 wide)
     await p.setViewport({ width: 1024, height: 768, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
