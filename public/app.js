@@ -1681,9 +1681,7 @@ function predCardHtml(m, pr, i, opts) {
       <div class="pr-meta">${lgTag(m)}<span>${esc(m.num)} · ${esc(m.date.slice(5))} ${esc(m.time)}</span>${m.sample ? '<span class="sample-tag">示例</span>' : ''}</div>
       ${ringCluster(pr.conf, { muted: isWatch || isPending, label: confLab, sm: true })}
     </div>
-    <div class="pr-quiet-body">
-      <div class="pr-teams">${badge(m.home, 'sm', m.homeLogo)}<span class="nm">${esc(m.home)}</span><span class="vs">vs</span><span class="nm">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div>
-    </div></div>`;
+    <div class="pr-quiet-body">${prTeamsQuietRow(m)}</div></div>`;
   }
   return `<div class="card pr-card${cardCls}" data-go="#/match/${encodeURIComponent(m.id)}">
     <div class="pr-hd"><span class="rank ${i < 3 && !isWatch && !isPending ? 'r' + (i + 1) : ''} num">${i + 1}</span>
@@ -1946,11 +1944,8 @@ function pagePredict() {
       const items = byDay.get(d);
       const md = (d && d.length >= 10) ? d.slice(5) : d;
       const lab = `${dayName(d)} ${md}`;
-      const cards = items.map(({ m, pr }, i) =>
-        `<div class="pr-shell">${predCardHtml(m, pr, i, { quiet: true })}</div>`
-      ).join('');
       return `<div class="pr-day"><div class="pr-day-h"><span class="pr-day-lab">${esc(lab)}</span><span>${items.length} 场</span></div>`
-        + `<div class="grid">${cards}</div></div>`;
+        + `<div class="grid">${items.map(({ m, pr }, i) => predCardHtml(m, pr, i, { quiet: true })).join('')}</div></div>`;
     }).join('');
   }
   if (nPending) h += `<p class="note" style="margin:10px 14px 4px">正在加载 ${nPending} 场情报简报…请稍候自动刷新。</p>`;
@@ -7789,6 +7784,19 @@ function syncTabbar(rName, isTab) {
   if (tb.innerHTML !== want) tb.innerHTML = want;
 }
 
+/** Tab/sub view class + optional navy wrap (开奖 rs-wrap / 预测 platform pr-wrap). */
+function viewWrapClass(r) {
+  const isTab = TABS.includes(r.name);
+  const prPlat = r.name === 'predict' && (S.prLane || 'hub') === 'platform';
+  const wrap = r.name === 'results' ? ' rs-wrap' : (r.name === 'match' ? ' md-wrap' : (prPlat ? ' pr-wrap' : ''));
+  return 'view' + (isTab ? '' : ' sub') + wrap;
+}
+
+/** Quiet predict list team row — same ends-flush layout as 开奖 mc-teams (名+徽 … vs … 徽+名). */
+function prTeamsQuietRow(m) {
+  return `<div class="pr-teams pr-teams-row"><div class="t h"><span class="nm" title="${esc(m.home)}">${esc(m.home)}</span>${badge(m.home, 'sm', m.homeLogo)}</div><span class="vs">vs</span><div class="t">${badge(m.away, 'sm', m.awayLogo)}<span class="nm" title="${esc(m.away)}">${esc(m.away)}</span></div></div>`;
+}
+
 function render(opts) {
   opts = opts || {};
   applyHomeTheme(homeTheme());
@@ -7839,15 +7847,13 @@ function render(opts) {
   const cold = !hasPrev && !document.documentElement.getAttribute('data-ready');
 
   if (canRestore) {
-    v.className = 'view';
+    v.className = viewWrapClass(r);
     applyViewHtml(v, keep.html, { isTab: true, hasPrev: true, cold: false });
     window.scrollTo(0, keep.y || 0);
   } else {
     const nextHtml = PAGES[r.name](r.arg);
     // 1.9.129: rs-wrap / md-wrap = intentional navy list bg (match-detail hero #1B2A4A)
-    const prPlat = r.name === 'predict' && (S.prLane || 'hub') === 'platform';
-    const wrap = r.name === 'results' ? ' rs-wrap' : (r.name === 'match' ? ' md-wrap' : (prPlat ? ' pr-wrap' : ''));
-    v.className = 'view' + (isTab ? '' : ' sub') + wrap;
+    v.className = viewWrapClass(r);
     const softSame = !!(same && hasPrev && !switchingTab);
     applyViewHtml(v, nextHtml, { isTab, hasPrev, cold, softSame });
     if (isTab) saveTabKeep(r.name, v);
