@@ -98,7 +98,12 @@ function preferHiResLogo(url) {
 }
 function loadCrests() {
   try {
-    const j = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'crests.json'), 'utf8'));
+    // Prefer DATA_DIR (same path crest-autofill writes) so hot-reload sees new badges.
+    const crestsPath = (() => {
+      try { return path.join(require('./lib/db').DATA_DIR, 'crests.json'); }
+      catch { return path.join(__dirname, 'data', 'crests.json'); }
+    })();
+    const j = JSON.parse(fs.readFileSync(crestsPath, 'utf8'));
     const bySporttery = new Map();
     const byAf = new Map();
     for (const [id, row] of Object.entries((j && j.teams) || {})) {
@@ -121,6 +126,26 @@ function loadCrests() {
 const CREST_DATA = loadCrests();
 const CRESTS = CREST_DATA.bySporttery;
 const CRESTS_BY_AF = CREST_DATA.byAf;
+/** Hot-reload in-memory crest maps after crest-autofill writes crests.json (no process restart). */
+function reloadCrestMaps() {
+  const next = loadCrests();
+  CRESTS.clear();
+  CRESTS_BY_AF.clear();
+  for (const [k, v] of next.bySporttery) CRESTS.set(k, v);
+  for (const [k, v] of next.byAf) CRESTS_BY_AF.set(k, v);
+  console.log('[crests] reloaded', CRESTS.size, 'sporttery badges');
+}
+function crestUsable(teamId) {
+  const id = String(teamId ?? '').trim();
+  // In-memory map (badge or AF synthetic). Missing key → autofill queue.
+  return !!(id && CRESTS.get(id));
+}
+function noteMissingCrest(teamId, zh) {
+  try {
+    const autofill = require('./lib/crest-autofill');
+    autofill.enqueue(teamId, { zh: zh || '' });
+  } catch { /* optional until start() */ }
+}
 function normalizeLogoUrl(raw) {
   if (raw == null) return '';
   let s = String(raw).trim();
@@ -135,7 +160,7 @@ function crestForAfLogo(url) {
   if (!m) return '';
   return CRESTS_BY_AF.get(m[1]) || '';
 }
-function teamLogo(raw, teamId) {
+function teamLogo(raw, teamId, teamName) {
   const id = String(teamId ?? '').trim();
   const crest = CRESTS.get(id);
   // Club crests override the sporttery CDN path, which 404s for clubs. National teams
@@ -149,6 +174,8 @@ function teamLogo(raw, teamId) {
     return direct;
   }
   if (!/^\d+$/.test(id) || id === '0') return '';
+  // No usable crest yet → async autofill (ESPN / API-Football); next refresh gets the badge.
+  noteMissingCrest(id, teamName);
   return LOGO_CDN + id + '.png';
 }
 function logoFields(m, side) {
@@ -223,8 +250,8 @@ function normalizeMatches(j) {
         date: m.matchDate, time: (m.matchTime || '').slice(0, 5), businessDate: m.businessDate || day.businessDate,
         weekday: m.matchWeek || day.weekday || '',
         home: m.homeTeamAbbName || m.homeTeamAllName, away: m.awayTeamAbbName || m.awayTeamAllName,
-        homeLogo: teamLogo(logoFields(m, 'home'), m.homeTeamId),
-        awayLogo: teamLogo(logoFields(m, 'away'), m.awayTeamId),
+        homeLogo: teamLogo(logoFields(m, 'home'), m.homeTeamId, m.homeTeamAbbName || m.homeTeamAllName || m.homeTeam || m.allHomeTeam || m.home),
+        awayLogo: teamLogo(logoFields(m, 'away'), m.awayTeamId, m.awayTeamAbbName || m.awayTeamAllName || m.awayTeam || m.allAwayTeam || m.away),
         homeRank: m.homeRank || '', awayRank: m.awayRank || '',
         homeTeamId: m.homeTeamId != null ? String(m.homeTeamId) : '',
         awayTeamId: m.awayTeamId != null ? String(m.awayTeamId) : '',
@@ -260,8 +287,8 @@ function normalizeSchedule(j) {
         businessDate: m.businessDate || day.businessDate,
         weekday: m.weekday || day.weekday || '',
         home: m.homeTeamAbbName || m.homeTeamAllName, away: m.awayTeamAbbName || m.awayTeamAllName,
-        homeLogo: teamLogo(logoFields(m, 'home'), m.homeTeamId),
-        awayLogo: teamLogo(logoFields(m, 'away'), m.awayTeamId),
+        homeLogo: teamLogo(logoFields(m, 'home'), m.homeTeamId, m.homeTeamAbbName || m.homeTeamAllName || m.homeTeam || m.allHomeTeam || m.home),
+        awayLogo: teamLogo(logoFields(m, 'away'), m.awayTeamId, m.awayTeamAbbName || m.awayTeamAllName || m.awayTeam || m.allAwayTeam || m.away),
         homeRank: m.homeRank || '', awayRank: m.awayRank || '',
         homeTeamId: m.homeTeamId != null ? String(m.homeTeamId) : '',
         awayTeamId: m.awayTeamId != null ? String(m.awayTeamId) : '',
@@ -293,8 +320,8 @@ function normalizeResults(j) {
         leagueColor: m.leagueBackColor ? '#' + String(m.leagueBackColor).replace('#', '') : null,
         date: matchDate, businessDate: issueDateFromNum(matchDate, num),
         home: m.homeTeam || m.allHomeTeam, away: m.awayTeam || m.allAwayTeam,
-        homeLogo: teamLogo(logoFields(m, 'home'), m.homeTeamId),
-        awayLogo: teamLogo(logoFields(m, 'away'), m.awayTeamId),
+        homeLogo: teamLogo(logoFields(m, 'home'), m.homeTeamId, m.homeTeamAbbName || m.homeTeamAllName || m.homeTeam || m.allHomeTeam || m.home),
+        awayLogo: teamLogo(logoFields(m, 'away'), m.awayTeamId, m.awayTeamAbbName || m.awayTeamAllName || m.awayTeam || m.allAwayTeam || m.away),
         homeTeamId: m.homeTeamId != null ? String(m.homeTeamId) : '',
         awayTeamId: m.awayTeamId != null ? String(m.awayTeamId) : '',
         half: m.sectionsNo1 || '', full: m.sectionsNo999 || '', goalLine: m.goalLine || '',
@@ -406,8 +433,8 @@ function resultRowToSchedule(m) {
     weekday: '',
     home: m.homeTeam || m.allHomeTeam,
     away: m.awayTeam || m.allAwayTeam,
-    homeLogo: teamLogo(logoFields(m, 'home'), m.homeTeamId),
-    awayLogo: teamLogo(logoFields(m, 'away'), m.awayTeamId),
+    homeLogo: teamLogo(logoFields(m, 'home'), m.homeTeamId, m.homeTeamAbbName || m.homeTeamAllName || m.homeTeam || m.allHomeTeam || m.home),
+    awayLogo: teamLogo(logoFields(m, 'away'), m.awayTeamId, m.awayTeamAbbName || m.awayTeamAllName || m.awayTeam || m.allAwayTeam || m.away),
     homeRank: '', awayRank: '',
     homeTeamId: m.homeTeamId != null ? String(m.homeTeamId) : '',
     awayTeamId: m.awayTeamId != null ? String(m.awayTeamId) : '',
@@ -647,6 +674,13 @@ async function getData(kind) {
         meta: { total: data.length, byBusinessDate: byBiz, ...metaExtra },
       };
       cache[kind] = { at: Date.now(), payload };
+      // 1.9.53: after schedule/matches refresh, enqueue any sporttery team ids missing crests
+      if (kind === 'schedule' || kind === 'matches') {
+        try {
+          const r = require('./lib/crest-autofill').sweepMatches(data);
+          if (r && r.queued) console.log('[crest-autofill] sweep', kind, 'queued', r.queued);
+        } catch { /* optional */ }
+      }
       return payload;
     } catch (e) { errors.push(`${ep.split('?')[0]}: ${e.message}`); }
   }
@@ -672,7 +706,8 @@ const NEWS_IMG_MAX_BYTES = Math.max(20 * 1024 * 1024, parseInt(process.env.NEWS_
 const newsImgInflight = new Map();
 const newsImgMiss = new Map();
 // qunliao.info (bdimgN / imgN / any subdomain) + dongqiudi image CDNs (img/bdimg/static/images/cdn)
-const NEWS_IMG_HOST_RE = /(?:^|\.)((?:[a-z0-9-]+\.)*qunliao\.info|(?:(?:bd)?img|static|images?|cdn)\d*\.dongqiudi\.(?:com|net)|img\d*\.dongqiudi\.com|i\d*\.chinanews\.com\.cn|(?:www\.)?chinanews\.com\.cn|(?:[a-z0-9-]+\.)?people\.com\.cn|(?:[a-z0-9-]+\.)?peopledaily\.com\.cn|(?:e\d+\.)?365dm\.com|(?:ichef|ychef|c)\.bbci\.co\.uk|(?:static\.files\.)?bbci\.co\.uk|(?:i|media)\.guim\.co\.uk|(?:a\d*\.)?espncdn\.com|media\.espn\.com|secure\.espncdn\.com)$/i;
+// 1.9.87: broader CN hosts (image.chinanews.com / cns / cnsimg) so scraped covers proxy+cache
+const NEWS_IMG_HOST_RE = /(?:^|\.)((?:[a-z0-9-]+\.)*qunliao\.info|(?:(?:bd)?img|static|images?|cdn)\d*\.dongqiudi\.(?:com|net)|img\d*\.dongqiudi\.com|i\d*\.chinanews\.com\.cn|image\.chinanews\.com|(?:www\.)?chinanews\.com\.cn|image\.cns\.com\.cn|(?:[a-z0-9-]+\.)*cnsimg\.net|(?:poss-videocloud\.)?cns\.com\.cn|(?:[a-z0-9-]+\.)?people\.com\.cn|(?:[a-z0-9-]+\.)?peopledaily\.com\.cn|(?:e\d+\.)?365dm\.com|(?:ichef|ychef|c)\.bbci\.co\.uk|(?:static\.files\.)?bbci\.co\.uk|(?:i|media)\.guim\.co\.uk|(?:a\d*\.)?espncdn\.com|media\.espn\.com|secure\.espncdn\.com)$/i;
 
 function safeNewsImageTarget(raw) {
   let s = String(raw || '').trim();
@@ -684,7 +719,7 @@ function safeNewsImageTarget(raw) {
   if (!NEWS_IMG_HOST_RE.test(u.hostname)) return null;
   if (!/\.(png|jpe?g|gif|webp)(?:$|\?)/i.test(u.pathname + (u.search ? '.jpg' : ''))) {
     // allow CDN paths without extension if host is allowlisted and path looks like known asset roots
-    if (!/fastdfs|\/simg\/|\/upload\/|\/ace\/|\/combiner\/|\/media\/|\/photo\/|\/cpsprodpb\/|\/img\//i.test(u.pathname)) return null;
+    if (!/fastdfs|\/simg\/|\/cspimp\/|\/fileftp\/|\/ypt\/|\/upload\/|\/ace\/|\/combiner\/|\/media\/|\/photo\/|\/cpsprodpb\/|\/img\/|\/oss\//i.test(u.pathname)) return null;
   }
   // Upgrade tiny 280x210 → 640x480; do NOT strip to full-res (often multi-MB → proxy miss)
   try {
@@ -758,7 +793,7 @@ async function fetchNewsImage(target) {
   return null;
 }
 
-module.exports = { normalizeMatches, normalizeResults, normalizeSchedule, issueDateFromNum, teamLogo, safeLogoTarget, safeNewsImageTarget, detectMatchNumGaps, resultRowToSchedule, completeSchedule, completeMatches };
+module.exports = { normalizeMatches, normalizeResults, normalizeSchedule, issueDateFromNum, teamLogo, safeLogoTarget, safeNewsImageTarget, detectMatchNumGaps, resultRowToSchedule, completeSchedule, completeMatches, reloadCrestMaps, crestUsable };
 if (require.main !== module) return;
 const app = express();
 app.disable('x-powered-by');
@@ -766,8 +801,108 @@ app.use((req, res, next) => { res.set({ 'X-Content-Type-Options': 'nosniff', 'Re
 // CORS: the Android app (origin https://appassets.androidplatform.net) calls the API cross-origin.
 // Auth uses an Authorization: Bearer token (no cookies), so a wildcard origin is safe here.
 app.use('/api', (req, res, next) => {
-  res.set({ 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Access-Control-Max-Age': '86400', 'Access-Control-Allow-Private-Network': 'true', 'Cache-Control': 'no-store' });
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-App-Channel, X-Partner-Key, X-App-Version, X-Player-Db-Key',
+    'Access-Control-Max-Age': '86400',
+    'Access-Control-Allow-Private-Network': 'true',
+    'Cache-Control': 'no-store',
+  });
   if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
+
+/** 1.9.92: light in-memory rate limit for partner-test clients (anti casual abuse) */
+const partnerRateBucket = new Map();
+function partnerRateLimit(req, res, next) {
+  const ch = String(req.get('x-app-channel') || '').trim().toLowerCase();
+  if (ch !== 'partner-test' && !String(req.path || '').includes('client-gate')) return next();
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim() || 'unknown';
+  const key = ip + '|' + ch;
+  const now = Date.now();
+  let b = partnerRateBucket.get(key);
+  if (!b || now > b.resetAt) b = { n: 0, resetAt: now + 60_000 };
+  b.n += 1;
+  partnerRateBucket.set(key, b);
+  if (partnerRateBucket.size > 5000) {
+    for (const [k, v] of partnerRateBucket) { if (now > v.resetAt) partnerRateBucket.delete(k); }
+  }
+  if (b.n > 120) {
+    return res.status(429).json({ ok: false, error: '请求过于频繁', messageZh: '请求过于频繁，请稍后再试' });
+  }
+  next();
+}
+app.use('/api', partnerRateLimit);
+
+/** 1.9.92: partner-test channel gate — remote kill via admin flag partner_test */
+function partnerChannelOf(req) {
+  return String(req.get('x-app-channel') || req.query.channel || '').trim().toLowerCase();
+}
+function partnerKeyOk(req) {
+  const want = String(process.env.PARTNER_BUILD_KEY || '').trim();
+  if (!want) return false;
+  const got = String(req.get('x-partner-key') || req.query.partnerKey || '').trim();
+  return !!got && got === want;
+}
+function partnerGatePayload(enabled) {
+  return {
+    ok: true,
+    channel: 'partner-test',
+    enabled: !!enabled,
+    version: require('./package.json').version,
+    messageZh: enabled
+      ? '合作测试版可用'
+      : '测试已结束：合作测试通道已由运营关闭。如需继续试用请联系对接人。',
+    checkedAt: new Date().toISOString(),
+  };
+}
+app.get('/api/client-gate', (req, res) => {
+  const ch = partnerChannelOf(req);
+  if (ch !== 'partner-test') {
+    return res.json({
+      ok: true,
+      channel: ch || 'prod',
+      enabled: true,
+      version: require('./package.json').version,
+      messageZh: '正式通道',
+      checkedAt: new Date().toISOString(),
+    });
+  }
+  if (!partnerKeyOk(req)) {
+    return res.status(403).json({
+      ok: false,
+      channel: 'partner-test',
+      enabled: false,
+      reason: 'partner_key',
+      messageZh: '测试已结束：无效的合作测试凭证。',
+      version: require('./package.json').version,
+    });
+  }
+  const enabled = require('./lib/feature-flags').isEnabled('partner_test');
+  const body = partnerGatePayload(enabled);
+  if (!enabled) return res.status(403).json({ ...body, ok: false });
+  res.json(body);
+});
+app.use('/api', (req, res, next) => {
+  // Always allow gate + admin + status from any client (admin uses its own auth)
+  const p = String(req.path || '');
+  if (p === '/client-gate' || p === '/status' || p.startsWith('/admin')) return next();
+  const ch = partnerChannelOf(req);
+  if (ch !== 'partner-test') return next();
+  if (!partnerKeyOk(req)) {
+    return res.status(403).json({
+      ok: false, reason: 'partner_key', error: '测试已结束',
+      messageZh: '测试已结束：无效的合作测试凭证。',
+    });
+  }
+  if (!require('./lib/feature-flags').isEnabled('partner_test')) {
+    return res.status(403).json({
+      ...partnerGatePayload(false),
+      ok: false, reason: 'partner_disabled', error: '测试已结束',
+    });
+  }
   next();
 });
 app.get('/api/matches', async (req, res) => res.json(await getData('matches')));
@@ -804,7 +939,16 @@ app.get('/api/live-scores', async (req, res) => {
     res.status(502).json({ ok: false, error: '实时比分暂时不可用', detail: e.message });
   }
 });
-app.get('/api/status', (req, res) => res.json({ version: require('./package.json').version, cache: Object.fromEntries(Object.entries(cache).map(([k, v]) => [k, { source: v.payload.source, fetchedAt: v.payload.fetchedAt }])), lastError }));
+app.get('/api/status', (req, res) => {
+  let partnerTestEnabled = true;
+  try { partnerTestEnabled = require('./lib/feature-flags').isEnabled('partner_test'); } catch { /* optional */ }
+  res.json({
+    version: require('./package.json').version,
+    partnerTestEnabled,
+    cache: Object.fromEntries(Object.entries(cache).map(([k, v]) => [k, { source: v.payload.source, fetchedAt: v.payload.fetchedAt }])),
+    lastError,
+  });
+});
 
 app.get('/api/baseline', (req, res) => {
   const file = path.join(require('./lib/db').DATA_DIR, 'history', 'baseline-report.json');
@@ -827,6 +971,37 @@ app.get('/api/baseline', (req, res) => {
   }
 });
 
+/** 1.9.98: 模型体检 — backtest reliability + categories (from tools/backtest-signals.js) */
+app.get('/api/calibration', (req, res) => {
+  try {
+    const cal = require('./lib/signals').calibration();
+    if (!cal) return res.json({ ok: false, error: '回测表暂未生成' });
+    const t = cal.calibration || {};
+    const c = (label, r) => ({ label, n: (r && r.n) || 0, hit: r ? (r.rate != null ? r.rate : r.hit) : null });
+    const ur = cal.upsetRules || {};
+    res.json({
+      ok: true, n: cal.n, range: cal.range, generatedAt: cal.generatedAt,
+      reliability: cal.reliability,
+      overall: cal.v198 && cal.v198.all && cal.v198.all.all,
+      categories: [
+        c('全部场次（模型倾向）', cal.v198 && cal.v198.all.all),
+        c('市场热门（对照）', cal.market && cal.market.all),
+        c('与盘口同向', t['kind:same']),
+        c('逆盘口表态', t['kind:rev']),
+        c('五大联赛+欧冠', t['tier:top']),
+        c('其他联赛', t['tier:other']),
+        c('热门隐含≥60%', t['band:fav']),
+        c('热门隐含45–60%', t['band:mid']),
+        c('热门隐含<45%', t['band:open']),
+        c('预测爆冷（全部）', ur.R0_current_v198 && ur.R0_current_v198.all),
+        c('预测爆冷（热门较开盘走弱）', cal.upsetBadge && cal.upsetBadge.strong && cal.upsetBadge.strong.all),
+        c('优势关注·测试', cal.edgeBadge && cal.edgeBadge.test),
+      ],
+      edge: cal.edgeBadge || null,
+    });
+  } catch (e) { res.status(500).json({ ok: false, error: '暂不可用' }); }
+});
+
 /** 1.9.27: usefulness metrics strip (high-conf / 与盘口一致 / conflict) — no invented stats */
 app.get('/api/usefulness', (req, res) => {
   try {
@@ -834,6 +1009,16 @@ app.get('/api/usefulness', (req, res) => {
     res.json(pmr.getUsefulnessStats());
   } catch (e) {
     res.status(500).json({ ok: false, error: '可用性指标暂不可用', detail: e.message });
+  }
+});
+
+/** 1.9.38: compact amplify/表态 map for 开奖 cards (also embedded in /api/usefulness.byMatch) */
+app.get('/api/lean-feedback-map', (req, res) => {
+  try {
+    const pmr = require('./lib/post-match-review');
+    res.json(pmr.getLeanFeedbackMap());
+  } catch (e) {
+    res.status(500).json({ ok: false, error: '表态对照暂不可用', detail: e.message });
   }
 });
 
@@ -993,7 +1178,7 @@ app.get('/api/squad', async (req, res) => {
 });
 
 
-// 1.9.4: this match's lineup (ESPN); pending → previous-match XI (labeled)
+// 1.9.4 / 1.9.107: match lineup (ESPN) with assembled match-level cache; pending → previous XI
 app.get('/api/lineup', async (req, res) => {
   try {
     const id = String(req.query.matchId || '').trim();
@@ -1009,7 +1194,11 @@ app.get('/api/lineup', async (req, res) => {
       if (!q.date || !(q.homeTeamId || q.awayTeamId)) return res.status(400).json({ ok: false, error: '缺少比赛信息' });
       m = { id, date: String(q.date), time: String(q.time || ''), homeTeamId: String(q.homeTeamId || ''), awayTeamId: String(q.awayTeamId || ''), home: String(q.home || ''), away: String(q.away || '') };
     }
-    res.json(await require('./lib/espn-lineup').getLineup(m));
+    const force = String(req.query.refresh || '') === '1';
+    const out = await require('./lib/espn-lineup').getLineup(m, { force, waitFresh: force });
+    if (out && out._cache) res.setHeader('X-Lineup-Cache', String(out._cache));
+    if (out && out._ageMs != null) res.setHeader('X-Lineup-Age-Ms', String(Math.round(out._ageMs)));
+    res.json(out);
   } catch (e) {
     res.status(502).json({ ok: false, error: '阵容数据暂时不可用', detail: e.message });
   }
@@ -1052,6 +1241,7 @@ app.get('/api/live-stats', async (req, res) => {
     let away = String(req.query.away || req.query.awayTeam || '').trim();
     let date = String(req.query.date || '').trim();
     let time = String(req.query.time || '').trim();
+    let businessDate = String(req.query.businessDate || '').trim();
 
     // Enrich from sporttery caches when only matchId (or partial ids) given
     if (matchId || (homeTeamId && awayTeamId && !home)) {
@@ -1075,6 +1265,7 @@ app.get('/api/live-stats', async (req, res) => {
         away = away || hit.away || '';
         date = date || hit.date || '';
         time = time || hit.time || '';
+        businessDate = businessDate || hit.businessDate || '';
       }
     }
 
@@ -1083,7 +1274,7 @@ app.get('/api/live-stats', async (req, res) => {
     }
 
     const live = require('./lib/live-stats');
-    const payload = await live.getLiveStats({ matchId, homeTeamId, awayTeamId, home, away, date, time });
+    const payload = await live.getLiveStats({ matchId, homeTeamId, awayTeamId, home, away, date, time, businessDate });
     // Never leak the API key; quota remaining is fine to expose for ops.
     res.json(payload);
   } catch (e) {
@@ -1108,6 +1299,72 @@ app.get('/api/match-stats', async (req, res) => {
   }
 });
 
+/** 1.9.105: upcoming fixtures (AF league+cups, cached); sporttery pool fallback */
+app.get('/api/next-fixtures', async (req, res) => {
+  try {
+    const matchId = String(req.query.matchId || req.query.id || '').trim();
+    let homeTeamId = String(req.query.homeTeamId || '').trim();
+    let awayTeamId = String(req.query.awayTeamId || '').trim();
+    let home = String(req.query.home || '').trim();
+    let away = String(req.query.away || '').trim();
+    let date = String(req.query.date || '').trim();
+    let time = String(req.query.time || '').trim();
+    const limit = Math.max(1, Math.min(8, Number(req.query.limit) || 5));
+
+    let schedulePool = [];
+    try {
+      const sched = await getData('schedule');
+      schedulePool = (sched && sched.data) || [];
+    } catch (_) {
+      try {
+        const ms = await getData('matches');
+        schedulePool = (ms && ms.data) || [];
+      } catch { /* */ }
+    }
+    // Merge schedule-seen so fallback has more rows (still filtered kickoff>now)
+    try {
+      const seen = JSON.parse(require('fs').readFileSync(schedSeenPath(), 'utf8'));
+      const byId = (seen && seen.byId) || {};
+      const extra = Object.values(byId);
+      if (extra.length) {
+        const ids = new Set(schedulePool.map(m => String(m.id)));
+        for (const m of extra) {
+          if (m && m.id != null && !ids.has(String(m.id))) schedulePool.push(m);
+        }
+      }
+    } catch { /* optional */ }
+
+    if (matchId && (!homeTeamId || !awayTeamId)) {
+      const pools = [];
+      try { const a = await getData('matches'); pools.push(...((a && a.data) || [])); } catch { /* */ }
+      try { const b = await getData('schedule'); pools.push(...((b && b.data) || [])); } catch { /* */ }
+      try {
+        const seen = JSON.parse(require('fs').readFileSync(schedSeenPath(), 'utf8'));
+        pools.push(...Object.values((seen && seen.byId) || {}));
+      } catch { /* */ }
+      const hit = pools.find(m => String(m.id) === matchId);
+      if (hit) {
+        homeTeamId = homeTeamId || String(hit.homeTeamId || '');
+        awayTeamId = awayTeamId || String(hit.awayTeamId || '');
+        home = home || String(hit.home || '');
+        away = away || String(hit.away || '');
+        date = date || String(hit.date || '');
+        time = time || String(hit.time || '');
+      }
+    }
+    if (!homeTeamId && !awayTeamId) {
+      return res.status(400).json({ ok: false, error: '缺少球队 ID 或 matchId' });
+    }
+    const payload = await require('./lib/next-fixtures').getNextFixturesForMatch({
+      matchId, homeTeamId, awayTeamId, home, away, date, time, limit, schedulePool,
+    });
+    res.json(payload);
+  } catch (e) {
+    console.warn('next-fixtures failed', e.message);
+    res.status(500).json({ ok: false, error: '后续赛程暂时不可用', detail: e.message });
+  }
+});
+
 /** 1.9.14: rolling process stats (possession/shots/…) for home & away */
 app.get('/api/process-stats', async (req, res) => {
   try {
@@ -1128,6 +1385,11 @@ app.get('/api/process-stats', async (req, res) => {
 
 app.get('/api/predict-report', async (req, res) => {
   try {
+    try {
+      if (!require('./lib/feature-flags').isEnabled('predict_report')) {
+        return res.status(503).json({ ok: false, reason: 'disabled', error: '综合预测报告已关闭' });
+      }
+    } catch (_) { /* */ }
     const matchId = String(req.query.matchId || req.query.id || '').trim();
     if (!matchId) return res.status(400).json({ ok: false, error: '缺少 matchId' });
     const force = req.query.refresh === '1' || req.query.force === '1';
@@ -1151,7 +1413,11 @@ app.get('/api/predict-report', async (req, res) => {
         schedulePool = ms.data || [];
       } catch (_) {}
     }
-    const report = await require('./lib/predict-report').buildReport(m, { schedulePool, force });
+    // 1.9.60: default async AI enrich (non-blocking); ?aiWait=1 to await DeepSeek
+    const aiWait = req.query.aiWait === '1' || req.query.aiSync === '1';
+    const report = await require('./lib/predict-report').buildReport(m, {
+      schedulePool, force, aiAsync: !aiWait,
+    });
     res.json(report);
   } catch (e) {
     console.warn('predict-report failed', e.message);
@@ -1169,9 +1435,21 @@ app.get('/api/post-match-review', async (req, res) => {
     const pmr = require('./lib/post-match-review');
     if (!force) {
       const cached = pmr.loadReview(matchId);
-      if (cached && cached.ok && !pmr.needsBaselineBackfill(cached)) return res.json(cached);
-      // One-sided baseline (wrong AF mapping at build time) → rebuild
-      if (cached && cached.ok && pmr.needsBaselineBackfill(cached)) force = true;
+      const stale = cached && cached.ok && (
+        pmr.needsBaselineBackfill(cached)
+        || (pmr.needsStatsBackfill && pmr.needsStatsBackfill(cached))
+        || (pmr.needsReviewUpgrade && pmr.needsReviewUpgrade(cached))
+      );
+      // 1.9.55: do NOT early-return when DeepSeek attribution still needed
+      // (e.g. players_pending resolved, or pre-AI cache). buildReview layers AI on cache hit.
+      let needsAi = false;
+      try {
+        const ds = require('./lib/deepseek-review');
+        needsAi = !!(cached && cached.ok && !stale && ds.needsAiEnrich(cached));
+      } catch (_) { needsAi = false; }
+      if (cached && cached.ok && !stale && !needsAi) return res.json(cached);
+      // One-sided baseline or missing AF fixture map → rebuild
+      if (stale) force = true;
     }
     let m = null;
     for (const kind of ['results', 'matches', 'schedule']) {
@@ -1349,6 +1627,54 @@ app.get('/api/topassists', async (req, res) => {
   }
 });
 
+app.get('/api/club-values', async (req, res) => {
+  try {
+    const league = String(req.query.league || 'epl').trim();
+    const season = req.query.season;
+    const payload = await require('./lib/league-tables').getClubMarketValues({ league, season });
+    res.json(payload);
+  } catch (e) {
+    const code = e.code === 'no_key' ? 503 : 502;
+    res.status(code).json({ ok: false, reason: e.code || 'error', error: '身价榜暂时不可用', detail: e.message });
+  }
+});
+
+// 1.9.119: global search — teams / players / matches → existing detail routes
+app.get('/api/search', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const tab = String(req.query.tab || 'all').trim();
+    const limit = req.query.limit;
+    const gs = require('./lib/global-search');
+    const payload = await gs.search({
+      q,
+      tab,
+      limit,
+      getMatchPools: async () => {
+        const kinds = ['matches', 'schedule', 'results'];
+        const rows = [];
+        const seen = new Set();
+        for (const k of kinds) {
+          try {
+            const payload = await getData(k);
+            for (const m of (payload && payload.data) || []) {
+              const id = String(m.id);
+              if (seen.has(id)) continue;
+              seen.add(id);
+              rows.push(m);
+            }
+          } catch { /* ignore pool */ }
+        }
+        return rows;
+      },
+    });
+    res.json(payload);
+  } catch (e) {
+    console.warn('search', e.message);
+    res.status(500).json({ ok: false, error: '搜索暂时不可用', detail: e.message });
+  }
+});
+
 app.get('/api/team', async (req, res) => {
   try {
     const teamId = req.query.id || req.query.teamId;
@@ -1356,11 +1682,36 @@ app.get('/api/team', async (req, res) => {
     const season = req.query.season;
     const enrich = req.query.enrich === '1' || req.query.enrich === 'true';
     const wantSquad = req.query.squad === '1' || req.query.squad === 'true';
-    const payload = await require('./lib/league-tables').getTeamDetail({ teamId, league, season, enrich, wantSquad });
+    const refresh = req.query.refresh === '1' || req.query.force === '1';
+    const payload = await require('./lib/league-tables').getTeamDetail({ teamId, league, season, enrich, wantSquad, refresh });
     res.json(payload);
   } catch (e) {
     const code = e.code === 'no_key' ? 503 : 502;
     res.status(code).json({ ok: false, reason: e.code || 'error', error: '球队详情暂时不可用', detail: e.message });
+  }
+});
+
+// 1.9.112: prefetch/warm assembled team + player detail (data center / 身价榜)
+app.post('/api/detail-warm', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    const lt = require('./lib/league-tables');
+    const body = req.body || {};
+    const league = String(body.league || req.query.league || '').trim();
+    const teams = Array.isArray(body.teams) ? body.teams.slice(0, 12) : [];
+    const players = Array.isArray(body.players) ? body.players.slice(0, 12) : [];
+    res.json({ ok: true, accepted: teams.length + players.length, noteZh: '后台预热中' });
+    setImmediate(() => {
+      (async () => {
+        for (const id of teams) {
+          try { await lt.warmTeamDetail({ teamId: id, league }); } catch (e) { console.warn('warm team', id, e.message); }
+        }
+        for (const id of players) {
+          try { await lt.warmPlayerDetail({ playerId: id, league }); } catch (e) { console.warn('warm player', id, e.message); }
+        }
+      })().catch(() => {});
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message || 'warm failed' });
   }
 });
 
@@ -1390,13 +1741,19 @@ app.get('/api/odds-live', async (req, res) => {
   }
 });
 
+app.get('/api/market-value-status', (req, res) => {
+  try { res.json(require('./lib/market-value').status()); }
+  catch (e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 app.get('/api/af-player'
 , async (req, res) => {
   try {
     const playerId = req.query.id || req.query.playerId;
     const league = String(req.query.league || '').trim();
     const season = req.query.season;
-    const payload = await require('./lib/league-tables').getAfPlayerDetail({ playerId, league, season });
+    const refresh = req.query.refresh === '1' || req.query.force === '1';
+    const payload = await require('./lib/league-tables').getAfPlayerDetail({ playerId, league, season, refresh });
     res.json(payload);
   } catch (e) {
     const code = e.code === 'no_key' ? 503 : 502;
@@ -1449,7 +1806,7 @@ app.get('/api/news/:id/translate', async (req, res) => {
       title: item.title,
       titleZh: tr.titleZh,
       htmlZh: tr.htmlZh,
-      disclaimerZh: tr.disclaimerZh || '机器翻译仅供参考',
+      disclaimerZh: tr.disclaimerZh || '机器翻译',
       fetchedAt: tr.fetchedAt,
     });
   } catch (e) {
@@ -1478,10 +1835,54 @@ app.get('/api/news/:id', async (req, res) => {
   }
 });
 
+app.use('/api', require('./lib/admin'));
 app.use('/api', require('./lib/auth'));
 app.use('/api', require('./lib/membership'));
 app.use('/api', require('./lib/chat'));
+const columnApi = require('./lib/column');
+app.use('/api', columnApi);
+// 1.9.75: settle 专栏胜平负表态 from live results cache when available
+columnApi.configure({
+  lookupMatchResult(matchId) {
+    try {
+      const pack = cache.results && cache.results.payload;
+      const list = (pack && pack.data) || [];
+      const m = list.find((x) => String(x.id) === String(matchId));
+      if (!m) return null;
+      let flag = m.winFlag ? String(m.winFlag).toUpperCase() : '';
+      if (!/^[HDA]$/.test(flag) && m.full) {
+        const [hg, ag] = String(m.full).split(':').map(Number);
+        if (!Number.isNaN(hg) && !Number.isNaN(ag)) flag = hg > ag ? 'H' : hg === ag ? 'D' : 'A';
+      }
+      return /^[HDA]$/.test(flag) ? flag : null;
+    } catch { return null; }
+  },
+});
+app.use('/api', require('./lib/deepseek-match-chat'));
+app.use('/api', require('./lib/player-db-api'));
 app.use('/api', (req, res) => res.status(404).json({ error: '接口不存在' }));
+// 1.9.63: internal entry for 球员库 browse UI — requires PLAYER_DB_VIEW_KEY (?key=)
+// 1.9.72: operator admin console (separate from App「我的」)
+app.get(['/admin', '/admin/'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
+});
+app.use('/admin', express.static(path.join(__dirname, 'public', 'admin'), {
+  setHeaders: (res, p) => { if (/\.(html|js|css)$/.test(p)) res.set('Cache-Control', 'no-cache'); },
+}));
+app.get(['/db/players', '/db/players/', '/admin/player-db'], (req, res) => {
+  const expected = String(process.env.PLAYER_DB_VIEW_KEY || '').trim();
+  if (!expected) return res.status(404).send('Not Found');
+  const key = typeof req.query.key === 'string' ? String(req.query.key).trim() : '';
+  if (!key || key.length !== expected.length) return res.status(404).send('Not Found');
+  const crypto = require('crypto');
+  const ok = (() => {
+    try {
+      return crypto.timingSafeEqual(Buffer.from(key, 'utf8'), Buffer.from(expected, 'utf8'));
+    } catch { return false; }
+  })();
+  if (!ok) return res.status(404).send('Not Found');
+  res.redirect(302, '/#/player-db?key=' + encodeURIComponent(key));
+});
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, p) => { if (/(sw\.js|index\.html|config\.js|app\.js|style\.css)$/.test(p)) res.set('Cache-Control', 'no-cache'); },
 }));
@@ -1707,6 +2108,31 @@ async function espnLearnJob() {
 }
 setTimeout(espnLearnJob, 20e3);
 setInterval(espnLearnJob, 6 * 3600e3);
+
+// 1.9.107: warm assembled lineups for on-sale matches near kickoff (prev XI + photos in our cache)
+async function lineupWarmJob(reason) {
+  try {
+    const lu = require('./lib/espn-lineup');
+    const sch = await getData('schedule').catch(() => ({ data: [] }));
+    const mat = await getData('matches').catch(() => ({ data: [] }));
+    const byId = new Map();
+    for (const m of [...(sch.data || []), ...(mat.data || [])]) {
+      if (m && m.id && !byId.has(String(m.id))) byId.set(String(m.id), m);
+    }
+    const r = await lu.warmUpcoming([...byId.values()], { withinHours: 36, limit: 24, gapMs: 800 });
+    if (r.warmed || reason === 'startup') console.log('[lineup-warm]', reason, JSON.stringify(r));
+  } catch (e) { console.warn('[lineup-warm]', reason, e.message); }
+}
+setTimeout(() => lineupWarmJob('startup'), 90e3);
+setInterval(() => lineupWarmJob('tick'), 12 * 60e3);
+
+// 1.9.53: auto-fill missing team badges (ESPN → API-Football) into crests.json + hot-reload maps
+try {
+  require('./lib/crest-autofill').start({
+    onReload: reloadCrestMaps,
+    hasUsable: crestUsable,
+  });
+} catch (e) { console.warn('[crest-autofill] start failed', e.message); }
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`竞彩预测 v${require('./package.json').version} running at http://localhost:${PORT} (data: ${require('./lib/db').DATA_DIR})`);
