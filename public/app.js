@@ -778,7 +778,7 @@ function matchFavBtn(x) {
 
 function matchEdgeNavBar(rightHtml) {
   return `<div class="hero-edge-nav" aria-label="赛事导航">
-    <button type="button" class="ic-btn hero-ic" data-act="back" aria-label="返回">${I.back}</button>
+    <button type="button" class="ic-btn hero-ic md-back" data-act="back" aria-label="返回">${I.back}</button>
     <div class="hero-edge-r">${rightHtml || '<span class="ph"></span>'}</div>
   </div>`;
 }

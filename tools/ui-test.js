@@ -76,25 +76,44 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '部落,头条,开奖', 'home: top chrome restores 部落/头条/开奖');
     await tap('.tabbar [data-go="#/schedule"]'); await sleep(200);
     await tap('.ls-row[data-go^="#/match/"]'); await p.waitForSelector('.hero');
-    const heroNav = await p.$eval('.hero-edge-nav', el => {
-      const r = el.getBoundingClientRect();
-      return { top: r.top, backH: el.querySelector('.hero-ic')?.getBoundingClientRect().height };
-    });
-    ok(heroNav.top <= 28 && heroNav.backH <= 30, `match detail compact nav (top=${heroNav.top}, back=${heroNav.backH})`);
-    const heroLay = await p.$eval('.hero.hero--edge', el => {
-      const nav = el.querySelector('.hero-edge-nav');
-      const meta = el.querySelector('.meta');
-      const teams = el.querySelector('.teams');
+    await p.evaluate(() => document.documentElement.style.setProperty('--sat', '24px'));
+    const mdTop = await p.evaluate(() => {
+      const sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0;
+      const back = document.querySelector('.md-back, .hero-edge-nav .hero-ic');
+      const nav = document.querySelector('.hero-edge-nav');
+      const hero = document.querySelector('.hero.hero--edge');
+      const view = document.querySelector('#view');
+      const app = document.querySelector('#app');
+      const backTop = back ? back.getBoundingClientRect().top : 999;
+      const navPos = nav ? getComputedStyle(nav).position : '';
+      const viewPadTop = view ? parseFloat(getComputedStyle(view).paddingTop) || 0 : 0;
+      const hasTopChrome = app ? app.classList.contains('has-top-chrome') : false;
+      const topChrome = document.getElementById('top-chrome');
+      const chromeH = topChrome && !topChrome.classList.contains('hidden') ? topChrome.getBoundingClientRect().height : 0;
+      const meta = hero && hero.querySelector('.meta');
+      const teams = hero && hero.querySelector('.teams');
       const tabs = document.querySelector('.view.sub.md-wrap .dtabs');
-      const nr = nav.getBoundingClientRect();
-      const mr = meta.getBoundingClientRect();
-      const tr = teams.getBoundingClientRect();
-      const hr = el.getBoundingClientRect();
+      const nr = nav ? nav.getBoundingClientRect() : { bottom: 0 };
+      const mr = meta ? meta.getBoundingClientRect() : { top: 0 };
+      const hr = hero ? hero.getBoundingClientRect() : { height: 0, bottom: 0 };
       const tabTop = tabs ? tabs.getBoundingClientRect().top : 0;
-      return { navBottom: nr.bottom, metaTop: mr.top, teamsTop: tr.top, heroH: hr.height, tabGap: tabTop - hr.bottom };
+      return {
+        sat, backTop, navPos, viewPadTop, hasTopChrome, chromeH,
+        metaGap: mr.top - nr.bottom, heroH: hr.height, tabGap: tabTop - hr.bottom,
+      };
     });
-    ok(heroLay.metaTop - heroLay.navBottom <= 6, `meta flush under nav (gap=${heroLay.metaTop - heroLay.navBottom})`);
-    ok(heroLay.heroH <= 200 && heroLay.tabGap <= 8, `compact hero (h=${heroLay.heroH}, tabGap=${heroLay.tabGap})`);
+    ok(!mdTop.hasTopChrome && mdTop.chromeH === 0 && mdTop.viewPadTop === 0, `match detail: no top-chrome reserve (chromeH=${mdTop.chromeH}, viewPad=${mdTop.viewPadTop})`);
+    ok(mdTop.navPos !== 'absolute', `match detail nav in document flow (position=${mdTop.navPos})`);
+    ok(mdTop.backTop <= mdTop.sat + 8, `md-back flush under status bar (top=${mdTop.backTop}, sat=${mdTop.sat})`);
+    ok(mdTop.metaGap <= 6, `meta flush under nav (gap=${mdTop.metaGap})`);
+    ok(mdTop.tabGap <= 8, `tabs tight under hero (tabGap=${mdTop.tabGap})`);
+    ok(!(mdTop.backTop > mdTop.sat + 40 && mdTop.heroH >= 180), `no phantom header band (backTop=${mdTop.backTop}, heroH=${mdTop.heroH})`);
+    const heroH0 = await p.evaluate(() => {
+      document.documentElement.style.setProperty('--sat', '0px');
+      return document.querySelector('.hero.hero--edge')?.getBoundingClientRect().height || 999;
+    });
+    ok(heroH0 < 170, `hero stack shorter than 1.9.149 ~182px (h=${heroH0} at sat=0)`);
+    await p.evaluate(() => document.documentElement.style.setProperty('--sat', '24px'));
     await p.waitForSelector('.hero-edge-nav [data-act="fav"]');
     await tap('.hero-edge-nav [data-act="fav"]');
     await p.waitForFunction(() => document.querySelector('.hero-edge-nav [data-act="fav"]')?.textContent.includes('已关注'), { timeout: 8000 });
