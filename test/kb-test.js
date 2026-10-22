@@ -18,6 +18,18 @@ const pack = store.createPack(userId, '测试包');
 assert.ok(pack.pack && pack.pack.id, 'create pack');
 const item = store.createItem(userId, pack.pack.id, '主场强势', '主队近期主场全胜，看好主胜');
 assert.ok(item.item && item.item.id, 'create item');
+assert.ok(Number.isFinite(item.item.posX) && Number.isFinite(item.item.posY), 'default node position');
+
+const laid = store.updatePackLayout(userId, pack.pack.id, {
+  panX: 12,
+  panY: -8,
+  zoom: 1.1,
+  nodes: { [item.item.id]: { x: 40, y: 50 } },
+});
+assert.ok(laid.pack && laid.pack.layoutPanX === 12);
+const listed = store.listItems(userId, pack.pack.id);
+assert.strictEqual(listed.items.find(x => x.id === item.item.id).posX, 40);
+assert.strictEqual(listed.items.find(x => x.id === item.item.id).posY, 50);
 
 const match = {
   id: '999001',

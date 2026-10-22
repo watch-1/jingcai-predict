@@ -6522,6 +6522,81 @@ async function loadKbPackItems(packId, force) {
   return j;
 }
 
+function destroyKbCanvas() {
+  if (S.kb && S.kb.canvasInst) {
+    try { S.kb.canvasInst.flushChange(); } catch (_) {}
+    S.kb.canvasInst.destroy();
+    S.kb.canvasInst = null;
+  }
+}
+
+let kbLayoutSaveTimer = null;
+function scheduleKbLayoutSave(packId, payload) {
+  clearTimeout(kbLayoutSaveTimer);
+  kbLayoutSaveTimer = setTimeout(async () => {
+    try {
+      await api('/kb/packs/' + encodeURIComponent(packId) + '/layout', { method: 'PATCH', body: payload });
+      if (S.kb && S.kb.packItems && S.kb.packItems.pack) {
+        S.kb.packItems.pack.layoutPanX = payload.panX;
+        S.kb.packItems.pack.layoutPanY = payload.panY;
+        S.kb.packItems.pack.layoutZoom = payload.zoom;
+        const items = S.kb.packItems.items || [];
+        const nodes = payload.nodes || {};
+        items.forEach((it) => {
+          const p = nodes[String(it.id)];
+          if (p) { it.posX = p.x; it.posY = p.y; }
+        });
+      }
+    } catch (e) {
+      console.warn('kb layout save', e.message || e);
+    }
+  }, 320);
+}
+
+function kbShowItemSheet({ packId, itemId, title, body, posX, posY }) {
+  const isNew = !itemId;
+  const sh = $('#sheet');
+  sh.classList.remove('hidden');
+  sh.innerHTML = `<div class="sheet kb-item-sheet"><h3><span>${isNew ? '新建节点' : '编辑节点'}</span><button class="x" data-act="closeSheet">✕</button></h3>
+    <label>标题<input type="text" name="kbSheetTitle" maxlength="80" value="${esc(title || '')}" placeholder="简短标题"></label>
+    <label>正文<textarea name="kbSheetBody" rows="6" maxlength="8000" placeholder="你的赛前依据、盘口观察等">${esc(body || '')}</textarea></label>
+    <button type="button" class="btn pri block" data-act="kbSaveItemSheet" data-pack="${esc(packId)}" data-id="${esc(itemId || '')}" data-posx="${posX != null && posX !== '' ? esc(String(posX)) : ''}" data-posy="${posY != null && posY !== '' ? esc(String(posY)) : ''}">保存</button></div>`;
+  const inp = sh.querySelector('input[name="kbSheetTitle"]');
+  if (inp) inp.focus();
+}
+
+function mountKbPackCanvas(packId) {
+  destroyKbCanvas();
+  const mount = document.getElementById('kb-canvas-mount');
+  const data = S.kb && S.kb.packItems;
+  if (!mount || !data || String(S.kb.packId) !== String(packId)) return;
+  if (!window.createKbCanvas) return;
+  const pack = data.pack;
+  const items = data.items || [];
+  S.kb.canvasInst = window.createKbCanvas(mount, {
+    pan: { x: pack.layoutPanX || 0, y: pack.layoutPanY || 0 },
+    zoom: pack.layoutZoom || 1,
+    items: items.map(it => ({ id: it.id, title: it.title, body: it.body, x: it.posX, y: it.posY })),
+    onChange: (payload) => scheduleKbLayoutSave(packId, payload),
+    onNodeOpen: (id) => {
+      const it = (S.kb.packItems.items || []).find(x => String(x.id) === String(id));
+      if (it) kbShowItemSheet({ packId, itemId: it.id, title: it.title, body: it.body });
+    },
+    onDelete: async (id) => {
+      if (!window.confirm('删除该节点？')) return;
+      try {
+        await api('/kb/items/' + id, { method: 'DELETE' });
+        if (S.kb.packItems) {
+          S.kb.packItems.items = (S.kb.packItems.items || []).filter(x => String(x.id) !== String(id));
+        }
+        S.kb.picker = null;
+        if (S.kb.canvasInst) S.kb.canvasInst.removeItem(id);
+        toast('已删除');
+      } catch (err) { toast(err.message || '删除失败'); }
+    },
+  });
+}
+
 /** Load KB data for current route only when cache miss — avoids render↔fetch infinite loop (1.9.131). */
 function ensureKbRouteData() {
   if (!loggedIn() || route().name !== 'kb') return;
@@ -6589,7 +6664,7 @@ function pageKbHome() {
     <button type="button" class="btn pri sm" data-act="kbCreatePack">创建</button></div>`;
   if (S.kb && S.kb.loading && !packs.length) h += skeleton(2);
   else if (!packs.length) {
-    h += empty('还没有知识包，先创建一个吧。', '', '暂无知识');
+    h += empty('还没有知识包，先创建一个吧。打开知识包可在画布上添加节点。', '', '暂无知识');
   } else {
     h += `<div class="list-meta" style="margin:8px 12px"><span>${packs.length} 个知识包</span><button type="button" class="btn ghost sm" data-act="kbExport">导出备份</button></div>`;
     h += `<div class="kb-pack-list">${packs.map(p => `<div class="kb-pack-row">
@@ -6611,20 +6686,11 @@ function pageKbPack(packId) {
     h += skeleton(3);
     return h + foot();
   }
-  h += `<div class="kb-form pad-card"><h4 style="margin:0 0 8px">新增条目</h4>
-    <label>标题<input type="text" name="kbItemTitle" maxlength="80" placeholder="简短标题"></label>
-    <label>正文<textarea name="kbItemBody" rows="4" maxlength="8000" placeholder="你的赛前依据、盘口观察等（可写主胜/客胜/平局等关键词）"></textarea></label>
-    <button type="button" class="btn pri sm" data-act="kbCreateItem" data-pack="${esc(packId)}">保存条目</button></div>`;
-  if (!items.length) h += empty('本包暂无条目，先添加一条笔记。', '', '暂无条目');
-  else {
-    h += `<div class="kb-item-list">${items.map(it => `<div class="kb-item-card">
-      <div class="kb-item-h"><b>${esc(it.title)}</b><span class="note">${new Date(it.updatedAt).toLocaleDateString('zh-CN')}</span></div>
-      <p>${esc(it.body)}</p>
-      <div class="kb-item-actions">
-        <button type="button" class="btn ghost sm" data-act="kbEditItem" data-id="${it.id}" data-title="${esc(it.title)}">编辑</button>
-        <button type="button" class="btn ghost sm danger" data-act="kbDeleteItem" data-id="${it.id}">删除</button>
-      </div></div>`).join('')}</div>`;
-  }
+  h += `<div class="kb-canvas-page">
+    <div id="kb-canvas-mount" class="kb-canvas-mount" aria-label="知识画布"></div>
+    ${!items.length ? '<p class="kb-canvas-hint">画布为空，点右下角「添加节点」开始。</p>' : ''}
+    <button type="button" class="kb-canvas-fab" data-act="kbAddNode" data-pack="${esc(packId)}">添加节点</button>
+  </div>`;
   return h + foot();
 }
 
@@ -7922,6 +7988,10 @@ function viewWrapClass(r, viewEl) {
   let wrap = r.name === 'results' ? ' rs-wrap' : (r.name === 'match' ? ' md-wrap' : (prPlat ? ' pr-wrap' : ''));
   // 1.9.137: 赛后复盘 — no layered card shell on content pane (wide tables must not clip)
   if (r.name === 'match' && detailTabOf(String(r.arg || '')) === 'review') wrap += ' md-wrap--review';
+  if (r.name === 'kb') {
+    const kp = String(r.arg || '').split('/').filter(Boolean);
+    if (kp[0] === 'pack') wrap += ' kb-wrap';
+  }
   return 'view' + (isTab ? '' : ' sub') + wrap;
 }
 
@@ -7973,6 +8043,19 @@ function render(opts) {
       const n = (S.results && S.results.length) || 0;
       const sn = (S.schedule && S.schedule.length) || 0;
       return 'results:' + n + ':' + sn + ':' + (S.rsDate || '') + ':' + (S.rsLeague || '') + ':' + JSON.stringify(r.query || {});
+    }
+    if (r.name === 'kb') {
+      const kp = String(r.arg || '').split('/').filter(Boolean);
+      const sub = kp[0] || 'home';
+      const kid = kp[1] || '';
+      const kb = S.kb || {};
+      if (sub === 'pack' && kid && kb.packItems && String(kb.packId) === kid) {
+        const items = kb.packItems.items || [];
+        const sig = items.map(it => `${it.id}:${it.updatedAt}:${it.posX}:${it.posY}`).join(',');
+        const pk = kb.packItems.pack || {};
+        return `kb:pack:${kid}:${sig}:${pk.updatedAt}:${pk.layoutPanX}:${pk.layoutPanY}:${pk.layoutZoom}`;
+      }
+      return 'kb:' + sub + ':' + kid + ':' + ((kb.packs && kb.packs.length) || 0);
     }
     return r.name + ':' + String(r.arg || '') + ':' + JSON.stringify(r.query || {});
   })();
@@ -8071,6 +8154,11 @@ function render(opts) {
     else setTimeout(() => loadPlayerDbHome(false), 0);
   }
   if (r.name === 'kb' && loggedIn()) ensureKbRouteData();
+  if (r.name === 'kb') {
+    const kp = String(r.arg || '').split('/').filter(Boolean);
+    if (kp[0] === 'pack' && kp[1]) setTimeout(() => mountKbPackCanvas(kp[1]), 0);
+    else destroyKbCanvas();
+  }
   tickClock();
 }
 
@@ -8376,45 +8464,55 @@ document.addEventListener('click', async e => {
       } catch (err) { toast(err.message || '删除失败'); }
       return;
     }
-    case 'kbCreateItem': {
+    case 'kbAddNode': {
       const packId = el.dataset.pack;
-      const title = (document.querySelector('input[name="kbItemTitle"]') || {}).value;
-      const body = (document.querySelector('textarea[name="kbItemBody"]') || {}).value;
+      let px;
+      let py;
+      if (S.kb && S.kb.canvasInst && S.kb.canvasInst.getViewportCenterWorld) {
+        const c = S.kb.canvasInst.getViewportCenterWorld();
+        px = Math.round(c.x - 88);
+        py = Math.round(c.y - 44);
+      }
+      kbShowItemSheet({ packId, posX: px, posY: py });
+      return;
+    }
+    case 'kbSaveItemSheet': {
+      const packId = el.dataset.pack;
+      const iid = el.dataset.id;
+      const sh = $('#sheet');
+      const title = (sh.querySelector('input[name="kbSheetTitle"]') || {}).value;
+      const body = (sh.querySelector('textarea[name="kbSheetBody"]') || {}).value;
+      const posX = el.dataset.posx;
+      const posY = el.dataset.posy;
       try {
-        await api('/kb/packs/' + packId + '/items', { method: 'POST', body: { title, body } });
-        S.kb.packItems = null;
+        if (iid) {
+          const j = await api('/kb/items/' + iid, { method: 'PATCH', body: { title, body } });
+          if (j && j.item && S.kb && S.kb.packItems) {
+            const items = S.kb.packItems.items || [];
+            const idx = items.findIndex(x => String(x.id) === String(iid));
+            if (idx >= 0) items[idx] = j.item;
+            else items.unshift(j.item);
+            S.kb.packItems.items = items;
+            if (S.kb.canvasInst) S.kb.canvasInst.upsertItem(j.item);
+          }
+        } else {
+          const payload = { title, body };
+          if (posX !== '' && posY !== '') {
+            payload.posX = Number(posX);
+            payload.posY = Number(posY);
+          }
+          const j = await api('/kb/packs/' + packId + '/items', { method: 'POST', body: payload });
+          if (j && j.item && S.kb) {
+            S.kb.packItems = S.kb.packItems || { pack: {}, items: [] };
+            S.kb.packItems.items = [j.item, ...(S.kb.packItems.items || []).filter(x => x.id !== j.item.id)];
+            if (S.kb.canvasInst) S.kb.canvasInst.upsertItem(j.item);
+            else render({ force: true });
+          }
+        }
         S.kb.picker = null;
-        toast('条目已保存');
-        render({ force: true });
+        closeSheet();
+        toast('已保存');
       } catch (err) { toast(err.message || '保存失败'); }
-      return;
-    }
-    case 'kbEditItem': {
-      const iid = el.dataset.id;
-      const curTitle = el.dataset.title || '';
-      const title = window.prompt('标题', curTitle);
-      if (!title) return;
-      const body = window.prompt('正文（可含主胜/客胜/平局等关键词）', '');
-      if (body === null) return;
-      try {
-        await api('/kb/items/' + iid, { method: 'PATCH', body: { title, body } });
-        S.kb.packItems = null;
-        S.kb.picker = null;
-        toast('已更新');
-        render({ force: true });
-      } catch (err) { toast(err.message || '更新失败'); }
-      return;
-    }
-    case 'kbDeleteItem': {
-      const iid = el.dataset.id;
-      if (!window.confirm('删除该条目？')) return;
-      try {
-        await api('/kb/items/' + iid, { method: 'DELETE' });
-        S.kb.packItems = null;
-        S.kb.picker = null;
-        toast('已删除');
-        render({ force: true });
-      } catch (err) { toast(err.message || '删除失败'); }
       return;
     }
     case 'kbExport': {
