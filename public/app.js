@@ -843,6 +843,21 @@ function syncMeDrawer() {
   const html = meDrawerHtml();
   if (dr.innerHTML !== html) dr.innerHTML = html;
 }
+/** 顶栏中部 Tab 集：按底栏上下文切换（赛程=三钮筛选，其余=部落/头条/开奖）。 */
+function topChromeCenterHtml(rName) {
+  if (rName === 'schedule') {
+    const mode = schModeOf();
+    const tabs = SCH_MODES.map(k =>
+      `<button type="button" class="tc-tab tc-tab--sch${mode === k ? ' on' : ''}" data-act="schMode" data-mode="${k}"${mode === k ? ' aria-current="true"' : ''}>${k}</button>`
+    ).join('');
+    return `<nav class="tc-tabs tc-tabs--sch" aria-label="赛程筛选">${tabs}</nav>`;
+  }
+  const activeTop = activeTopTab(rName);
+  const tabs = TOP_TAB_DEF.map(([k, lab]) =>
+    `<button type="button" class="tc-tab${k === activeTop ? ' on' : ''}" data-go="#/${k}"${k === activeTop ? ' aria-current="page"' : ''}>${esc(lab)}</button>`
+  ).join('');
+  return `<nav class="tc-tabs" aria-label="内容">${tabs}</nav>`;
+}
 function syncTopChrome(rName) {
   const el = $('#top-chrome');
   const app = $('#app');
@@ -850,17 +865,16 @@ function syncTopChrome(rName) {
   const show = isShellTab(rName);
   el.classList.toggle('hidden', !show);
   app.classList.toggle('has-top-chrome', show);
+  el.classList.toggle('top-chrome--schedule', show && rName === 'schedule');
   if (!show) return;
   const activeTop = activeTopTab(rName);
   if (activeTop) noteFeedTop(activeTop);
   const li = loggedIn();
   const av = avatarSvg(li ? (S.user && S.user.avatar) || 'a1' : 'a8');
   const msgDot = (S.plans && S.plans.length) ? '<i class="tc-dot" aria-hidden="true"></i>' : '';
-  const tabs = TOP_TAB_DEF.map(([k, lab]) =>
-    `<button type="button" class="tc-tab${k === activeTop ? ' on' : ''}" data-go="#/${k}"${k === activeTop ? ' aria-current="page"' : ''}>${esc(lab)}</button>`
-  ).join('');
+  const center = topChromeCenterHtml(rName);
   const want = `<div class="tc-slot tc-slot-l"><button type="button" class="tc-avatar" data-act="openMe" aria-label="我的">${av}</button></div>
-    <nav class="tc-tabs" aria-label="内容">${tabs}</nav>
+    ${center}
     <div class="tc-slot tc-slot-r"><div class="tc-actions">
       <button type="button" class="tc-ic" data-go="#/search" aria-label="搜索">${I.search}</button>
       <button type="button" class="tc-ic" data-go="#/plans" aria-label="我的消息">${I.mail}${msgDot}</button>
@@ -1365,7 +1379,7 @@ function dateStrip(dates, cur, key, { light = true } = {}) {
 function isHotLeague(l) { return prio(l) < 99; }
 function isFinishedRow(x) { return x._t === 'r' || !!x.full || (x.status && /完场|已结束|Payout/i.test(String(x.status))); }
 const SCH_MODES = ['关注', '未开始', '已结束'];
-/** 1.9.147: 赛程主筛选项（关注 / 未开始 / 已结束），替代旧「热门/关注/全部」+ 状态 pills。 */
+/** 1.9.148: 赛程主筛选项（关注 / 未开始 / 已结束）在顶栏中部；1.9.147 曾误放在日期条下。 */
 function initSchMode() {
   const def = '未开始';
   try {
@@ -1397,11 +1411,6 @@ function setSchMode(m) {
 function setSchHideFinished(on) {
   S.schHideFinished = !!on;
   try { localStorage.setItem('jc_sch_hide_fin', on ? '1' : '0'); } catch (_) {}
-}
-function schModeStrip(cur) {
-  return `<div class="sch-mode">${SCH_MODES.map(k =>
-    `<button type="button" class="${cur === k ? 'on' : ''}" data-act="schMode" data-mode="${k}">${k}</button>`
-  ).join('')}</div>`;
 }
 function schModeFilterRows(classified, mode) {
   if (mode === '关注') return classified.filter(x => isFav(x.id));
@@ -1639,7 +1648,6 @@ function pageSchedule() {
   if (!S.schDate || !dates.includes(S.schDate)) S.schDate = dates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || dates.find(d => d >= today) || dates[dates.length - 1];
   const mode = schModeOf();
   h += dateStrip(dates, S.schDate, 'sdate');
-  h += schModeStrip(mode);
   const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
   const dayAll = [...ms.filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)).map(m => ({ ...m, _t: 'm' })), ...dayRes.map(r => ({ ...r, _t: 'r' }))];
   let classifiedDay = dayAll.map(classifyScoreRow);
@@ -8139,7 +8147,7 @@ function render(opts) {
     // 1.9.126: include match detailTab so tab taps are not no-op'd
     if (r.name === 'match') {
       const id = String(r.arg || '');
-      return 'match:' + id + ':' + detailTabOf(id) + ':' + ((S.squadTab && S.squadTab[id]) || '') + ':' + JSON.stringify(r.query || {});
+      return 'match:' + id + ':' + detailTabOf(id) + ':' + (isFav(id) ? 1 : 0) + ':' + ((S.squadTab && S.squadTab[id]) || '') + ':' + JSON.stringify(r.query || {});
     }
     // 1.9.128: include 开奖 date/league filters (hash stays #/results; without these, chip taps no-op)
     if (r.name === 'results') {
