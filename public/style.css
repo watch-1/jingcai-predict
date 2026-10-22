@@ -1090,6 +1090,18 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .sch-channels button.on {
   color: var(--pri); font-weight: 700; border-bottom-color: var(--pri); background: var(--pri-l);
 }
+/* 1.9.147: schedule primary filter (关注 / 未开始 / 已结束) */
+.sch-mode {
+  display: flex; gap: 8px; margin: 8px 12px 0; padding: 0 2px;
+}
+.sch-mode button {
+  flex: 1; height: 36px; font-size: 14px; font-weight: 500; color: var(--t2);
+  background: #fff; border-radius: 10px; box-shadow: var(--sh);
+}
+.sch-mode button.on {
+  color: var(--pri); font-weight: 700; background: var(--pri-l);
+  box-shadow: inset 0 0 0 1.5px var(--pri);
+}
 .sch-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   margin: 8px 16px 0; flex-wrap: wrap;
@@ -3176,6 +3188,8 @@ html[data-theme="pitch"] .sheet,
 html[data-theme="pitch"] .dialog,
 html[data-theme="pitch"] .news-search,
 html[data-theme="pitch"] .sch-channels,
+html[data-theme="pitch"] .sch-mode,
+html[data-theme="pitch"] .sch-mode button,
 html[data-theme="pitch"] .dtabs,
 html[data-theme="pitch"] .dc-scorers,
 html[data-theme="pitch"] .dc-legend,
@@ -3201,6 +3215,7 @@ html[data-theme="pitch"] .proc-card {
 html[data-theme="pitch"] .chips button,
 html[data-theme="pitch"] .league-chips button,
 html[data-theme="pitch"] .ls-status button,
+html[data-theme="pitch"] .sch-mode button,
 html[data-theme="pitch"] .types button,
 html[data-theme="pitch"] .ana-chip,
 html[data-theme="pitch"] .vote-btn {
@@ -3212,6 +3227,7 @@ html[data-theme="pitch"] .vote-btn {
 html[data-theme="pitch"] .chips button.on,
 html[data-theme="pitch"] .league-chips button.on,
 html[data-theme="pitch"] .ls-status button.on,
+html[data-theme="pitch"] .sch-mode button.on,
 html[data-theme="pitch"] .types button.on,
 html[data-theme="pitch"] .ana-chip.on,
 html[data-theme="pitch"] .vote-btn.on,

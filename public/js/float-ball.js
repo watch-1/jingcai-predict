@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const ACTIVE_ROUTES = new Set(['home', 'schedule', 'predict']);
-const GLB_URL = 'demos/assets/soccer_ball.glb?v=1.9.146';
+const GLB_URL = 'demos/assets/soccer_ball.glb?v=1.9.147';
 
 const STATE = { REST: 0, DRAG: 1, SETTLE: 2, SLING: 3, FLY: 4, CELEBRATE: 5 };
 

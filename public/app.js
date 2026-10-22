@@ -330,9 +330,8 @@ const S = {
   matches: null, schedule: null, results: null, msrc: null, ssrc: null, rsrc: null,
   plans: [], favs: [],
   sel: {}, types: [], mult: 1, navDepth: 0,
-  schDate: null, schLeague: '全部', schChannel: initSchChannel(),
+  schDate: null, schLeague: '全部', schMode: initSchMode(),
   schHideFinished: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_hide_fin') === '1'),
-  schStatus: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_status')) || '全部',
   liveScores: null, liveScoresAt: 0, liveScorePoll: null, liveScoresLoading: false,
   rsDate: null, rsLeague: '全部', prFilter: '全部', prLane: 'hub', dataLeague: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_lg')) || 'epl', dataKind: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_kind')) || 'standings', bannerIdx: 0, pendingAv: null,
   detailTab: {}, voteCache: {}, statsCache: {}, statsUi: {}, liveStatsCache: {}, livePoll: null, predictCache: {}, reviewCache: {}, reviewListCache: null, usefulness: null, leanByMatch: {},
@@ -762,28 +761,14 @@ const foot = () => ''; // 1.9.96: no data-source / disclaimer footer in end-user
 const TOP_TAB_DEF = [['tribe', '部落'], ['news', '头条'], ['results', '开奖']];
 const TAB_DEF = [['home', '首页', I.home], ['schedule', '赛程', I.cal], ['predict', '预测', I.chart], ['data', '数据', I.data]];
 
-/** Bottom tool tabs keep last 部落/头条/开奖 underline; 首页 is not a top tab. */
-function feedTopTabOf(rName) {
-  if (TOP_TABS.includes(rName)) {
-    S.feedTop = rName;
-    try { localStorage.setItem('jc_feed_top', rName); } catch (_) {}
-    return rName;
-  }
-  if (!S.feedTop) {
-    try {
-      let v = localStorage.getItem('jc_feed_top') || 'tribe';
-      if (v === 'home') v = 'tribe';
-      S.feedTop = v;
-    } catch (_) { S.feedTop = 'tribe'; }
-  }
-  if (S.feedTop === 'home') S.feedTop = 'tribe';
-  if (!TOP_TABS.includes(S.feedTop)) S.feedTop = 'tribe';
-  return S.feedTop;
+/** Remember last 部落/头条/开奖 when user opens a top tab (not used for bottom-tool highlight). */
+function noteFeedTop(rName) {
+  if (!TOP_TABS.includes(rName)) return;
+  S.feedTop = rName;
+  try { localStorage.setItem('jc_feed_top', rName); } catch (_) {}
 }
 function activeTopTab(rName) {
-  if (rName === 'home') return '';
-  if (TOP_TABS.includes(rName)) return rName;
-  return feedTopTabOf(rName);
+  return TOP_TABS.includes(rName) ? rName : '';
 }
 
 function matchFavBtn(x) {
@@ -867,6 +852,7 @@ function syncTopChrome(rName) {
   app.classList.toggle('has-top-chrome', show);
   if (!show) return;
   const activeTop = activeTopTab(rName);
+  if (activeTop) noteFeedTop(activeTop);
   const li = loggedIn();
   const av = avatarSvg(li ? (S.user && S.user.avatar) || 'a1' : 'a8');
   const msgDot = (S.plans && S.plans.length) ? '<i class="tc-dot" aria-hidden="true"></i>' : '';
@@ -1378,58 +1364,50 @@ function dateStrip(dates, cur, key, { light = true } = {}) {
 /** 热门 = 竞彩常见优先联赛（LEAGUE_PRIO 白名单），不含瑞超/挪超/巴甲等长尾。 */
 function isHotLeague(l) { return prio(l) < 99; }
 function isFinishedRow(x) { return x._t === 'r' || !!x.full || (x.status && /完场|已结束|Payout/i.test(String(x.status))); }
-// Default 全部 so sales-day matches are not silently dropped by 热门 whitelist.
-// v2 (1.8.2): migrate 热门→全部 once. v3 (1.8.9): migrate again — old APKs / leftover
-// jc_sch_ch=热门 after v2 flag was set still hid 长尾/early-kickoff days without an obvious cue.
-function initSchChannel() {
+const SCH_MODES = ['关注', '未开始', '已结束'];
+/** 1.9.147: 赛程主筛选项（关注 / 未开始 / 已结束），替代旧「热门/关注/全部」+ 状态 pills。 */
+function initSchMode() {
+  const def = '未开始';
   try {
-    if (typeof localStorage === 'undefined') return '全部';
-    if (!localStorage.getItem('jc_sch_ch_v3')) {
-      localStorage.setItem('jc_sch_ch_v3', '1');
-      localStorage.setItem('jc_sch_ch_v2', '1');
-      localStorage.setItem('jc_sch_ch', '全部');
-      return '全部';
+    if (typeof localStorage === 'undefined') return def;
+    if (!localStorage.getItem('jc_sch_mode_v1')) {
+      localStorage.setItem('jc_sch_mode_v1', '1');
+      const ch = localStorage.getItem('jc_sch_ch');
+      const st = localStorage.getItem('jc_sch_status');
+      let mode = def;
+      if (ch === '关注') mode = '关注';
+      else if (st === '已结束') mode = '已结束';
+      else if (st === '未开始') mode = '未开始';
+      else if (st === '进行中' || st === '全部') mode = '未开始';
+      localStorage.setItem('jc_sch_mode', mode);
+      return mode;
     }
-    const c = localStorage.getItem('jc_sch_ch');
-    return ['热门', '关注', '全部'].includes(c) ? c : '全部';
-  } catch (_) { return '全部'; }
+    const m = localStorage.getItem('jc_sch_mode');
+    return SCH_MODES.includes(m) ? m : def;
+  } catch (_) { return def; }
 }
-function schChannelOf() {
-  const c = S.schChannel || '全部';
-  return ['热门', '关注', '全部'].includes(c) ? c : '全部';
+function schModeOf() {
+  const m = S.schMode || '未开始';
+  return SCH_MODES.includes(m) ? m : '未开始';
 }
-function setSchChannel(c) {
-  S.schChannel = c;
-  try { localStorage.setItem('jc_sch_ch', c); } catch (_) {}
+function setSchMode(m) {
+  S.schMode = SCH_MODES.includes(m) ? m : '未开始';
+  try { localStorage.setItem('jc_sch_mode', S.schMode); } catch (_) {}
 }
 function setSchHideFinished(on) {
   S.schHideFinished = !!on;
   try { localStorage.setItem('jc_sch_hide_fin', on ? '1' : '0'); } catch (_) {}
 }
-function schStatusOf() {
-  const c = S.schStatus || '全部';
-  return ['全部', '进行中', '未开始', '已结束'].includes(c) ? c : '全部';
-}
-function setSchStatus(c) {
-  S.schStatus = c;
-  try { localStorage.setItem('jc_sch_status', c); } catch (_) {}
-}
-function channelStrip(cur) {
-  const items = [['热门', '优先联赛（五大/欧战/亚冠等）'], ['关注', '我的收藏'], ['全部', '当日全部竞彩场次']];
-  return `<div class="sch-channels">${items.map(([k, tip]) =>
-    `<button type="button" class="${cur === k ? 'on' : ''}" data-act="schChannel" data-ch="${k}" title="${tip}">${k}</button>`
+function schModeStrip(cur) {
+  return `<div class="sch-mode">${SCH_MODES.map(k =>
+    `<button type="button" class="${cur === k ? 'on' : ''}" data-act="schMode" data-mode="${k}">${k}</button>`
   ).join('')}</div>`;
 }
-function statusStrip(cur, counts) {
-  const items = [
-    ['全部', counts.all],
-    ['进行中', counts.live],
-    ['未开始', counts.ns],
-    ['已结束', counts.ft],
-  ];
-  return `<div class="ls-status">${items.map(([k, n]) =>
-    `<button type="button" class="${cur === k ? 'on' : ''}" data-act="schStatus" data-st="${k}">${k}${n != null ? `<small>${n}</small>` : ''}</button>`
-  ).join('')}</div>`;
+function schModeFilterRows(classified, mode) {
+  if (mode === '关注') return classified.filter(x => isFav(x.id));
+  if (mode === '未开始') return classified.filter(x => x._kind === 'ns');
+  if (mode === '已结束') return classified.filter(x => x._kind === 'ft');
+  return classified;
 }
 function leagueChips(list, cur, key, { strong = false } = {}) {
   const cnt = {}; list.forEach(x => (cnt[x.league] = (cnt[x.league] || 0) + 1));
@@ -1659,24 +1637,15 @@ function pageSchedule() {
   const dates = [...new Set([...(rs || []).map(issueDate), ...ms.map(issueDate)])].sort();
   const today = bjDate(0);
   if (!S.schDate || !dates.includes(S.schDate)) S.schDate = dates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || dates.find(d => d >= today) || dates[dates.length - 1];
-  const ch = schChannelOf();
+  const mode = schModeOf();
   h += dateStrip(dates, S.schDate, 'sdate');
-  h += channelStrip(ch);
+  h += schModeStrip(mode);
   const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
   const dayAll = [...ms.filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)).map(m => ({ ...m, _t: 'm' })), ...dayRes.map(r => ({ ...r, _t: 'r' }))];
-  let dayRows = dayAll;
-  if (ch === '热门') dayRows = dayAll.filter(x => isHotLeague(x.league));
-  else if (ch === '关注') dayRows = dayAll.filter(x => isFav(x.id));
-  const hiddenN = (ch === '热门' || ch === '关注') ? Math.max(0, dayAll.length - dayRows.length) : 0;
-  if (S.schLeague !== '全部' && !dayRows.some(x => x.league === S.schLeague)) S.schLeague = '全部';
-  h += leagueChips(dayRows, S.schLeague, 'slg', { strong: true });
-  if (hiddenN > 0) {
-    const why = ch === '热门' ? '非优先联赛' : '未关注';
-    h += `<div class="sch-filter-banner" role="status">
-      <span>已隐藏 <b>${hiddenN}</b> 场（${why}）· 源数据当日 ${dayAll.length} 场</span>
-      <button type="button" class="btn ghost sm" data-act="schChannel" data-ch="全部">查看全部</button>
-    </div>`;
-  }
+  let classifiedDay = dayAll.map(classifyScoreRow);
+  let modeRows = schModeFilterRows(classifiedDay, mode);
+  if (S.schLeague !== '全部' && !modeRows.some(x => x.league === S.schLeague)) S.schLeague = '全部';
+  h += leagueChips(modeRows, S.schLeague, 'slg', { strong: true });
   const gapInfo = S.ssrc && S.ssrc.meta && S.ssrc.meta.gaps && S.ssrc.meta.gaps[S.schDate];
   if (gapInfo && gapInfo.missing && gapInfo.missing.length) {
     h += `<div class="sch-filter-banner warn" role="status">
@@ -1684,38 +1653,38 @@ function pageSchedule() {
     </div>`;
   }
   if (typeof console !== 'undefined' && console.debug) {
-    console.debug('[schedule]', S.schDate, 'src=', dayAll.length, 'ch=', ch, 'shown=', dayRows.length, 'hidden=', hiddenN, 'gaps=', gapInfo || null);
+    console.debug('[schedule]', S.schDate, 'src=', dayAll.length, 'mode=', mode, 'shown=', modeRows.length, 'gaps=', gapInfo || null);
   }
 
   // Kick off live-score fetch for the day's ids (async → re-render)
-  const dayIds = dayRows.map(x => String(x.id));
+  const allDayIds = classifiedDay.map(x => String(x.id));
   const needFetch = !S.liveScoresAt || Date.now() - S.liveScoresAt > 35000;
-  if (needFetch && dayIds.length) {
+  if (needFetch && allDayIds.length) {
     setTimeout(async () => {
-      await loadLiveScores(dayIds);
+      await loadLiveScores(allDayIds);
       if (route().name === 'schedule') render();
     }, 0);
   }
 
-  let classified = dayRows.map(classifyScoreRow);
   const counts = {
-    all: classified.length,
-    live: classified.filter(x => x._kind === 'live').length,
-    ns: classified.filter(x => x._kind === 'ns').length,
-    ft: classified.filter(x => x._kind === 'ft').length,
+    all: classifiedDay.length,
+    live: classifiedDay.filter(x => x._kind === 'live').length,
+    ns: classifiedDay.filter(x => x._kind === 'ns').length,
+    ft: classifiedDay.filter(x => x._kind === 'ft').length,
   };
-  const st = schStatusOf();
-  h += statusStrip(st, counts);
+  const modeN = modeRows.length;
+  const hint = mode === '关注'
+    ? (S.favs.length ? `已关注 ${modeN} 场` : '点进详情可关注比赛')
+    : mode === '未开始'
+      ? `未开赛 ${modeN} 场`
+      : `已完场 ${modeN} 场`;
   h += `<div class="sch-toolbar">
-    <span class="sch-ch-hint">${counts.live ? `<span class="ls-live-hint"><i class="ls-dot"></i>进行中 ${counts.live} 场 · 约 50 秒自动刷新</span>` : (ch === '热门' ? (hiddenN ? `优先联赛 ${dayRows.length}/${dayAll.length} 场` : '优先联赛 · 比分列表') : ch === '关注' ? (S.favs.length ? `已关注 ${S.favs.length} 场` : '点进详情可关注比赛') : `当日全部 ${dayAll.length} 场`)}</span>
+    <span class="sch-ch-hint">${counts.live && mode === '未开始' ? `<span class="ls-live-hint"><i class="ls-dot"></i>当日 ${counts.live} 场进行中 · 约 50 秒自动刷新</span>` : hint}</span>
     <button type="button" class="btn ghost sm" data-act="schRefresh">${S.liveScoresLoading ? '刷新中…' : '刷新'}</button>
   </div>`;
   h += warnBar();
 
-  let rows = classified.filter(x => S.schLeague === '全部' || x.league === S.schLeague);
-  if (st === '进行中') rows = rows.filter(x => x._kind === 'live');
-  else if (st === '未开始') rows = rows.filter(x => x._kind === 'ns');
-  else if (st === '已结束') rows = rows.filter(x => x._kind === 'ft');
+  let rows = modeRows.filter(x => S.schLeague === '全部' || x.league === S.schLeague);
   // Sort: live first (by minute desc), then NS by kickoff, then FT by kickoff desc
   rows.sort((a, b) => {
     const rank = k => (k === 'live' ? 0 : k === 'ns' ? 1 : 2);
@@ -1726,50 +1695,30 @@ function pageSchedule() {
     return kickoff(b) - kickoff(a);
   });
 
-  ensureLiveScorePoll(dayIds, counts.live > 0);
+  ensureLiveScorePoll(allDayIds, counts.live > 0);
 
-  const nLive = rows.filter(x => x._kind === 'live').length;
-  const nNs = rows.filter(x => x._kind === 'ns').length;
-  const nFt = rows.filter(x => x._kind === 'ft').length;
-  h += `<div class="list-meta"><span>${esc(S.schDate)} ${rows[0] ? issueWeek(rows[0]) : wd(S.schDate)} · ${esc(ch)} · ${esc(st)}</span><span>${[
-    nLive ? `进行中 ${nLive}` : '',
-    nNs ? `未开赛 ${nNs}` : '',
-    nFt ? `完场 ${nFt}` : '',
-    !rows.length ? '0 场' : '',
-  ].filter(Boolean).join(' · ')}</span></div>`;
+  h += `<div class="list-meta"><span>${esc(S.schDate)} ${rows[0] ? issueWeek(rows[0]) : wd(S.schDate)} · ${esc(mode)}</span><span>${rows.length ? `${rows.length} 场` : '0 场'}</span></div>`;
 
   if (!rows.length) {
-    const tip = ch === '关注'
-      ? empty('在赛事详情点击「关注」后，已关注场次会出现在这里。', '<button class="btn ghost sm" data-act="schChannel" data-ch="全部">查看全部</button>', '暂无关注')
-      : ch === '热门'
-        ? empty('当日优先联赛暂无场次，可切换到「全部」查看全部竞彩场次。', '<button class="btn ghost sm" data-act="schChannel" data-ch="全部">查看全部</button>', '暂无热门')
-        : st !== '全部'
-          ? empty(`当前筛选「${st}」暂无场次，可切换其他状态。`, '<button class="btn ghost sm" data-act="schStatus" data-st="全部">查看全部</button>', '暂无场次')
-          : empty('该日期暂无竞彩足球赛事安排。', '', '暂无赛事');
+    const tip = mode === '关注'
+      ? empty('在赛事详情点击「关注」后，已关注场次会出现在这里。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="未开始">查看未开始</button>', '暂无关注')
+      : mode === '已结束'
+        ? empty('该日期暂无已结束场次，可切换到「未开始」查看待赛。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="未开始">查看未开始</button>', '暂无场次')
+        : empty('该日期暂无未开始场次，可切换日期或查看「已结束」。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="已结束">查看已结束</button>', '暂无场次');
     h += tip;
   } else if (S.schLeague === '全部') {
-    // Group by status blocks for scan UX (live / ns / ft), then by league inside
-    const order = st === '全部' ? ['live', 'ns', 'ft'] : [rows[0]._kind];
-    const lab = { live: '进行中', ns: '未开始', ft: '已结束' };
-    for (const k of order) {
-      const block = rows.filter(x => x._kind === k);
-      if (!block.length) continue;
-      if (st === '全部') h += `<div class="ls-sec"><div class="ls-sec-h"><span class="ls-sec-lab ${k}">${lab[k]}</span><span>${block.length} 场</span></div>`;
-      // subgroup by league
-      const groups = [];
-      const map = new Map();
-      block.forEach(x => {
-        const lg = x.league || '其他';
-        if (!map.has(lg)) { map.set(lg, []); groups.push(lg); }
-        map.get(lg).push(x);
-      });
-      h += groups.map(lg => {
-        const list = map.get(lg);
-        return `<div class="lg-group ls-group"><div class="lg-head">${homeTheme() === 'pitch' ? `<span class="tag tag-muted">${esc(lg)}</span>` : `<span class="tag" style="background:${esc(list[0].leagueColor || '#2F6FED')}">${esc(lg)}</span>`}<span class="lg-n">${list.length} 场</span></div>
-          <div class="ls-list">${list.map(scoreCard).join('')}</div></div>`;
-      }).join('');
-      if (st === '全部') h += `</div>`;
-    }
+    const groups = [];
+    const map = new Map();
+    rows.forEach(x => {
+      const lg = x.league || '其他';
+      if (!map.has(lg)) { map.set(lg, []); groups.push(lg); }
+      map.get(lg).push(x);
+    });
+    h += groups.map(lg => {
+      const list = map.get(lg);
+      return `<div class="lg-group ls-group"><div class="lg-head">${homeTheme() === 'pitch' ? `<span class="tag tag-muted">${esc(lg)}</span>` : `<span class="tag" style="background:${esc(list[0].leagueColor || '#2F6FED')}">${esc(lg)}</span>`}<span class="lg-n">${list.length} 场</span></div>
+        <div class="ls-list">${list.map(scoreCard).join('')}</div></div>`;
+    }).join('');
   } else {
     h += `<div class="ls-list">${rows.map(scoreCard).join('')}</div>`;
   }
@@ -8001,7 +7950,7 @@ function tabContentSig(name) {
     }
     if (name === 'schedule') {
       const n = (S.schedule && S.schedule.length) || (S.matches && S.matches.length) || 0;
-      return 's:' + n + ':' + (S.schDate || '') + ':' + schChannelOf() + ':' + (S.schLeague || '') + ':' + (S.schStatus || '') + ':' + (S.schHideFinished ? 1 : 0);
+      return 's:' + n + ':' + (S.schDate || '') + ':' + schModeOf() + ':' + (S.schLeague || '') + ':' + (S.schHideFinished ? 1 : 0);
     }
     if (name === 'predict') {
       const ms = S.matches || [];
@@ -8354,12 +8303,8 @@ document.addEventListener('click', async e => {
   if (d.av) { S.pendingAv = d.av; document.querySelectorAll('[data-av]').forEach(b => b.classList.toggle('on', b === el)); return; }
   if (d.go) { e.preventDefault(); return go(d.go); }
   switch (d.act) {
-    case 'schChannel': {
-      setSchChannel(el.dataset.ch || '全部');
-      return render();
-    }
-    case 'schStatus': {
-      setSchStatus(el.dataset.st || '全部');
+    case 'schMode': {
+      setSchMode(el.dataset.mode || '未开始');
       return render();
     }
     case 'schRefresh': {

@@ -50,6 +50,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     // home (底部首页)
     await tap('.tabbar [data-go="#/home"]'); await p.waitForSelector('.banner .bn-bg, .banner img'); await p.waitForFunction(() => [...document.querySelectorAll('.banner .bn-bg, .banner > .track img.bn-bg')].every(i => i.complete && i.naturalWidth > 0));
     await tap('.tc-tab[data-go="#/tribe"]'); await p.waitForFunction(() => location.hash === '#/tribe', { timeout: 5000 });
+    ok(!!(await p.$('.tc-tab.on[data-go="#/tribe"]')), 'tribe route highlights 部落 top tab');
     ok((await p.$eval('.empty-t', e => e.textContent)).includes('部落'), 'tribe tab shows placeholder, not home feed');
     await tap('.tabbar [data-go="#/home"]'); await sleep(300);
     ok(await p.$$eval('.banner .hero-slide', l => l.length) === 3, 'home banner carousel with 3 slides');
@@ -57,6 +58,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await shot('home');
     // schedule
     await tap('.tabbar [data-go="#/schedule"]'); await p.waitForSelector('.dstrip button');
+    ok(!(await p.$('.tc-tab.on')), 'schedule: bottom tool page — no top tab green underline');
+    ok(!(await p.$('.sch-channels')), 'schedule: no 热门/关注/全部 channel row');
+    ok(!(await p.$('.ls-status')), 'schedule: no legacy status pill row');
+    ok(await p.$$eval('[data-act="schMode"]', l => l.map(b => b.dataset.mode).join(',')) === '关注,未开始,已结束', 'schedule: 关注/未开始/已结束 mode buttons');
     ok(await p.$$eval('.dstrip button', l => l.length) > 0 && await p.$$eval('.chips button', l => l.length) > 0, 'schedule: date strip + league chips');
     const hasMatch = await p.$('.ls-row[data-go^="#/match/"]');
     await shot('schedule');
