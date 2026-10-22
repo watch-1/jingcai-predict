@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>竞足运营后台</title>
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="login-view" class="login-wrap hidden">
+      <form id="login-form" class="login-card" autocomplete="off">
+        <div class="brand">
+          <span class="logo">竞</span>
+          <div>
+            <h1>竞足运营后台</h1>
+            <p>仅限运营人员 · 非 App「我的」入口</p>
+          </div>
+        </div>
+        <label>管理密码</label>
+        <input type="password" id="login-pw" name="password" placeholder="ADMIN_PASSWORD / ADMIN_TOKEN" required autofocus />
+        <button type="submit" class="btn primary block">登 录</button>
+        <p id="login-err" class="err"></p>
+        <p class="hint">密码存于服务器环境变量，首次部署见 docs/admin-console-1.9.72.md</p>
+      </form>
+    </div>
+
+    <div id="shell" class="shell hidden">
+      <aside class="side">
+        <div class="side-brand"><span class="logo sm">竞</span><strong>运营后台</strong></div>
+        <nav id="nav">
+          <button type="button" data-page="dashboard" class="nav-item active">总览监控</button>
+          <button type="button" data-page="users" class="nav-item">用户管理</button>
+          <button type="button" data-page="orders" class="nav-item">会员订单</button>
+          <button type="button" data-page="column" class="nav-item">专栏管理</button>
+          <button type="button" data-page="flags" class="nav-item">功能开关</button>
+        </nav>
+        <div class="side-foot">
+          <div id="side-ver" class="muted"></div>
+          <button type="button" id="btn-logout" class="btn ghost block">退出登录</button>
+        </div>
+      </aside>
+      <main class="main">
+        <header class="top">
+          <h2 id="page-title">总览监控</h2>
+          <div class="top-right"><span id="clock" class="muted"></span></div>
+        </header>
+        <div id="content" class="content"></div>
+      </main>
+    </div>
+  </div>
+  <script src="/admin/admin.js"></script>
+</body>
+</html>

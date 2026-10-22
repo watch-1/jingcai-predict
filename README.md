@@ -1,4 +1,4 @@
-# 竞彩预测 v1.9.0（用户端）
+# 竞彩预测 v1.9.85（用户端）
 
 竞彩足球 **赛事资讯 + 赔率概率预测** App：Node/Express 后端 + 静态前端（网页 / PWA）+ Android WebView APK。
 
@@ -15,7 +15,7 @@
 | 赛事详情 | 情报 Tab：交锋/战绩表（近5/近10、主客筛选）+ 后续赛程卡片 + 赔率摘要；数据 Tab：绿茵屏；聊球/阵容/预测保留；关注按钮 |
 | 预测 | **赛前情报简报**（背景/战绩进失球/交锋/伤停若有/日程 + 赔率参考项）+ 高信心 2串1 + 卡片；按信心排序（稳胆 ≥60% / 倾向 45–60% / 谨慎 <45%）；按场次磁盘缓存 |
 | 开奖 | 按日期 + 联赛查看赛果、胜平负/让球结果、赔率热门命中统计 |
-| 数据中心 | 底栏「数据」：五大联赛等积分榜 / 射手榜 / 助攻榜（真实队徽/头像经 `/api/logo` 代理缓存；点击进球队/球员详情；API-Football 磁盘缓存约 6 小时；免费档为最近可用赛季） |
+| 数据中心 | 底栏「数据」：五大联赛等积分榜 / 射手榜 / 助攻榜（真实队徽/头像经 `/api/logo` 代理缓存；点击进球队/球员详情；球队/球员页展示参考身价；API-Football 磁盘缓存约 6 小时；免费档为最近可用赛季） |
 | 我的 | 头像/昵称、**会员中心**（月/季/年套餐、权益、模拟支付、订单）、我的方案、我的关注、个人资料、修改密码、设置 |
 | 账号 | 手机号 + 密码注册/登录，**未接入短信验证码**（没有短信服务商，故不做假验证码）；游客浏览；注册需勾选协议 |
 
@@ -26,7 +26,7 @@ UI：蓝色体育风、底部 5 Tab（首页/赛程/预测/数据/我的；开�
 - 数据：`GET /api/matches`、`GET /api/results`（代理 sporttery.cn，缓存 3 分钟；不可达时返回明确标注的示例数据）、`GET /api/status`
 - 资讯：`GET /api/news`（体坛资讯页「国内｜外网」切换；默认国内：懂球帝 + 中新网/人民网；`?lang=en` 外网足球 RSS：天空体育/BBC/卫报/ESPN；缓存约 20 分钟，`?q=队名` 筛选；**持久存档**：每次抓取写入 SQLite + `data/news/archive-*.json`，`?before=`/`?offset=` 分页「加载更早」；配图磁盘缓存有数量/体积上限）、`GET /api/news/:id`（详情：服务器抓取正文并缓存；外网失败则摘要；存档可回看；配图走代理）、`GET /api/news/:id/translate`（外网一键译中文：MyMemory+重试/分块+有道备用，按文章 id 缓存）、`GET /api/news-image`（资讯配图代理，含外网 CDN，自动淘汰旧图）
 - 聊球：`GET /api/match-chat?matchId=`（短轮询，`afterId` 增量）、`POST /api/match-chat`（登录，限流）、`GET /api/match-chat/stream`（SSE）
-- 数据中心：`GET /api/leagues`、`GET /api/standings?league=epl|39`、`GET /api/topscorers`、`GET /api/topassists`、`GET /api/team?id=`、`GET /api/af-player?id=`（API-Football；榜单缓存约 6 小时；队/人详情磁盘缓存；队徽/头像走 `/api/logo` 含 media.api-sports.io）
+- 数据中心：`GET /api/leagues`、`GET /api/standings?league=epl|39`、`GET /api/topscorers`、`GET /api/topassists`、`GET /api/team?id=`、`GET /api/af-player?id=`（队/人详情含参考身价 `marketValue`；身价索引见 `GET /api/market-value-status`；榜单缓存约 6 小时；队徽/头像走 `/api/logo`）
 - 实时比分（赛程页）：`GET /api/live-scores?ids=`（sporttery `getMatchLiveV1` 批量，缓存约 45 秒；可选叠加 API-Football `/fixtures?live=all` 一次请求补分钟，依赖已有 fixture-map）
 - 综合预测简报：`GET /api/predict-report?matchId=`（赛前情报长文 + 结构化结论，磁盘缓存）；配额策略 `GET /api/predict-quota`
 - 绿茵屏：`GET /api/live-stats` 附带 `events`（API-Football fixtures/events，重缓存；无真实球轨迹）
@@ -45,6 +45,12 @@ UI：蓝色体育风、底部 5 Tab（首页/赛程/预测/数据/我的；开�
   登录限流（每 IP 15 分钟 30 次；同一手机号连续 5 次密码错误锁定 15 分钟）、注册限流；手机号/密码/昵称/头像/方案大小校验；
   令牌走 Header 不用 Cookie，所以 CORS `*` 安全（APK 的页面源是 `https://appassets.androidplatform.net`）。
   限流计数在内存中，服务重启会清零。
+
+**运营后台**（v1.9.72）：`/admin` 独立暗色控制台（用户/订单/功能开关/监控），密码见服务器 `.env` 的 `ADMIN_PASSWORD`，文档 `docs/admin-console-1.9.72.md`。与 App「我的」隔离。
+
+球迷专栏（1.9.75）：`#/column` sticky pastel 专栏；可选胜平负表态关联 matchId，完场后自动结算，作者卡展示真实近N中M/连红（无结算则不展示）。内容仅供参考；付费帖已上线。运营删帖见 `/admin`「专栏管理」。
+
+球员库只读浏览（`/db/players`、`/api/player-db/*`）为**内部自用工具**（自 1.9.63）：不出现在「我的」菜单；须环境变量 `PLAYER_DB_VIEW_KEY`（`?key=` / `X-Player-Db-Key`）；未配置则 404；手机登录无效。 自 1.9.64 起用户端「近期复盘」列表移除；1.9.65 起指标对照/硬仗检验结构化入库，预测优先读库，表态命中等事实迁入 `match_outcomes`，仅内部球员库可见。
 
 ## 部署（当前服务器 120.77.152.74）
 

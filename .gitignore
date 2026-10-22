@@ -4,6 +4,8 @@ data/news-images/
 data/crests/
 data/league-tables/
 data/*.db
+data/*.db-shm
+data/*.db-wal
 dist/
 backups/
 screenshots/

@@ -1,4 +1,4 @@
-API_BASE (fixed): http://120.77.152.74:8088  version 1.9.28 (68)
+API_BASE (fixed): http://120.77.152.74:8088  version 1.9.115 (152) channel=prod buildId=20261022-0325
 Note: /workspace/tiicai-site/android/src/com/tiicai/jingcai/MainActivity.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
 Verifies
@@ -7,4 +7,14 @@ Verified using v2 scheme (APK Signature Scheme v2): true
 Verified using v3 scheme (APK Signature Scheme v3): true
 Verified using v3.1 scheme (APK Signature Scheme v3.1): false
 Verified using v4 scheme (APK Signature Scheme v4): false
--rw-r--r-- 1 box box 554837 Oct 16 06:21 /workspace/tiicai-site/dist/jingcai-predict.apk
+-rw-r--r-- 1 box box 7583025 Oct 22 03:25 /workspace/tiicai-site/dist/jingcai-predict-1.9.115.apk
+API_BASE (fixed): http://120.77.152.74:8088  version 1.9.115-test (152) channel=partner-test buildId=20261022-0325
+Note: /workspace/tiicai-site/android/src/com/tiicai/jingcai/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): true
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+-rw-r--r-- 1 box box 7583025 Oct 22 03:25 /workspace/tiicai-site/dist/jingcai-predict-1.9.115-partner.apk

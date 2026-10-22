@@ -1,8 +1,10 @@
 // 竞彩预测 service worker: offline app shell + last-known public match data. Account APIs are never cached.
-const VER = 'jc-v1.9.29';
+const VER = 'jc-v1.9.129';
 const SHELL = ['./', './index.html', './style.css', './app.js', './config.js', './sample-data.js', './manifest.json',
-  './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',
-  './banners/banner-hot.jpg', './banners/banner-predict.jpg', './banners/banner-results.jpg'];
+  './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/yun-duo.png',
+  './banners/banner-hot.jpg', './banners/banner-predict.jpg', './banners/banner-results.jpg',
+  './banners/slide-hot-match.jpg', './banners/slide-news.jpg', './banners/slide-contra.jpg',
+  './banners/hero-data-luxury.jpg', './banners/hero-pitch-night.jpg'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VER).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VER).map(k => caches.delete(k)))).then(() => self.clients.claim()));

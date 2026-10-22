@@ -38,8 +38,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await p.waitForFunction(() => location.hash === '#/me', { timeout: 10000 }); registered = true;
     ok((await txt('.me-row .nm')) === 'UI测试', 'registered + logged in, 我的 shows nickname');
     // home
-    await tap('.tabbar [data-go="#/home"]'); await p.waitForSelector('.banner img'); await p.waitForFunction(() => [...document.querySelectorAll('.banner img')].every(i => i.complete && i.naturalWidth > 0));
-    ok(await p.$$eval('.banner img', l => l.length) === 3, 'home banner carousel with 3 images');
+    await tap('.tabbar [data-go="#/home"]'); await p.waitForSelector('.banner .bn-bg, .banner img'); await p.waitForFunction(() => [...document.querySelectorAll('.banner .bn-bg, .banner > .track img.bn-bg')].every(i => i.complete && i.naturalWidth > 0));
+    ok(await p.$$eval('.banner .hero-slide', l => l.length) === 3, 'home banner carousel with 3 slides');
+    ok(await p.$$eval('.banner img.bn-bg', l => l.length) === 3, 'home banner carousel with 3 background images');
     await shot('home');
     // schedule
     await tap('.tabbar [data-go="#/schedule"]'); await p.waitForSelector('.dstrip button');
