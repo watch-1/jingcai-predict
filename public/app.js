@@ -7784,12 +7784,29 @@ function syncTabbar(rName, isTab) {
   if (tb.innerHTML !== want) tb.innerHTML = want;
 }
 
+/** True when predict tab should use navy list wrap (state or cached #prBody DOM). */
+function predictPlatformWrapActive(r, viewEl) {
+  if (!r || r.name !== 'predict') return false;
+  if ((S.prLane || 'hub') === 'platform') return true;
+  if (!viewEl) return false;
+  try {
+    return !!viewEl.querySelector('#prBody.pr-body');
+  } catch (_) {
+    return false;
+  }
+}
+
 /** Tab/sub view class + optional navy wrap (开奖 rs-wrap / 预测 platform pr-wrap). */
-function viewWrapClass(r) {
+function viewWrapClass(r, viewEl) {
   const isTab = TABS.includes(r.name);
-  const prPlat = r.name === 'predict' && (S.prLane || 'hub') === 'platform';
+  const prPlat = predictPlatformWrapActive(r, viewEl);
   const wrap = r.name === 'results' ? ' rs-wrap' : (r.name === 'match' ? ' md-wrap' : (prPlat ? ' pr-wrap' : ''));
   return 'view' + (isTab ? '' : ' sub') + wrap;
+}
+
+function applyViewWrapClass(v, r) {
+  if (!v) return;
+  v.className = viewWrapClass(r, v);
 }
 
 /** Quiet predict list team row — same ends-flush layout as 开奖 mc-teams (名+徽 … vs … 徽+名). */
@@ -7830,13 +7847,13 @@ function render(opts) {
   // No-op: same route + same content signature (boot double-render / 3min poll)
   if (!opts.force && same && render.lastSig === curSig && v.childNodes.length) {
     syncTabbar(r.name, isTab);
+    applyViewWrapClass(v, r);
     renderPlanBar();
     return;
   }
 
   const prevTab = render.lastTab || null;
   const switchingTab = isTab && prevTab && prevTab !== r.name && TABS.includes(prevTab);
-  if (switchingTab && r.name === 'predict') S.prLane = 'hub';
 
   // Stash leaving tab before wipe
   if (switchingTab) saveTabKeep(prevTab, v);
@@ -7847,15 +7864,16 @@ function render(opts) {
   const cold = !hasPrev && !document.documentElement.getAttribute('data-ready');
 
   if (canRestore) {
-    v.className = viewWrapClass(r);
     applyViewHtml(v, keep.html, { isTab: true, hasPrev: true, cold: false });
+    applyViewWrapClass(v, r);
     window.scrollTo(0, keep.y || 0);
   } else {
     const nextHtml = PAGES[r.name](r.arg);
     // 1.9.129: rs-wrap / md-wrap = intentional navy list bg (match-detail hero #1B2A4A)
-    v.className = viewWrapClass(r);
+    applyViewWrapClass(v, r);
     const softSame = !!(same && hasPrev && !switchingTab);
     applyViewHtml(v, nextHtml, { isTab, hasPrev, cold, softSame });
+    applyViewWrapClass(v, r);
     if (isTab) saveTabKeep(r.name, v);
     if (same) window.scrollTo(0, y);
   }
