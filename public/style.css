@@ -272,7 +272,9 @@ html[data-ready="1"] .app {
   padding-bottom: 6px; border-bottom: 3px solid var(--orange, #f0861a);
   display: inline-block;
 }
+.ha-sec-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .ha-sec-h .more { color: var(--t3); font-size: 12.5px; display: flex; align-items: center; white-space: nowrap; }
+.ha-sec-h .more.ha-kb { color: var(--pri, #1a62f0); font-weight: 700; }
 .home-attitude-wrap {
   position: relative; margin: 0 0 6px; padding: 6px 0 14px;
   --ha-p: 0; --ha-diag: 0%;
@@ -5300,6 +5302,9 @@ html[data-edge="1"] .auth-hd {
   font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px;
   background: linear-gradient(90deg, #ff6a3d, #e03e36); color: #fff; letter-spacing: .04em;
 }
+.pred-hub-pill.sec {
+  background: linear-gradient(135deg, #1a62f0, #1246b5);
+}
 .pred-hub-card h3 { margin: 0 0 6px; font-size: 17px; font-weight: 800; color: var(--pri-d, #1246b5); }
 .pred-hub-card.sec h3 { color: var(--t1); }
 .pred-hub-card p { margin: 0; font-size: 13px; line-height: 1.52; color: var(--t2); }
@@ -5319,10 +5324,14 @@ html[data-edge="1"] .auth-hd {
 /* ---------- 个人知识库 (1.9.130) ---------- */
 .kb-hdr-sp { min-height: 8px; }
 .kb-entry {
-  display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  font: inherit; color: inherit; cursor: pointer;
+  padding: 14px 16px;
   border: 1px solid var(--line, #eef2f8); border-radius: var(--r, 14px);
   background: linear-gradient(135deg, #f5f9ff 0%, #fff 55%);
+  box-shadow: 0 4px 16px rgba(27, 42, 74, .08);
 }
+.kb-entry:active { transform: scale(.995); }
 .kb-entry h3 { margin: 0 0 6px; font-size: 16px; color: var(--pri-d, #1246b5); }
 .kb-entry p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--t2); }
 .kb-entry-body { flex: 1; min-width: 0; }

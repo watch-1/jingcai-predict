@@ -8,12 +8,15 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const ACTIVE_ROUTES = new Set(['home', 'schedule', 'predict']);
-const GLB_URL = 'demos/assets/soccer_ball.glb?v=20261022-v16';
+const GLB_URL = 'demos/assets/soccer_ball.glb?v=1.9.141';
 
 const STATE = { REST: 0, DRAG: 1, SETTLE: 2, SLING: 3, FLY: 4, CELEBRATE: 5 };
 
 let root, canvas, hitEl, slingZoneEl, ghostEl, goalFrame;
 let renderer, scene, camera, ball, shadow, placeholder, placeholderMat;
+let glbReady = false;
+let glbFailed = false;
+let glbLoadTimer = 0;
 let W = 1, H = 1, worldHalfW = 1, worldHalfH = 1;
 let localCss = 168;
 let hitCss = 64;
@@ -116,6 +119,30 @@ function minBallWorldY(allowSlingDip) {
   return screenToWorld(0, tabFloorScreenY(pad)).y;
 }
 
+function useCssFallbackBall(reason) {
+  if (glbFailed) return;
+  glbFailed = true;
+  glbReady = false;
+  clearTimeout(glbLoadTimer);
+  glbLoadTimer = 0;
+  if (placeholder && ball) {
+    ball.remove(placeholder);
+    placeholder.geometry.dispose();
+    placeholderMat.dispose();
+    placeholder = null;
+  }
+  hide();
+  try { delete window.JCFloatBall; } catch (_) { window.JCFloatBall = undefined; }
+  try {
+    if (window.JCFloatBallFallback) window.JCFloatBallFallback.mount();
+    const hash = (location.hash || '#/home').replace(/^#\/?/, '').split('?')[0].split('/')[0];
+    if (window.JCFloatBall && window.JCFloatBall.syncRoute) {
+      window.JCFloatBall.syncRoute(hash || 'home');
+    }
+  } catch (_) {}
+  try { console.warn('[float-ball] using CSS fallback (' + (reason || 'unknown') + ')'); } catch (_) {}
+}
+
 function ensureDom() {
   if (root) return;
   root = document.createElement('div');
@@ -203,6 +230,7 @@ function initThree() {
     color: 0xf0f0f0, roughness: 0.42, metalness: 0.04
   });
   placeholder = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 32, 24), placeholderMat);
+  placeholder.visible = false;
   ball.add(placeholder);
 
   const shadowGeo = new THREE.CircleGeometry(BALL_R * 1.15, 24);
@@ -228,14 +256,27 @@ function initThree() {
   pVel = [];
   for (let i = 0; i < MAX_P; i++) pVel.push({ x: 0, y: 0, life: 0, life: 0 });
 
+  clearTimeout(glbLoadTimer);
+  glbLoadTimer = setTimeout(() => {
+    if (!glbReady && !glbFailed) useCssFallbackBall('timeout');
+  }, 12000);
   new GLTFLoader().load(GLB_URL, (gltf) => {
+    clearTimeout(glbLoadTimer);
+    glbLoadTimer = 0;
     const model = gltf.scene;
     fitBallModel(model);
     ball.remove(placeholder);
     placeholder.geometry.dispose();
     placeholderMat.dispose();
+    placeholder = null;
     ball.add(model);
-  }, undefined, () => {});
+    glbReady = true;
+  }, undefined, (err) => {
+    clearTimeout(glbLoadTimer);
+    glbLoadTimer = 0;
+    try { console.warn('[float-ball] GLB load failed', err); } catch (_) {}
+    useCssFallbackBall('load');
+  });
 
   resizeLocalCanvas();
 }
@@ -794,6 +835,12 @@ function start() {
 }
 
 function show() {
+  if (glbFailed) {
+    try {
+      if (window.JCFloatBall && window.JCFloatBall.fallback) window.JCFloatBall.show();
+    } catch (_) {}
+    return;
+  }
   start();
   active = true;
   root.classList.remove('hidden');
