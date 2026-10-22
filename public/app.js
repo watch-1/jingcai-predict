@@ -8361,7 +8361,10 @@ document.addEventListener('click', async e => {
   if (d.type) { const n = +d.type; S.types = S.types.includes(n) ? S.types.filter(x => x !== n) : [...S.types, n]; if (!S.types.length) S.types = [n]; return openPlanSheet(); }
   if (d.mult) { S.mult = Math.max(1, Math.min(99, S.mult + +d.mult)); return openPlanSheet(); }
   if (d.sdate) { S.schDate = d.sdate; return render(); }
-  if (d.slg) { S.schLeague = d.slg; return render(); }
+  if (d.slg) {
+    S.schLeague = (d.slg === S.schLeague && d.slg !== '全部') ? '全部' : d.slg;
+    return render();
+  }
   if (d.rdate) { S.rsDate = d.rdate; if (softPatchResults()) return; return render({ force: true }); }
   if (d.rlg) { S.rsLeague = d.rlg; if (softPatchResults()) return; return render({ force: true }); }
   if (d.pf) { S.prFilter = d.pf; return render(); }
