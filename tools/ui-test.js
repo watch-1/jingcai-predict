@@ -27,6 +27,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     console.log('     data source pill:', src);
     ok(await p.$$eval('.tabbar button', l => l.map(x => x.textContent).join()) === '赛程,预测,数据', 'bottom tab bar has 赛程/预测/数据');
     ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '部落,头条,开奖', 'top chrome has 部落/头条/开奖');
+    ok(!!(await p.$('.tc-actions .tc-ic[data-go="#/search"]')), 'top chrome has search icon');
+    ok(!(await p.$('.home-search-cap')), 'no sticky home search bar');
+    await tap('.tc-ic[data-go="#/search"]'); await p.waitForFunction(() => location.hash === '#/search', { timeout: 5000 });
+    ok(!!(await p.$('#gsInput')), 'search page opens with input');
+    await p.evaluate(() => { location.hash = '#/home'; }); await sleep(300);
     ok(!(await p.content()).includes('服务器地址'), 'no 服务器地址 setting anywhere');
     ok(!(await p.$('.hdr-title')) || !(await p.evaluate(() => document.querySelector('.hdr-title')?.textContent === '赛程')), 'no centered navy page title on home');
     // register

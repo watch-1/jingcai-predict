@@ -866,6 +866,7 @@ function syncTopChrome(rName) {
   const want = `<button type="button" class="tc-avatar" data-act="openMe" aria-label="我的">${av}</button>
     <nav class="tc-tabs" aria-label="内容">${tabs}</nav>
     <div class="tc-actions">
+      <button type="button" class="tc-ic" data-go="#/search" aria-label="搜索">${I.search}</button>
       <button type="button" class="tc-ic" data-go="#/plans" aria-label="我的消息">${I.mail}${msgDot}</button>
     </div>`;
   if (el.innerHTML !== want) el.innerHTML = want;
@@ -7917,7 +7918,7 @@ function syncAndroidChrome(routeName) {
     if (window.JingcaiChrome && typeof window.JingcaiChrome.refreshSafeArea === 'function') {
       window.JingcaiChrome.refreshSafeArea();
     }
-    const darkIcons = isShellTab(routeName);
+    const darkIcons = isShellTab(routeName) || routeName === 'search';
     if (window.JingcaiChrome && typeof window.JingcaiChrome.statusBarStyle === 'function') {
       window.JingcaiChrome.statusBarStyle(darkIcons ? 'dark' : 'light');
     }
@@ -8172,7 +8173,6 @@ function render(opts) {
     }
     r = route();
   }
-  if (r.name === 'search') return go('#/home', true);
   if (!PAGES[r.name]) return go('#/home', true);
   if (PROTECTED.includes(r.name) && !loggedIn()) return go('#/login', true);
   if ((r.name === 'login' || r.name === 'register') && loggedIn()) {
