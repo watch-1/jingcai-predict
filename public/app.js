@@ -708,9 +708,9 @@ function openPlanSheet() {
 function closeSheet() { $('#sheet').classList.add('hidden'); $('#sheet').innerHTML = ''; }
 
 // ======================= router =======================
-/** 1.9.143: top feed tabs (部落/头条/开奖) + bottom tool tabs (赛程/预测/数据). */
-const TOP_TABS = ['home', 'news', 'results'];
-const TABS = ['schedule', 'predict', 'data'];
+/** 1.9.146: top feed tabs (部落/头条/开奖) + bottom tabs (首页/赛程/预测/数据). */
+const TOP_TABS = ['tribe', 'news', 'results'];
+const TABS = ['home', 'schedule', 'predict', 'data'];
 const SHELL_TABS = [...TOP_TABS, ...TABS];
 function isShellTab(name) { return SHELL_TABS.includes(name); }
 const PROTECTED = ['profile', 'password', 'delete', 'pay', 'orders'];
@@ -759,10 +759,10 @@ const hdr = (title, { back: b = true, right = '' } = {}) =>
   `<header class="hdr center"><div class="hdr-side left">${b ? `<button class="ic-btn" data-act="back" aria-label="返回">${I.back}</button>` : '<span class="ph"></span>'}</div><h1 class="hdr-title">${esc(title)}</h1><div class="hdr-side right">${right || '<span class="ph"></span>'}</div></header>`;
 const foot = () => ''; // 1.9.96: no data-source / disclaimer footer in end-user UI
 
-const TOP_TAB_DEF = [['home', '部落'], ['news', '头条'], ['results', '开奖']];
-const TAB_DEF = [['schedule', '赛程', I.cal], ['predict', '预测', I.chart], ['data', '数据', I.data]];
+const TOP_TAB_DEF = [['tribe', '部落'], ['news', '头条'], ['results', '开奖']];
+const TAB_DEF = [['home', '首页', I.home], ['schedule', '赛程', I.cal], ['predict', '预测', I.chart], ['data', '数据', I.data]];
 
-/** 1.9.144: bottom tool tabs keep last 部落/头条/开奖 underline so feed switch stays visible. */
+/** Bottom tool tabs keep last 部落/头条/开奖 underline; 首页 is not a top tab. */
 function feedTopTabOf(rName) {
   if (TOP_TABS.includes(rName)) {
     S.feedTop = rName;
@@ -770,10 +770,20 @@ function feedTopTabOf(rName) {
     return rName;
   }
   if (!S.feedTop) {
-    try { S.feedTop = localStorage.getItem('jc_feed_top') || 'home'; } catch (_) { S.feedTop = 'home'; }
+    try {
+      let v = localStorage.getItem('jc_feed_top') || 'tribe';
+      if (v === 'home') v = 'tribe';
+      S.feedTop = v;
+    } catch (_) { S.feedTop = 'tribe'; }
   }
-  if (!TOP_TABS.includes(S.feedTop)) S.feedTop = 'home';
+  if (S.feedTop === 'home') S.feedTop = 'tribe';
+  if (!TOP_TABS.includes(S.feedTop)) S.feedTop = 'tribe';
   return S.feedTop;
+}
+function activeTopTab(rName) {
+  if (rName === 'home') return '';
+  if (TOP_TABS.includes(rName)) return rName;
+  return feedTopTabOf(rName);
 }
 
 function matchFavBtn(x) {
@@ -856,19 +866,19 @@ function syncTopChrome(rName) {
   el.classList.toggle('hidden', !show);
   app.classList.toggle('has-top-chrome', show);
   if (!show) return;
-  const activeTop = feedTopTabOf(rName);
+  const activeTop = activeTopTab(rName);
   const li = loggedIn();
   const av = avatarSvg(li ? (S.user && S.user.avatar) || 'a1' : 'a8');
   const msgDot = (S.plans && S.plans.length) ? '<i class="tc-dot" aria-hidden="true"></i>' : '';
   const tabs = TOP_TAB_DEF.map(([k, lab]) =>
     `<button type="button" class="tc-tab${k === activeTop ? ' on' : ''}" data-go="#/${k}"${k === activeTop ? ' aria-current="page"' : ''}>${esc(lab)}</button>`
   ).join('');
-  const want = `<button type="button" class="tc-avatar" data-act="openMe" aria-label="我的">${av}</button>
+  const want = `<div class="tc-slot tc-slot-l"><button type="button" class="tc-avatar" data-act="openMe" aria-label="我的">${av}</button></div>
     <nav class="tc-tabs" aria-label="内容">${tabs}</nav>
-    <div class="tc-actions">
+    <div class="tc-slot tc-slot-r"><div class="tc-actions">
       <button type="button" class="tc-ic" data-go="#/search" aria-label="搜索">${I.search}</button>
       <button type="button" class="tc-ic" data-go="#/plans" aria-label="我的消息">${I.mail}${msgDot}</button>
-    </div>`;
+    </div></div>`;
   if (el.innerHTML !== want) el.innerHTML = want;
 }
 const empty = (text, btn = '', title = '') => `<div class="empty">${EMPTY_SVG}${title ? `<div class="empty-t">${title}</div>` : ''}<div class="empty-d">${text}</div>${btn}</div>`;
@@ -1187,22 +1197,6 @@ function focusCardPitch(m) {
     ${badge(m.away, 'sm', m.awayLogo)}
   </button>`;
 }
-function homeQuick(theme) {
-  const items = [
-    ['#/schedule', '赛程', I.cal],
-    ['#/predict', '预测', theme === 'luxury' ? I.lineChart : I.chart],
-    ['#/column', '专栏', I.column],
-    ['#/data', '数据', theme === 'luxury' ? I.db : I.data],
-    ['#/results', '开奖', I.cup],
-  ];
-  if (theme === 'luxury') {
-    return `<div class="quick quick-lux">${items.map(([g, t, ic]) =>
-      `<button type="button" data-go="${g}"><span class="qi line">${ic}</span>${t}</button>`).join('')}</div>`;
-  }
-  return `<div class="quick quick-pitch">${items.map(([g, t, ic]) =>
-    `<button type="button" data-go="${g}"><span class="qi frost">${ic}</span>${t}</button>`).join('')}</div>`;
-}
-
 /** 1.9.139: home 「比赛态度」 — same column_posts as match 态度 tab (平台简报). */
 function homeAttitudeWhen(m) {
   const t = (m.time || '').slice(0, 5);
@@ -1269,10 +1263,7 @@ function homeAttitudeCard({ m, pr }) {
   return homeAttitudeCardFromPost(null, m);
 }
 function homeAttitudeSection(ms) {
-  let h = `<div class="ha-sec-h"><h2>比赛态度</h2><div class="ha-sec-actions">
-    <button type="button" class="more ha-kb" data-go="${loggedIn() ? '#/kb' : '#/login'}">我的知识库</button>
-    <button type="button" class="more" data-go="#/predict">全部预测 ${I.arr}</button>
-  </div></div>`;
+  let h = `<div class="ha-sec-h"><h2>比赛态度</h2></div>`;
   const sk = `<div class="ha-feed" id="homeAttitudeFeed">${[1, 2, 3].map(() =>
     '<div class="ha-card ha-skel"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line" style="height:36px;margin-top:10px"></div><div class="sk sk-line" style="width:90%;margin-top:8px"></div></div>').join('')}</div>`;
   h += `<div id="homeAttitudeWrap" class="home-attitude-wrap" style="--ha-p:0;--ha-diag:0%">`;
@@ -1350,9 +1341,7 @@ function pageHome() {
   let h = `<div class="banner home-hero theme-${theme}"><div class="track" id="bnTrack">${homeHeroSlides(theme, S.homeBannerNews || null)}</div><div class="dots">${Array.from({ length: BANNER_N }, (_, i) => `<i class="${i === S.bannerIdx ? 'on' : ''}"></i>`).join('')}</div></div>`;
   if (theme === 'luxury') {
     h += `<div class="focus-row">${ms ? (focus.slice(0, 2).map(focusCardCompact).join('') || '<div class="focus-empty note">暂无焦点赛事</div>') : '<div class="focus-card skel"></div><div class="focus-card skel"></div>'}</div>`;
-    h += homeQuick('luxury');
   } else {
-    h += homeQuick('pitch');
     h += `<div class="focus-pitch-wrap">${ms ? (focus[0] ? focusCardPitch(focus[0]) : '<div class="focus-empty note">暂无焦点赛事</div>') : '<div class="focus-bar skel"></div>'}</div>`;
   }
   h += warnBar();
@@ -1371,6 +1360,15 @@ function pageHome() {
     }
   }, 0);
   return h + foot();
+}
+
+/** 1.9.146: 部落 — future social surface; not the home feed. */
+function pageTribe() {
+  return empty(
+    '这里将汇聚球队动态、热议话题与球迷真实发帖。功能还在打磨中，欢迎先用底部「首页」查看焦点赛事与比赛态度。',
+    '<button type="button" class="btn ghost sm" data-go="#/home">去首页</button>',
+    '部落即将开放'
+  ) + foot();
 }
 
 function dateStrip(dates, cur, key, { light = true } = {}) {
@@ -6883,7 +6881,7 @@ function pageKbPredict(matchId) {
   return h + foot();
 }
 
-// ======================= 我的（1.9.143 侧栏抽屉；#/me 重定向到部落并打开抽屉） =======================
+// ======================= 我的（1.9.143 侧栏抽屉；#/me 重定向到首页并打开抽屉） =======================
 function pageMe() {
   return pageHome();
 }
@@ -7978,10 +7976,10 @@ function softPatchLiveScoreCards() {
 }
 
 // ======================= render (1.9.124 keep-alive + 1.9.125 home snap / boot-shell) =======================
-const PAGES = { home: pageHome, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs,
+const PAGES = { home: pageHome, tribe: pageTribe, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs,
   news: pageNews, login: pageLogin, register: pageRegister, profile: pageProfile, password: pagePassword, delete: pageDelete, settings: pageSettings, about: pageAbout, terms: pageTerms, privacy: pagePrivacy,
   membership: pageMembership, pay: pagePay, orders: pageOrders, 'member-terms': pageMemberTerms, column: pageColumn, kb: pageKb };
-const TITLES = { home: '部落', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库' };
+const TITLES = { home: '首页', tribe: '部落', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库' };
 
 /** In-memory keep-alive for bottom-tab pages — restore DOM HTML instead of wiping to skeleton. */
 const TAB_KEEP = Object.create(null);

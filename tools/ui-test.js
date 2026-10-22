@@ -25,7 +25,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     ok(/#\/home$/.test(p.url()), '游客浏览 -> home');
     const src = await p.evaluate(() => document.querySelector('.src-pill')?.textContent || '');
     console.log('     data source pill:', src);
-    ok(await p.$$eval('.tabbar button', l => l.map(x => x.textContent).join()) === '赛程,预测,数据', 'bottom tab bar has 赛程/预测/数据');
+    ok(await p.$$eval('.tabbar button', l => l.map(x => x.textContent).join()) === '首页,赛程,预测,数据', 'bottom tab bar has 首页/赛程/预测/数据');
     ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '部落,头条,开奖', 'top chrome has 部落/头条/开奖');
     ok(!!(await p.$('.tc-actions .tc-ic[data-go="#/search"]')), 'top chrome has search icon');
     ok(!(await p.$('.home-search-cap')), 'no sticky home search bar');
@@ -45,8 +45,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await tap('[data-act="openMe"]'); await p.waitForSelector('.me-drawer.open');
     ok((await txt('.md-name')) === 'UI测试', 'registered + logged in, drawer shows nickname');
     await p.evaluate(() => document.getElementById('me-drawer-mask').click());
-    // home (部落)
-    await tap('.tc-tab[data-go="#/home"]'); await p.waitForSelector('.banner .bn-bg, .banner img'); await p.waitForFunction(() => [...document.querySelectorAll('.banner .bn-bg, .banner > .track img.bn-bg')].every(i => i.complete && i.naturalWidth > 0));
+    ok(!(await p.$('.quick')), 'home has no shortcut icon row');
+    ok(!(await p.$('.ha-kb')), 'home attitude header has no 我的知识库 link');
+    // home (底部首页)
+    await tap('.tabbar [data-go="#/home"]'); await p.waitForSelector('.banner .bn-bg, .banner img'); await p.waitForFunction(() => [...document.querySelectorAll('.banner .bn-bg, .banner > .track img.bn-bg')].every(i => i.complete && i.naturalWidth > 0));
+    await tap('.tc-tab[data-go="#/tribe"]'); await p.waitForFunction(() => location.hash === '#/tribe', { timeout: 5000 });
+    ok((await p.$eval('.empty-t', e => e.textContent)).includes('部落'), 'tribe tab shows placeholder, not home feed');
+    await tap('.tabbar [data-go="#/home"]'); await sleep(300);
     ok(await p.$$eval('.banner .hero-slide', l => l.length) === 3, 'home banner carousel with 3 slides');
     ok(await p.$$eval('.banner img.bn-bg', l => l.length) === 3, 'home banner carousel with 3 background images');
     await shot('home');
