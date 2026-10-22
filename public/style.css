@@ -820,24 +820,18 @@ html[data-theme="pitch"] .pmr-report .pmr-wrap {
 
 /* ---------- detail ---------- */
 .hero { background: var(--pri-g); color: #fff; padding: 6px 16px 22px; text-align: center; }
-/* 1.9.149: match detail — toolbar + meta/teams share one tight stack under safe area */
+/* 1.9.150: match detail — single flow stack from safe-area (no phantom header padding) */
 .hero.hero--edge {
-  --hero-edge-toolbar: 26px;
-  padding: calc(var(--sat) + var(--hero-edge-toolbar) + 2px) 10px 6px;
+  padding: 0 10px 6px;
   position: relative;
 }
-.hero.hero--edge-min { min-height: calc(var(--sat) + var(--hero-edge-toolbar, 26px) + 8px); padding-bottom: 6px; }
+.hero.hero--edge-min { min-height: calc(var(--sat) + 40px); padding-bottom: 6px; }
 .hero-edge-nav {
-  position: absolute; left: 0; right: 0; top: 0;
-  display: flex; align-items: flex-start; justify-content: space-between;
-  height: calc(var(--sat) + var(--hero-edge-toolbar));
-  padding: calc(var(--sat) + 1px) 6px 0; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(var(--sat) + 4px) 6px 2px;
+  box-sizing: border-box;
   z-index: 3;
-  pointer-events: none;
 }
-.hero-edge-nav .ic-btn.hero-ic,
-.hero-edge-nav .hero-edge-r,
-.hero-edge-nav .fav-btn { pointer-events: auto; }
 .hero-edge-nav .ic-btn.hero-ic {
   width: 28px; height: 28px; color: #fff;
   background: rgba(0, 0, 0, .1);
@@ -850,6 +844,7 @@ html[data-theme="pitch"] .pmr-report .pmr-wrap {
   padding: 2px 7px; font-size: 10px; border-radius: 11px; gap: 2px; line-height: 1.2;
 }
 .hero-edge-nav .fav-btn svg { width: 12px; height: 12px; }
+.view.sub.md-wrap { padding-top: 0; }
 .view.sub.md-wrap .hero.hero--edge { margin-top: 0; }
 .hero.hero--edge .meta { margin-top: 0; line-height: 1.25; }
 .hero.hero--edge .badge.lg,
@@ -4880,7 +4875,7 @@ html[data-theme="pitch"] .ev-legend { background: rgba(0,0,0,.25) !important; bo
   background: var(--fx-pitch) center/100% 100% no-repeat;
   opacity: .07; filter: blur(.6px);
 }
-.hero > * { position: relative; z-index: 1; }
+.hero > *:not(.hero-edge-nav) { position: relative; z-index: 1; }
 
 /* 1.9.95: blue/black field + artful red/white chevron & soft geometric accents (no diagonal slash) */
 .hdr, .hdr-ext, .dstrip {
