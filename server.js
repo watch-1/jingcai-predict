@@ -1837,6 +1837,20 @@ app.get('/api/news/:id', async (req, res) => {
 
 app.use('/api', require('./lib/admin'));
 app.use('/api', require('./lib/auth'));
+const kbApi = require('./lib/kb');
+kbApi.configure({
+  resolveMatch: async (matchId) => {
+    for (const kind of ['matches', 'schedule']) {
+      try {
+        const pack = await getData(kind);
+        const m = (pack.data || []).find((x) => String(x.id) === String(matchId));
+        if (m) return m;
+      } catch (_) { /* */ }
+    }
+    return null;
+  },
+});
+app.use('/api', kbApi);
 app.use('/api', require('./lib/membership'));
 app.use('/api', require('./lib/chat'));
 const columnApi = require('./lib/column');

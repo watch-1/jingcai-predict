@@ -64,7 +64,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     ok((await txt('#toast')).includes('方案已保存并同步'), 'plan saved + synced: ' + await txt('#toast'));
     // predict / results
     await tap('.hdr [data-act="back"]'); await p.waitForFunction(() => location.hash === '#/schedule');
-    await tap('.tabbar [data-go="#/predict"]'); await p.waitForSelector('.psum'); await shot('predict');
+    await tap('.tabbar [data-go="#/predict"]'); await p.waitForSelector('.kb-entry'); await shot('predict');
     await tap('.tabbar [data-go="#/results"]'); await p.waitForSelector('.dstrip button, .empty'); await shot('results');
     // me
     await tap('.tabbar [data-go="#/me"]'); await p.waitForSelector('.me-stats');

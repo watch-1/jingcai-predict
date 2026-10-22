@@ -343,6 +343,7 @@ const S = {
   columnCompose: { kind: 'match', topic: '分析', matchId: '', matchLabel: '', title: '', body: '', pick: '' },
   columnAuthorCache: {}, columnPostCache: {},
   searchQ: '', searchTab: 'all', searchCache: null,
+  kb: { packs: null, picker: null, packItems: null, packId: null, selected: {}, intervention: 'medium', lastResult: null, loading: false },
 };
 const loggedIn = () => !!S.token;
 function loadLocalLists() {
@@ -1837,16 +1838,21 @@ function usefulnessStripHtml() {
 function pagePredict() {
   const ms = S.matches;
   let h = hdr('预测', { back: false, right: srcPill() });
-  if (!ms) return h + `<div class="hdr-ext" style="height:72px"></div>` + skeleton(4);
+  if (!ms) return h + `<div class="hdr-ext kb-hdr-sp"></div>` + skeleton(4);
   const all = ms.map(m => ({ m, pr: effectivePredict(m) })).filter(x => x.pr)
     .sort(prCompare);
   const nSpeak = all.filter(x => isSpeakPr(x.pr)).length;
   const nPending = all.filter(x => isPendingPr(x.pr)).length;
   const nWatch = all.length - nSpeak - nPending;
-  const nStable = all.filter(x => isSpeakPr(x.pr) && x.pr.lvl && x.pr.lvl[1] === '稳胆').length;
-  h += `<div class="hdr-ext"><div class="psum"><div><b class="num">${nSpeak}</b>额外表态</div><div><b class="num">${nWatch}</b>观望</div><div><b class="num">${nPending ? nPending : nStable}</b>${nPending ? '加载中' : '其中稳胆'}</div></div></div>`;
-  h += usefulnessStripHtml();
-  h += twoFoldCard(ms);
+  h += `<div class="hdr-ext kb-hdr-sp"></div>`;
+  h += `<div class="kb-entry card" style="margin:10px 12px 6px">
+    <div class="kb-entry-body">
+      <h3>我的知识库</h3>
+      <p>录入你自己的赛前笔记与判断依据，在单场中勾选知识条目，生成<strong>独立于站内简报</strong>的个人参考概率（与平台预测分开存储）。</p>
+      <p class="note" style="margin:6px 0 0">内容未经核实，仅供参考，非购彩建议。</p>
+    </div>
+    <button type="button" class="btn pri sm" data-go="${loggedIn() ? '#/kb' : '#/login'}">${loggedIn() ? '管理知识库' : '登录后使用'}</button>
+  </div>`;
   const filters = [
     ['全部', all.length],
     ['表态', nSpeak],
@@ -4244,19 +4250,11 @@ function predTabHtml(m) {
   } else {
     h += `<div class="dsec reason"><h3>赛前情报简报</h3><p class="note">综合报告暂不可用（${esc(rep.error || rep.reason || '加载失败')}），先展示赔率参考层。</p>${reasoningOddsFallback(m).join('')}</div>`;
   }
-  if (pr) {
-    const mode = pr.speakMode || 'amplify';
-    h += `<div class="dsec"><h3>表态说明</h3>
-      <p class="speak-note" style="margin:0;font-size:14px;line-height:1.7">默认少说话：低信心同向无冲击仍「与盘口一致 / 信息不足」。逆盘口（含平局 vs 主/客）、冲击信号，或同向信心≥62%（含双方平局）时给出稳胆/倾向级表态（稳胆门槛 62%）。当前本场：<b>${mode === 'amplify' ? '额外表态' : mode === 'align' ? '与盘口一致' : '信息不足·观望'}</b>。</p>`;
-    h += `</div>`;
-  }
-  const tf = highConfTwoFold(S.matches);
-  if (tf && (tf.a.m.id === m.id || tf.b.m.id === m.id)) {
-    const other = tf.a.m.id === m.id ? tf.b : tf.a;
-    h += `<div class="dsec"><h3>高信心 2串1 关联</h3>
-      <p style="margin:0;font-size:14px;line-height:1.7">本场与 <button data-go="#/match/${encodeURIComponent(other.m.id)}" style="color:var(--pri);background:none;border:0;padding:0;font:inherit">${esc(other.m.home)} vs ${esc(other.m.away)}</button>（${other.pr.text} ${pct(other.pr.conf)}）组成今日参考 2串1，理论参考赔约 <b>${tf.comboOdds.toFixed(2)}</b>。</p>
-      <p class="note" style="margin:8px 0 0">${esc(tf.hist.note)} 约 ${tf.hist.hitRate}%（${tf.hist.days} 日）。</p></div>`;
-  }
+  h += `<div class="dsec kb-match-entry">
+    <h3>个人知识库预测</h3>
+    <p class="note" style="margin:0 0 10px">与上方「平台赛前简报」分开：仅在你主动选择知识条目后，按你的笔记调整参考概率。</p>
+    <button type="button" class="btn pri block" data-go="${loggedIn() ? ('#/kb/predict/' + encodeURIComponent(String(m.id))) : '#/login'}">用我的知识库预测</button>
+  </div>`;
   return h;
 }
 function intelFmtTs(iso) {
@@ -6316,6 +6314,165 @@ async function runPlayerDbSearch(q) {
   } catch (e) { toast(e.message || '搜索失败'); }
 }
 
+// ======================= 个人知识库 =======================
+const KB_IV = [
+  ['explain', '仅解释', '展示命中与归因，不改变概率'],
+  ['light', '轻度', '单项最多约 ±2%'],
+  ['medium', '中度', '单项最多约 ±5%'],
+  ['strong', '强度', '单项最多约 ±8%'],
+];
+
+function kbRouteParts() {
+  const r = route();
+  const p = String(r.arg || '').split('/').filter(Boolean);
+  return { sub: p[0] || 'home', id: p[1] || '' };
+}
+
+async function loadKbPacks(force) {
+  if (!loggedIn()) return [];
+  if (!force && S.kb && S.kb.packs) return S.kb.packs;
+  const j = await api('/kb/packs');
+  S.kb.packs = (j && j.packs) || [];
+  return S.kb.packs;
+}
+
+async function loadKbPicker(force) {
+  if (!loggedIn()) return [];
+  if (!force && S.kb && S.kb.picker) return S.kb.picker;
+  const j = await api('/kb/picker');
+  S.kb.picker = (j && j.packs) || [];
+  return S.kb.picker;
+}
+
+async function loadKbPackItems(packId, force) {
+  if (!loggedIn()) return null;
+  if (!force && S.kb && S.kb.packId === packId && S.kb.packItems) return S.kb.packItems;
+  const j = await api('/kb/packs/' + encodeURIComponent(packId) + '/items');
+  S.kb.packId = packId;
+  S.kb.packItems = j;
+  return j;
+}
+
+function kbToggleItem(id) {
+  S.kb = S.kb || { selected: {} };
+  const k = String(id);
+  if (S.kb.selected[k]) delete S.kb.selected[k];
+  else S.kb.selected[k] = true;
+}
+
+function kbSelectedIds() {
+  return Object.keys((S.kb && S.kb.selected) || {}).filter(k => S.kb.selected[k]);
+}
+
+function kbProbBlock(title, probs, pick) {
+  return `<div class="kb-prob"><div class="kb-prob-h">${esc(title)}${pick ? ` · <b>${esc(pick)}</b>` : ''}</div>
+    <div class="kb-prob-bar"><span style="width:${(probs.h * 100).toFixed(1)}%">主 ${pct(probs.h, 1)}</span>
+    <span style="width:${(probs.d * 100).toFixed(1)}%">平 ${pct(probs.d, 1)}</span>
+    <span style="width:${(probs.a * 100).toFixed(1)}%">客 ${pct(probs.a, 1)}</span></div></div>`;
+}
+
+function pageKb(arg) {
+  const parts = String(arg || '').split('/').filter(Boolean);
+  const sub = parts[0] || 'home';
+  const id = parts[1] || '';
+  if (sub === 'predict' && id) return pageKbPredict(id);
+  if (sub === 'pack' && id) return pageKbPack(id);
+  return pageKbHome();
+}
+
+function pageKbHome() {
+  if (!loggedIn()) {
+    return hdr('我的知识库') + `<div class="pad-card"><p class="note">登录后可创建知识包、录入笔记，并在单场预测中勾选使用。</p><button class="btn pri block" data-go="#/login">去登录</button></div>` + foot();
+  }
+  const packs = (S.kb && S.kb.packs) || [];
+  let h = hdr('我的知识库', { back: true });
+  h += `<div class="pad-card kb-intro"><p class="note" style="margin:0">知识包相当于标签；条目为标题+正文。个人预测<strong>不会</strong>写入或影响站内平台简报缓存。</p></div>`;
+  h += `<div class="kb-form pad-card"><label>新建知识包<input type="text" name="kbPackName" maxlength="32" placeholder="例如：英超主场、伤停笔记"></label>
+    <button type="button" class="btn pri sm" data-act="kbCreatePack">创建</button></div>`;
+  if (S.kb && S.kb.loading && !packs.length) h += skeleton(2);
+  else if (!packs.length) {
+    h += empty('还没有知识包，先创建一个吧。', '', '暂无知识');
+  } else {
+    h += `<div class="list-meta" style="margin:8px 12px"><span>${packs.length} 个知识包</span><button type="button" class="btn ghost sm" data-act="kbExport">导出备份</button></div>`;
+    h += `<div class="kb-pack-list">${packs.map(p => `<div class="kb-pack-row">
+      <button type="button" class="kb-pack-main" data-go="#/kb/pack/${p.id}"><b>${esc(p.name)}</b><span>${p.itemCount || 0} 条</span></button>
+      <button type="button" class="btn ghost sm" data-act="kbRenamePack" data-id="${p.id}" data-name="${esc(p.name)}">改名</button>
+      <button type="button" class="btn ghost sm danger" data-act="kbDeletePack" data-id="${p.id}">删除</button>
+    </div>`).join('')}</div>`;
+  }
+  return h + foot();
+}
+
+function pageKbPack(packId) {
+  if (!loggedIn()) return hdr('知识包') + `<div class="pad-card"><button class="btn pri block" data-go="#/login">去登录</button></div>` + foot();
+  const data = S.kb && S.kb.packItems && String(S.kb.packId) === String(packId) ? S.kb.packItems : null;
+  const pack = data && data.pack;
+  const items = (data && data.items) || [];
+  let h = hdr(pack ? esc(pack.name) : '知识包', { back: true });
+  if (!data) {
+    h += skeleton(3);
+    return h + foot();
+  }
+  h += `<div class="kb-form pad-card"><h4 style="margin:0 0 8px">新增条目</h4>
+    <label>标题<input type="text" name="kbItemTitle" maxlength="80" placeholder="简短标题"></label>
+    <label>正文<textarea name="kbItemBody" rows="4" maxlength="8000" placeholder="你的赛前依据、盘口观察等（可写主胜/客胜/平局等关键词）"></textarea></label>
+    <button type="button" class="btn pri sm" data-act="kbCreateItem" data-pack="${esc(packId)}">保存条目</button></div>`;
+  if (!items.length) h += empty('本包暂无条目，先添加一条笔记。', '', '暂无条目');
+  else {
+    h += `<div class="kb-item-list">${items.map(it => `<div class="kb-item-card">
+      <div class="kb-item-h"><b>${esc(it.title)}</b><span class="note">${new Date(it.updatedAt).toLocaleDateString('zh-CN')}</span></div>
+      <p>${esc(it.body)}</p>
+      <div class="kb-item-actions">
+        <button type="button" class="btn ghost sm" data-act="kbEditItem" data-id="${it.id}" data-title="${esc(it.title)}">编辑</button>
+        <button type="button" class="btn ghost sm danger" data-act="kbDeleteItem" data-id="${it.id}">删除</button>
+      </div></div>`).join('')}</div>`;
+  }
+  return h + foot();
+}
+
+function pageKbPredict(matchId) {
+  if (!loggedIn()) {
+    return hdr('知识库预测') + `<div class="pad-card"><button class="btn pri block" data-go="#/login">去登录</button></div>` + foot();
+  }
+  const m = findMatch(matchId) || (S.results || []).find(x => String(x.id) === String(matchId));
+  let h = hdr('知识库预测', { back: true });
+  if (!m) {
+    h += `<div class="pad-card"><p class="note">未找到场次 ${esc(matchId)}，请从预测列表或赛程进入。</p><button class="btn ghost sm" data-go="#/predict">返回预测</button></div>`;
+    return h + foot();
+  }
+  h += `<div class="pad-card kb-match-hd"><div class="note">${esc(m.num || '')} · ${esc(m.league || '')}</div><h3 style="margin:6px 0">${esc(m.home)} vs ${esc(m.away)}</h3></div>`;
+  const picker = (S.kb && S.kb.picker) || [];
+  const sel = kbSelectedIds();
+  const ivCur = (S.kb && S.kb.intervention) || 'medium';
+  h += `<div class="pad-card"><h4 style="margin:0 0 8px">干预强度</h4><div class="chips kb-iv">${KB_IV.map(([k, lab, sub]) =>
+    `<button type="button" class="${ivCur === k ? 'on' : ''}" data-act="kbIv" data-iv="${k}">${lab}<small>${sub}</small></button>`).join('')}</div></div>`;
+  if (S.kb && S.kb.loading && !picker.length) h += skeleton(3);
+  else if (!picker.length) {
+    h += empty('还没有知识条目，先去创建知识包并添加内容。', '<button class="btn pri sm" data-go="#/kb">去管理</button>', '暂无知识');
+  } else {
+    h += `<div class="list-meta" style="margin:8px 12px"><span>已选 ${sel.length} 条（至少 1 条）</span></div>`;
+    h += picker.map(pk => `<div class="kb-pick-pack"><div class="kb-pick-pack-h">${esc(pk.name)}</div>
+      ${(pk.items || []).map(it => `<label class="kb-pick-item"><input type="checkbox" data-act="kbToggle" data-id="${it.id}" ${S.kb.selected[String(it.id)] ? 'checked' : ''}>
+        <span><b>${esc(it.title)}</b></span></label>`).join('') || '<p class="note" style="padding:8px 12px">本包暂无条目</p>'}
+    </div>`).join('');
+    h += `<div class="pad-card"><button type="button" class="btn pri block" data-act="kbRunPredict" data-mid="${esc(matchId)}" ${sel.length ? '' : 'disabled'}>生成个人预测</button></div>`;
+  }
+  const res = S.kb && S.kb.lastResult;
+  if (res && String(res.matchId) === String(matchId) && res.ok) {
+    h += `<div class="pad-card kb-result">
+      <h4>平台基线 vs 个人调整</h4>
+      <p class="note">${esc(res.source || '')} · ${esc(res.interventionLabel || '')}</p>
+      ${kbProbBlock('平台基线', res.base, res.basePick)}
+      ${kbProbBlock('个人参考', res.adjusted, res.adjustedPick)}
+      <h4 style="margin:14px 0 8px">归因</h4>
+      <div class="kb-attr-list">${(res.attributions || []).map(a => `<div class="kb-attr"><div class="kb-attr-h"><span class="kb-tag">${esc(a.packName)}</span><b>${esc(a.title)}</b></div>
+        <p class="note">${esc(a.snippet)}</p>
+        <p style="margin:4px 0 0;font-size:13px">${esc(a.note)} · 主${(a.effect.h * 100).toFixed(1)}% 平${(a.effect.d * 100).toFixed(1)}% 客${(a.effect.a * 100).toFixed(1)}%</p></div>`).join('')}</div>
+      <p class="note" style="margin-top:10px">${esc(res.disclaimerZh || '')}</p></div>`;
+  }
+  return h + foot();
+}
+
 // ======================= 我的 =======================
 function pageMe() {
   const u = S.user; const li = loggedIn();
@@ -6328,7 +6485,7 @@ function pageMe() {
   // membership promo card
   h += `<div class="vip-card" data-go="#/membership"><div class="vip-card-bg"></div><div class="vip-card-ic">${I.vip}</div><div class="vip-card-body"><div class="vip-card-title">${mem ? '会员中心' : '开通资讯会员'}</div><div class="vip-card-sub">${mem ? `剩余约 ${esc(String(daysLeft))} 天 · 点此续费或查看权益` : '高级预测简报 · 数据中心完整 · 无广告浏览'}</div></div><span class="vip-card-cta">${mem ? '续费' : '开通'}</span></div>`;
   const mi = (g, ic, bg, title, val = '') => `<button data-go="${g}"><span class="mic" style="background:${bg}">${ic}</span><span class="sp">${title}</span><span class="val">${val}</span>${I.arr}</button>`;
-  h += `<div class="menu">${mi('#/membership', I.vip, 'linear-gradient(135deg,#f5b942,#e08a1a)', '会员中心', mem ? '已开通' : '未开通')}${mi('#/orders', I.doc, '#1a62f0', '会员订单', '')}${mi('#/plans', I.doc, '#1565e0', '我的方案', S.plans.length + ' 个')}${mi('#/favs', I.star, '#f5a524', '我的关注', S.favs.length + ' 场')}${mi('#/column', I.column, '#c2185b', '球迷专栏', '真实观点')}${mi('#/column/wallet', I.vip, '#e08a1a', '云朵钱包', (S.user && S.user.coinBalance != null) ? (S.user.coinBalance + ' 朵') : '充值解锁')}${mi('#/news', I.news, '#6d28d9', '体坛资讯', newsTabOf() === 'en' ? '外网' : '国内')}</div>`;
+  h += `<div class="menu">${mi('#/membership', I.vip, 'linear-gradient(135deg,#f5b942,#e08a1a)', '会员中心', mem ? '已开通' : '未开通')}${mi('#/orders', I.doc, '#1a62f0', '会员订单', '')}${mi('#/plans', I.doc, '#1565e0', '我的方案', S.plans.length + ' 个')}${mi('#/favs', I.star, '#f5a524', '我的关注', S.favs.length + ' 场')}${mi('#/kb', I.doc, '#1a62f0', '我的知识库', '个人预测')}${mi('#/column', I.column, '#c2185b', '球迷专栏', '真实观点')}${mi('#/column/wallet', I.vip, '#e08a1a', '云朵钱包', (S.user && S.user.coinBalance != null) ? (S.user.coinBalance + ' 朵') : '充值解锁')}${mi('#/news', I.news, '#6d28d9', '体坛资讯', newsTabOf() === 'en' ? '外网' : '国内')}</div>`;
   h += `<div class="menu">${li ? mi('#/profile', I.pen, '#12a150', '个人资料') + mi('#/password', I.lock, '#7b4ce0', '修改密码') : mi('#/login', I.nick, '#12a150', '登录 / 注册')}${mi('#/settings', I.gear, '#546e7a', '设置 / 外观', THEME_LABEL[homeTheme()])}${mi('#/about', I.info, '#0aa5b8', '关于我们', 'v' + esc(CFG.version))}</div>`;
   return h + foot();
 }
@@ -7417,9 +7574,9 @@ function softPatchLiveScoreCards() {
 // ======================= render (1.9.124 keep-alive + 1.9.125 home snap / boot-shell) =======================
 const PAGES = { home: pageHome, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs,
   news: pageNews, login: pageLogin, register: pageRegister, profile: pageProfile, password: pagePassword, delete: pageDelete, settings: pageSettings, about: pageAbout, terms: pageTerms, privacy: pagePrivacy,
-  membership: pageMembership, pay: pagePay, orders: pageOrders, 'member-terms': pageMemberTerms, column: pageColumn };
+  membership: pageMembership, pay: pagePay, orders: pageOrders, 'member-terms': pageMemberTerms, column: pageColumn, kb: pageKb };
 const TAB_DEF = [['home', '首页', I.home], ['schedule', '赛程', I.cal], ['predict', '预测', I.chart], ['data', '数据', I.data], ['me', '我的', I.user]];
-const TITLES = { home: '首页', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏' };
+const TITLES = { home: '首页', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库' };
 
 /** In-memory keep-alive for bottom-tab pages — restore DOM HTML instead of wiping to skeleton. */
 const TAB_KEEP = Object.create(null);
@@ -7448,7 +7605,13 @@ function tabContentSig(name) {
       const pc = S.predictCache || {};
       let ready = 0;
       for (const k of Object.keys(pc)) { if (pc[k] && pc[k].ok) ready++; }
-      return 'p:' + ms.length + ':' + (S.prFilter || '') + ':' + ready;
+      return 'p:' + ms.length + ':' + (S.prFilter || '') + ':' + ready + ':kb1';
+    }
+    if (name === 'kb') {
+      const p = kbRouteParts();
+      const nsel = kbSelectedIds().length;
+      const lr = (S.kb && S.kb.lastResult && S.kb.lastResult.matchId) || '';
+      return 'kb:' + p.sub + ':' + p.id + ':' + nsel + ':' + lr + ':' + ((S.kb && S.kb.intervention) || 'medium');
     }
     if (name === 'data') {
       const lg = dataLeagueOf(), kind = dataKindOf();
@@ -7653,6 +7816,24 @@ function render(opts) {
     if (parts[0] === 'match' && parts[1]) setTimeout(() => loadPlayerDbMatch(parts[1]), 0);
     else if (parts[0] === 'player' && parts[1]) setTimeout(() => loadPlayerDbPlayer(parts[1]), 0);
     else setTimeout(() => loadPlayerDbHome(false), 0);
+  }
+  if (r.name === 'kb' && loggedIn()) {
+    const parts = String(r.arg || '').split('/').filter(Boolean);
+    const sub = parts[0] || 'home';
+    const id = parts[1] || '';
+    S.kb = S.kb || { selected: {}, intervention: 'medium' };
+    S.kb.loading = true;
+    const done = () => {
+      S.kb.loading = false;
+      if (route().name === 'kb') render({ force: true });
+    };
+    if (sub === 'predict' && id) {
+      loadKbPicker(false).then(done).catch(() => { toast('知识库加载失败'); done(); });
+    } else if (sub === 'pack' && id) {
+      Promise.all([loadKbPacks(false), loadKbPackItems(id, true)]).then(done).catch(() => { toast('加载失败'); done(); });
+    } else {
+      loadKbPacks(false).then(done).catch(() => { toast('加载失败'); done(); });
+    }
   }
   tickClock();
 }
@@ -7894,6 +8075,117 @@ document.addEventListener('click', async e => {
         if (p2) p2.innerHTML = reviewTabHtml(x);
       }
       toast('复盘已更新');
+      return;
+    }
+    case 'kbCreatePack': {
+      const inp = document.querySelector('input[name="kbPackName"]');
+      const name = inp && inp.value;
+      try {
+        await api('/kb/packs', { method: 'POST', body: { name } });
+        S.kb.packs = null;
+        if (inp) inp.value = '';
+        toast('知识包已创建');
+        render({ force: true });
+      } catch (err) { toast(err.message || '创建失败'); }
+      return;
+    }
+    case 'kbRenamePack': {
+      const pid = el.dataset.id;
+      const cur = el.dataset.name || '';
+      const name = window.prompt('新的知识包名称', cur);
+      if (!name || name === cur) return;
+      try {
+        await api('/kb/packs/' + pid, { method: 'PATCH', body: { name } });
+        S.kb.packs = null;
+        toast('已改名');
+        render({ force: true });
+      } catch (err) { toast(err.message || '改名失败'); }
+      return;
+    }
+    case 'kbDeletePack': {
+      const pid = el.dataset.id;
+      if (!window.confirm('删除知识包将同时删除其中所有条目，确定？')) return;
+      try {
+        await api('/kb/packs/' + pid, { method: 'DELETE' });
+        S.kb.packs = null;
+        S.kb.picker = null;
+        toast('已删除');
+        render({ force: true });
+      } catch (err) { toast(err.message || '删除失败'); }
+      return;
+    }
+    case 'kbCreateItem': {
+      const packId = el.dataset.pack;
+      const title = (document.querySelector('input[name="kbItemTitle"]') || {}).value;
+      const body = (document.querySelector('textarea[name="kbItemBody"]') || {}).value;
+      try {
+        await api('/kb/packs/' + packId + '/items', { method: 'POST', body: { title, body } });
+        S.kb.packItems = null;
+        S.kb.picker = null;
+        toast('条目已保存');
+        render({ force: true });
+      } catch (err) { toast(err.message || '保存失败'); }
+      return;
+    }
+    case 'kbEditItem': {
+      const iid = el.dataset.id;
+      const curTitle = el.dataset.title || '';
+      const title = window.prompt('标题', curTitle);
+      if (!title) return;
+      const body = window.prompt('正文（可含主胜/客胜/平局等关键词）', '');
+      if (body === null) return;
+      try {
+        await api('/kb/items/' + iid, { method: 'PATCH', body: { title, body } });
+        S.kb.packItems = null;
+        S.kb.picker = null;
+        toast('已更新');
+        render({ force: true });
+      } catch (err) { toast(err.message || '更新失败'); }
+      return;
+    }
+    case 'kbDeleteItem': {
+      const iid = el.dataset.id;
+      if (!window.confirm('删除该条目？')) return;
+      try {
+        await api('/kb/items/' + iid, { method: 'DELETE' });
+        S.kb.packItems = null;
+        S.kb.picker = null;
+        toast('已删除');
+        render({ force: true });
+      } catch (err) { toast(err.message || '删除失败'); }
+      return;
+    }
+    case 'kbExport': {
+      try {
+        const j = await api('/kb/export');
+        const blob = new Blob([JSON.stringify(j, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'jingcai-kb-backup.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast('已导出 JSON');
+      } catch (err) { toast(err.message || '导出失败'); }
+      return;
+    }
+    case 'kbIv': {
+      S.kb.intervention = el.dataset.iv || 'medium';
+      return render();
+    }
+    case 'kbToggle': {
+      kbToggleItem(el.dataset.id);
+      return render();
+    }
+    case 'kbRunPredict': {
+      const mid = el.dataset.mid;
+      const ids = kbSelectedIds().map(Number);
+      if (!ids.length) { toast('请至少选择一条知识'); return; }
+      try {
+        const j = await api('/predict/personal', { method: 'POST', body: { matchId: mid, intervention: S.kb.intervention || 'medium', itemIds: ids } });
+        S.kb.lastResult = j;
+        toast('个人预测已生成');
+        render({ force: true });
+      } catch (err) { toast(err.message || '生成失败'); }
       return;
     }
     case 'modelCheck': { e.stopPropagation && e.stopPropagation(); return openModelCheck(); }
