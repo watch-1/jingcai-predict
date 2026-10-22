@@ -197,6 +197,7 @@ html[data-ready="1"] .app {
   padding: 8px 14px 4px; background: var(--bg);
 }
 .shell-tools--compact { padding-top: 4px; }
+.shell-tools--bare { justify-content: flex-end; padding-top: 6px; }
 .shell-title { font-size: 15px; font-weight: 700; color: var(--t1); }
 .shell-link {
   font-size: 12.5px; color: var(--pri); display: inline-flex; align-items: center; gap: 4px;
@@ -803,6 +804,29 @@ html[data-theme="pitch"] .pmr-report .pmr-wrap {
 
 /* ---------- detail ---------- */
 .hero { background: var(--pri-g); color: #fff; padding: 6px 16px 22px; text-align: center; }
+/* 1.9.144: match detail — hero under status bar, floating back / 关注 */
+.hero.hero--edge {
+  padding: calc(var(--sat) + 44px) 16px 22px;
+  position: relative;
+}
+.hero.hero--edge-min { min-height: calc(var(--sat) + 52px); padding-bottom: 12px; }
+.hero-edge-nav {
+  position: absolute; left: 0; right: 0; top: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(var(--sat) + 4px) 6px 0; z-index: 3;
+  pointer-events: none;
+}
+.hero-edge-nav .ic-btn.hero-ic,
+.hero-edge-nav .hero-edge-r,
+.hero-edge-nav .fav-btn { pointer-events: auto; }
+.hero-edge-nav .ic-btn.hero-ic {
+  width: 40px; height: 40px; color: #fff;
+  background: rgba(0, 0, 0, .12);
+  border-radius: 50%;
+}
+.hero-edge-nav .ic-btn.hero-ic:active { background: rgba(0, 0, 0, .22); }
+.hero-edge-r { display: flex; align-items: center; justify-content: flex-end; min-width: 40px; }
+.view.sub.md-wrap .hero.hero--edge { margin-top: 0; }
 .hero .meta { font-size: 12px; opacity: .85; display: flex; justify-content: center; gap: 8px; align-items: center; }
 .hero .teams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: 14px; }
 .hero .tm { display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 600; font-size: 16px; min-width: 0; }
