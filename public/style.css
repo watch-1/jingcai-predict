@@ -832,13 +832,21 @@ html[data-theme="pitch"] .pmr-report .pmr-wrap {
   box-sizing: border-box;
   z-index: 3;
 }
-.hero-edge-nav .ic-btn.hero-ic {
-  width: 28px; height: 28px; color: #fff;
-  background: rgba(0, 0, 0, .1);
-  border-radius: 50%;
+/* 1.9.151: 仅白色 chevron，无圆底胶囊；保留 32×32 点按热区 */
+.hero-edge-nav .ic-btn.hero-ic,
+.hero-edge-nav .ic-btn.hero-ic.md-back {
+  width: 32px; height: 32px; color: #fff;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
 }
 .hero-edge-nav .ic-btn.hero-ic svg { width: 18px; height: 18px; }
-.hero-edge-nav .ic-btn.hero-ic:active { background: rgba(0, 0, 0, .22); }
+.hero-edge-nav .ic-btn.hero-ic:active,
+.hero-edge-nav .ic-btn.hero-ic.md-back:active {
+  background: transparent;
+  opacity: 0.72;
+}
 .hero-edge-r { display: flex; align-items: center; justify-content: flex-end; min-width: 28px; }
 .hero-edge-nav .fav-btn {
   padding: 2px 7px; font-size: 10px; border-radius: 11px; gap: 2px; line-height: 1.2;
