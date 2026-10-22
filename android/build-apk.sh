@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"; A="$ROOT/android"
 export JAVA_HOME="${JAVA_HOME:-/opt/android-tools/jdk17}"; export PATH="$JAVA_HOME/bin:$PATH"
 SDK="${ANDROID_HOME:-/opt/android-tools/sdk}"; BT="$SDK/build-tools/34.0.0"; JAR="$SDK/platforms/android-34/android.jar"
 KEYSTORE="${KEYSTORE:-$A/release.keystore}"; KS_PASS="${KS_PASS:-jingcai-predict}"; KEY_ALIAS="${KEY_ALIAS:-jingcai}"
-VERSION_NAME="${VERSION_NAME:-1.9.140}"; VERSION_CODE="${VERSION_CODE:-177}"
+VERSION_NAME="${VERSION_NAME:-1.9.141}"; VERSION_CODE="${VERSION_CODE:-178}"
 API_BASE="${API_BASE:-http://120.77.152.74:8088}"; API_BASE="${API_BASE%/}"
 case "$API_BASE" in http://*|https://*) ;; *) echo "API_BASE must start with http:// or https://" >&2; exit 1;; esac
 OUT="${OUT:-$ROOT/dist/jingcai-predict.apk}"; B="$A/build"
@@ -21,6 +21,13 @@ rm -rf "$B"; mkdir -p "$B/assets/www" "$B/gen" "$B/classes" "$B/res" "$ROOT/dist
 
 # 1) bundle frontend (sw.js not needed inside the app) + build-time config
 cp -r "$ROOT/public/." "$B/assets/www/"; rm -f "$B/assets/www/sw.js" "$B/assets/www/"*.apk
+for _req in \
+  "$B/assets/www/banners/slide-hot-match.jpg" \
+  "$B/assets/www/banners/slide-news.jpg" \
+  "$B/assets/www/banners/slide-contra.jpg" \
+  "$B/assets/www/demos/assets/soccer_ball.glb"; do
+  if [ ! -f "$_req" ]; then echo "Missing required APK asset: $_req" >&2; exit 1; fi
+done
 CHANNEL="${CHANNEL:-prod}"
 PARTNER_KEY="${PARTNER_BUILD_KEY:-}"
 BUILD_ID="${BUILD_ID:-$(date +%Y%m%d-%H%M)}"

@@ -1145,7 +1145,10 @@ function homeAttitudeCard({ m, pr }) {
   return homeAttitudeCardFromPost(null, m);
 }
 function homeAttitudeSection(ms) {
-  let h = `<div class="ha-sec-h"><h2>比赛态度</h2><button type="button" class="more" data-go="#/predict">全部预测 ${I.arr}</button></div>`;
+  let h = `<div class="ha-sec-h"><h2>比赛态度</h2><div class="ha-sec-actions">
+    <button type="button" class="more ha-kb" data-go="${loggedIn() ? '#/kb' : '#/login'}">我的知识库</button>
+    <button type="button" class="more" data-go="#/predict">全部预测 ${I.arr}</button>
+  </div></div>`;
   const sk = `<div class="ha-feed" id="homeAttitudeFeed">${[1, 2, 3].map(() =>
     '<div class="ha-card ha-skel"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line" style="height:36px;margin-top:10px"></div><div class="sk sk-line" style="width:90%;margin-top:8px"></div></div>').join('')}</div>`;
   h += `<div id="homeAttitudeWrap" class="home-attitude-wrap" style="--ha-p:0;--ha-diag:0%">`;
@@ -1993,13 +1996,24 @@ function pagePredictHub() {
       <button type="button" class="pred-hub-card sec" data-act="prLane" data-lane="kb">
         <div class="pred-hub-card-hd">
           <span class="pred-hub-ic sec">${I.doc}</span>
+          <span class="pred-hub-pill sec">知识库</span>
         </div>
-        <h3>私有知识预测</h3>
-        <p>管理知识包与笔记，在单场勾选条目生成个人参考概率。</p>
+        <h3>我的知识库</h3>
+        <p>创建知识包、录入笔记，在单场预测中勾选条目生成个人参考概率。</p>
         <div class="pred-hub-foot">
           <span class="pred-hub-stat">${kbMeta}</span>
-          <span class="pred-hub-go">管理<span class="go-ic">${I.arr}</span></span>
+          <span class="pred-hub-go">进入<span class="go-ic">${I.arr}</span></span>
         </div>
+      </button>
+    </div>
+    <div class="kb-intro">
+      <button type="button" class="kb-entry" data-go="${loggedIn() ? '#/kb' : '#/login'}">
+        <span class="pred-hub-ic sec">${I.doc}</span>
+        <div class="kb-entry-body">
+          <h3>我的知识库</h3>
+          <p>登录后管理个人知识包；与平台预测相互独立，不写入平台缓存。</p>
+        </div>
+        <span class="pred-hub-go">打开<span class="go-ic">${I.arr}</span></span>
       </button>
     </div>
   </div>`;

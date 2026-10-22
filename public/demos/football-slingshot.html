@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0a1a0a" />
+<title>足球弹弓 Demo · 体彩</title>
+<!-- demo-build: 20261017-v15 -->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #0a1a0a;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #c {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    display: block; z-index: 3;
+  }
+  .pitch-overlay {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(ellipse 70% 55% at 50% 42%, rgba(46, 125, 50, 0.28) 0%, transparent 68%),
+      linear-gradient(180deg, #07140a 0%, #0d1f10 45%, #0a160c 100%);
+  }
+  .pitch-lines {
+    position: fixed; inset: 0; pointer-events: none; z-index: 1; opacity: 0.14;
+  }
+  .pitch-lines svg { width: 100%; height: 100%; }
+  #ui {
+    position: fixed; inset: 0; z-index: 10; pointer-events: none;
+  }
+  .hints {
+    position: absolute; left: 10px; right: 10px; top: max(10px, env(safe-area-inset-top));
+    display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+  }
+  .hint {
+    background: rgba(8, 18, 10, 0.72);
+    color: #c8e6c9;
+    font-size: 11px; line-height: 1.35;
+    padding: 5px 11px; border-radius: 999px;
+    border: 1px solid rgba(165, 214, 167, 0.28);
+    backdrop-filter: blur(8px);
+    letter-spacing: 0.01em;
+  }
+  .hint strong { color: #fff; font-weight: 600; }
+  .goal-wrap {
+    position: absolute; left: 50%;
+    top: max(52px, calc(env(safe-area-inset-top) + 44px));
+    transform: translateX(-50%);
+    width: min(240px, 62vw);
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .goal-label {
+    color: rgba(200, 230, 201, 0.55);
+    font-size: 10px; letter-spacing: 0.22em;
+    margin-bottom: 4px; font-weight: 600;
+  }
+  .goal-frame {
+    position: relative;
+    width: 100%; height: 42px;
+    border: 3px solid rgba(255, 255, 255, 0.92);
+    border-bottom: none;
+    border-radius: 3px 3px 0 0;
+    background:
+      repeating-linear-gradient(90deg, transparent 0 11px, rgba(255,255,255,0.14) 11px 12px),
+      repeating-linear-gradient(0deg, transparent 0 9px, rgba(255,255,255,0.11) 9px 10px),
+      linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.12));
+    box-shadow:
+      0 0 18px rgba(129, 199, 132, 0.28),
+      inset 0 0 24px rgba(255, 255, 255, 0.06);
+  }
+  .goal-frame::before,
+  .goal-frame::after {
+    content: '';
+    position: absolute; bottom: -10px; width: 10px; height: 10px;
+    border: 3px solid rgba(255,255,255,0.85);
+    border-top: none;
+  }
+  .goal-frame::before { left: -3px; border-right: none; border-radius: 0 0 0 2px; }
+  .goal-frame::after { right: -3px; border-left: none; border-radius: 0 0 2px 0; }
+  /* Soft concave tray at bottom — physical dip, no dashed chrome / labels */
+  .sling-zone {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 14%;
+    pointer-events: none;
+    opacity: 1;
+    transition: box-shadow 0.22s ease, background 0.22s ease, filter 0.22s ease;
+    /* Recessed bowl: darken toward bottom-center + soft curved lip */
+    background:
+      radial-gradient(ellipse 78% 95% at 50% 118%,
+        rgba(0, 0, 0, 0.42) 0%,
+        rgba(0, 0, 0, 0.22) 38%,
+        rgba(0, 0, 0, 0.08) 62%,
+        transparent 78%),
+      radial-gradient(ellipse 92% 55% at 50% 0%,
+        rgba(255, 255, 255, 0.045) 0%,
+        transparent 55%),
+      linear-gradient(0deg,
+        rgba(0, 0, 0, 0.28) 0%,
+        rgba(0, 0, 0, 0.12) 45%,
+        transparent 100%);
+    box-shadow:
+      inset 0 18px 28px -12px rgba(0, 0, 0, 0.35),
+      inset 0 -8px 20px rgba(0, 0, 0, 0.18);
+  }
+  .sling-zone::before {
+    content: '';
+    position: absolute; left: 6%; right: 6%; top: 0; height: 55%;
+    border-radius: 50% / 100%;
+    border-bottom: none;
+    background: radial-gradient(ellipse 100% 80% at 50% 0%,
+      rgba(200, 255, 230, 0.06) 0%,
+      transparent 70%);
+    opacity: 0.55;
+    pointer-events: none;
+    transition: opacity 0.22s ease, background 0.22s ease;
+  }
+  .sling-zone.active {
+    background:
+      radial-gradient(ellipse 78% 95% at 50% 118%,
+        rgba(0, 0, 0, 0.52) 0%,
+        rgba(0, 0, 0, 0.28) 40%,
+        rgba(0, 12, 8, 0.12) 62%,
+        transparent 80%),
+      radial-gradient(ellipse 92% 55% at 50% 0%,
+        rgba(200, 255, 230, 0.08) 0%,
+        transparent 55%),
+      linear-gradient(0deg,
+        rgba(0, 0, 0, 0.34) 0%,
+        rgba(0, 0, 0, 0.14) 48%,
+        transparent 100%);
+    box-shadow:
+      inset 0 22px 32px -10px rgba(0, 0, 0, 0.45),
+      inset 0 -10px 24px rgba(0, 0, 0, 0.22),
+      0 0 28px rgba(160, 230, 200, 0.12);
+  }
+  .sling-zone.active::before {
+    opacity: 1;
+    background: radial-gradient(ellipse 100% 90% at 50% 0%,
+      rgba(200, 255, 230, 0.14) 0%,
+      rgba(180, 240, 220, 0.04) 45%,
+      transparent 72%);
+  }
+  .toast {
+    position: absolute; left: 50%; top: 42%;
+    transform: translate(-50%, -50%) scale(0.92);
+    background: rgba(16, 28, 18, 0.94);
+    color: #e8f5e9;
+    padding: 14px 22px; border-radius: 14px;
+    font-size: 15px; font-weight: 500;
+    border: 1px solid rgba(129,199,132,0.45);
+    box-shadow: 0 10px 36px rgba(0,0,0,0.5);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.22s, transform 0.22s;
+    z-index: 20;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  .score {
+    position: absolute;
+    left: max(12px, env(safe-area-inset-left));
+    bottom: max(16px, env(safe-area-inset-bottom));
+    color: rgba(200,230,201,0.7); font-size: 12px;
+  }
+  .score b { color: #fff; font-size: 17px; font-variant-numeric: tabular-nums; }
+  .demo-tag {
+    position: absolute;
+    right: max(12px, env(safe-area-inset-right));
+    top: max(12px, env(safe-area-inset-top));
+    font-size: 9px; color: rgba(200,230,201,0.35);
+    letter-spacing: 0.1em;
+  }
+  body.embed .demo-tag { display: none; }
+  .embed-back {
+    display: none;
+    position: absolute;
+    left: max(10px, env(safe-area-inset-left));
+    top: max(10px, env(safe-area-inset-top));
+    z-index: 30;
+    align-items: center; gap: 4px;
+    padding: 7px 12px 7px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(200,255,230,0.28);
+    background: rgba(8, 18, 10, 0.72);
+    color: #e8f5e9;
+    font-size: 13px; font-weight: 500;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    cursor: pointer;
+    pointer-events: auto;
+    touch-action: manipulation;
+  }
+  body.embed .embed-back { display: inline-flex; }
+  body.embed .hints {
+    top: max(48px, calc(env(safe-area-inset-top) + 40px));
+  }
+  #rubber {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 5;
+  }
+</style>
+</head>
+<body>
+  <div class="pitch-overlay"></div>
+  <div class="pitch-lines" aria-hidden="true">
+    <svg viewBox="0 0 100 160" preserveAspectRatio="none">
+      <rect x="8" y="8" width="84" height="144" fill="none" stroke="#fff" stroke-width="0.4"/>
+      <line x1="8" y1="80" x2="92" y2="80" stroke="#fff" stroke-width="0.35"/>
+      <circle cx="50" cy="80" r="12" fill="none" stroke="#fff" stroke-width="0.35"/>
+      <rect x="28" y="8" width="44" height="20" fill="none" stroke="#fff" stroke-width="0.35"/>
+      <rect x="28" y="132" width="44" height="20" fill="none" stroke="#fff" stroke-width="0.35"/>
+    </svg>
+  </div>
+  <canvas id="c"></canvas>
+  <svg id="rubber" aria-hidden="true"></svg>
+  <div id="ui">
+    <button type="button" class="embed-back" id="embedBack" aria-label="返回">← 返回</button>
+    <div class="demo-tag">STANDALONE DEMO</div>
+    <div class="hints">
+      <span class="hint"><strong>拖动</strong> 移动</span>
+      <span class="hint"><strong>底部下拉蓄力</strong> 弹弓射门</span>
+      <span class="hint"><strong>点按</strong> 聊天</span>
+      <span class="hint"><strong>飞行中点球</strong> 再抓取</span>
+    </div>
+    <div class="goal-wrap">
+      <div class="goal-label">GOAL</div>
+      <div class="goal-frame" id="goalFrame"></div>
+    </div>
+    <div class="sling-zone" id="slingZone" aria-hidden="true"></div>
+    <div class="score">进球 <b id="scoreVal">0</b></div>
+    <div class="toast" id="toast"></div>
+  </div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three/three.module.js",
+    "three/addons/": "../vendor/three/addons/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const IS_EMBED = new URLSearchParams(location.search).get('embed') === '1';
+if (IS_EMBED) {
+  document.body.classList.add('embed');
+  const backBtn = document.getElementById('embedBack');
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.location.hash = '#/me';
+          return;
+        }
+      } catch (_) {}
+      try { history.back(); } catch (_) {}
+      location.hash = '#/me';
+    });
+  }
+}
+
+const $ = (id) => document.getElementById(id);
+const canvas = $('c');
+const rubberSvg = $('rubber');
+const toastEl = $('toast');
+const slingZoneEl = $('slingZone');
+const scoreVal = $('scoreVal');
+const goalFrame = $('goalFrame');
+
+let score = 0;
+let toastTimer = 0;
+function showToast(msg, ms = 1600) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), ms);
+}
+
+const renderer = new THREE.WebGLRenderer({
+  canvas, antialias: true, alpha: true, powerPreference: 'high-performance'
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setClearColor(0x000000, 0);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+camera.position.set(0, 0, 12);
+
+// Soft studio lighting (match reference: key upper-left, cool fill, rim)
+const hemi = new THREE.HemisphereLight(0xf2f5ff, 0x1a2a1a, 0.55);
+scene.add(hemi);
+const amb = new THREE.AmbientLight(0xffffff, 0.28);
+scene.add(amb);
+const key = new THREE.DirectionalLight(0xffffff, 1.15);
+key.position.set(4.5, 7.5, 8);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xb3d4fc, 0.42);
+fill.position.set(-6, 1, 4);
+scene.add(fill);
+const rimLight = new THREE.DirectionalLight(0xe8f0ff, 0.35);
+rimLight.position.set(-2, 5, -7);
+scene.add(rimLight);
+
+const BALL_R = 0.44;
+/** Root the simulation drives; GLB mesh is parented inside. */
+const ball = new THREE.Group();
+scene.add(ball);
+
+// Lightweight placeholder until GLB arrives
+const placeholderMat = new THREE.MeshStandardMaterial({
+  color: 0xf0f0f0, roughness: 0.45, metalness: 0.05
+});
+const placeholder = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 32, 24), placeholderMat);
+ball.add(placeholder);
+
+function fitBallModel(root) {
+  const box = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const s = (BALL_R * 2) / maxDim;
+  root.scale.setScalar(s);
+  box.setFromObject(root);
+  const center = box.getCenter(new THREE.Vector3());
+  root.position.sub(center);
+  root.traverse((obj) => {
+    if (!obj.isMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const m of mats) {
+      if (!m) continue;
+      m.side = THREE.FrontSide;
+      if ('metalness' in m) m.metalness = Math.min(m.metalness ?? 0, 0.05);
+      if ('envMapIntensity' in m) m.envMapIntensity = 0.7;
+      m.needsUpdate = true;
+    }
+  });
+}
+
+const loader = new GLTFLoader();
+loader.load(
+  './assets/soccer_ball.glb?v=20261017-v15',
+  (gltf) => {
+    const model = gltf.scene;
+    fitBallModel(model);
+    ball.remove(placeholder);
+    placeholder.geometry.dispose();
+    placeholderMat.dispose();
+    ball.add(model);
+  },
+  undefined,
+  (err) => {
+    console.warn('GLB load failed, keeping placeholder', err);
+  }
+);
+
+const shadowGeo = new THREE.CircleGeometry(BALL_R * 1.2, 32);
+const shadowMat = new THREE.MeshBasicMaterial({
+  color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false
+});
+const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+shadow.position.z = -0.05;
+scene.add(shadow);
+
+const MAX_P = 56;
+const pGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(MAX_P * 3);
+const pCol = new Float32Array(MAX_P * 3);
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+const pMat = new THREE.PointsMaterial({
+  size: 0.2, vertexColors: true, transparent: true, opacity: 1,
+  depthWrite: false, sizeAttenuation: true
+});
+const particles = new THREE.Points(pGeo, pMat);
+particles.visible = false;
+scene.add(particles);
+const pVel = [];
+for (let i = 0; i < MAX_P; i++) pVel.push({ x: 0, y: 0, life: 0, life: 0 });
+
+let W = 1, H = 1;
+let worldHalfW = 1, worldHalfH = 1;
+const STATE = { REST: 0, DRAG: 1, SETTLE: 2, SLING: 3, FLY: 4, CELEBRATE: 5 };
+let state = STATE.REST;
+
+const restN = { x: 0.5, y: 0.93 };
+let ballPos = new THREE.Vector3();
+let vel = new THREE.Vector3();
+let targetPos = new THREE.Vector3();
+let dragOffset = new THREE.Vector3();
+
+let pointerId = null;
+let pressStart = 0;
+let pressStartY = 0;
+let pressMoved = false;
+let longArmed = false;
+let longTimer = 0;
+let slingAnchor = new THREE.Vector3();
+let lastPointer = { x: 0, y: 0 };
+let lastMoveT = 0;
+/** Recent DRAG pointer velocities in world units/sec: { vx, vy, t }. */
+let dragVelHist = [];
+let celebrateT = 0;
+
+const LONG_MS = 280;
+const TAP_MAX_MS = 280;
+const TAP_MAX_MOVE = 12;
+/** Thin bottom band only — upper screen is pure drag. */
+const SLING_ZONE_FRAC = 0.14;
+/** Clear downward pull (px) from press start before sling engages. */
+const SLING_PULL_PX = 52;
+/** When press already near screen bottom, allow a shorter pull. */
+const SLING_PULL_PX_EDGE = 20;
+const EDGE_DAMP = 0.82;
+const AIR_DAMP = 0.988;
+const SOFT_STOP_DAMP = 0.88;
+const MAX_PULL = 3.2;
+const SHOT_SCALE = 9.5;
+/** Max drag-flick speed ≈ 42% of full sling impulse (MAX_PULL * SHOT_SCALE). */
+const DRAG_MAX_SPEED = MAX_PULL * SHOT_SCALE * 0.42;
+/** Below this flick speed → soft-stop in place. */
+const DRAG_MIN_SPEED = 0.55;
+const DRAG_VEL_SAMPLES = 6;
+const DRAG_VEL_WINDOW_MS = 90;
+
+function restWorld() {
+  return screenToWorld(restN.x * W, restN.y * H);
+}
+
+function resize() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  renderer.setSize(W, H, false);
+  camera.aspect = W / H;
+  camera.updateProjectionMatrix();
+  const dist = camera.position.z;
+  const vFov = (camera.fov * Math.PI) / 180;
+  worldHalfH = Math.tan(vFov / 2) * dist;
+  worldHalfW = worldHalfH * camera.aspect;
+}
+window.addEventListener('resize', resize);
+
+function screenToWorld(sx, sy) {
+  const ndcX = (sx / W) * 2 - 1;
+  const ndcY = -(sy / H) * 2 + 1;
+  return new THREE.Vector3(ndcX * worldHalfW, ndcY * worldHalfH, 0);
+}
+
+function worldToScreen(v) {
+  return {
+    x: ((v.x / worldHalfW) + 1) * 0.5 * W,
+    y: ((-v.y / worldHalfH) + 1) * 0.5 * H,
+  };
+}
+
+function ballScreenR() {
+  return (BALL_R / worldHalfW) * (W / 2);
+}
+
+function hitTestBall(sx, sy) {
+  const s = worldToScreen(ballPos);
+  const dx = sx - s.x, dy = sy - s.y;
+  const r = ballScreenR() * 2.35;
+  return dx * dx + dy * dy <= r * r;
+}
+
+function inSlingZone(sy) {
+  return sy >= H * (1 - SLING_ZONE_FRAC);
+}
+
+function ballInSlingZone() {
+  return inSlingZone(worldToScreen(ballPos).y);
+}
+
+/** True sling charge: thin bottom band + clear pull-down (not mere presence). */
+function slingChargeReady(sy) {
+  if (!inSlingZone(sy) && !ballInSlingZone()) return false;
+  const roomBelow = Math.max(0, H - pressStartY);
+  const pull = sy - pressStartY;
+  // Already at the very bottom: little/no room to pull — long-press in band + tiny nudge
+  if (roomBelow < 14) {
+    return longArmed && pull >= 4;
+  }
+  // Near bottom: shorter but still deliberate pull
+  if (roomBelow < SLING_PULL_PX + 12) {
+    const need = Math.min(SLING_PULL_PX_EDGE, Math.max(12, roomBelow * 0.45));
+    return pull >= Math.min(need, roomBelow - 2);
+  }
+  // Normal: clear downward pull into the thin band
+  return pull >= SLING_PULL_PX;
+}
+
+/** Inner goal mouth (content box inside posts/crossbar) — not posts or outside. */
+function getGoalRect() {
+  const r = goalFrame.getBoundingClientRect();
+  // CSS border is 3px; inset a bit more so ball center on a post does not count
+  const post = 5;
+  const crossbar = 5;
+  return {
+    left: r.left + post,
+    right: r.right - post,
+    top: r.top + crossbar,
+    bottom: r.bottom, // open mouth toward the field (no bottom border)
+  };
+}
+
+let rubberLineL = null, rubberLineR = null, rubberAim = null;
+(function initRubber() {
+  const ns = 'http://www.w3.org/2000/svg';
+  // Soft glow filter for premium rubber look
+  const defs = document.createElementNS(ns, 'defs');
+  const filter = document.createElementNS(ns, 'filter');
+  filter.setAttribute('id', 'rubberGlow');
+  filter.setAttribute('x', '-40%');
+  filter.setAttribute('y', '-40%');
+  filter.setAttribute('width', '180%');
+  filter.setAttribute('height', '180%');
+  const blur = document.createElementNS(ns, 'feGaussianBlur');
+  blur.setAttribute('stdDeviation', '1.6');
+  blur.setAttribute('result', 'blur');
+  const merge = document.createElementNS(ns, 'feMerge');
+  const m1 = document.createElementNS(ns, 'feMergeNode');
+  m1.setAttribute('in', 'blur');
+  const m2 = document.createElementNS(ns, 'feMergeNode');
+  m2.setAttribute('in', 'SourceGraphic');
+  merge.appendChild(m1);
+  merge.appendChild(m2);
+  filter.appendChild(blur);
+  filter.appendChild(merge);
+  defs.appendChild(filter);
+  rubberSvg.appendChild(defs);
+
+  rubberLineL = document.createElementNS(ns, 'line');
+  rubberLineR = document.createElementNS(ns, 'line');
+  for (const el of [rubberLineL, rubberLineR]) {
+    el.setAttribute('stroke', 'rgba(200,255,230,0.7)');
+    el.setAttribute('stroke-width', '1.7');
+    el.setAttribute('stroke-linecap', 'round');
+    el.setAttribute('filter', 'url(#rubberGlow)');
+    rubberSvg.appendChild(el);
+  }
+  // Subtle dashed aim trajectory (anchor → opposite of pull)
+  rubberAim = document.createElementNS(ns, 'line');
+  rubberAim.setAttribute('stroke', 'rgba(230,255,245,0.28)');
+  rubberAim.setAttribute('stroke-width', '1.2');
+  rubberAim.setAttribute('stroke-linecap', 'round');
+  rubberAim.setAttribute('stroke-dasharray', '5 7');
+  rubberSvg.appendChild(rubberAim);
+  hideRubber();
+})();
+
+function hideRubber() {
+  rubberLineL.style.display = 'none';
+  rubberLineR.style.display = 'none';
+  rubberAim.style.display = 'none';
+}
+function showRubber(anchorW, ballW) {
+  const a = worldToScreen(anchorW);
+  const b = worldToScreen(ballW);
+  const spread = 22;
+  rubberLineL.style.display = '';
+  rubberLineR.style.display = '';
+  rubberAim.style.display = '';
+  // Elegant thin V: fork tips at anchor → meet at ball
+  rubberLineL.setAttribute('x1', a.x - spread);
+  rubberLineL.setAttribute('y1', a.y);
+  rubberLineL.setAttribute('x2', b.x);
+  rubberLineL.setAttribute('y2', b.y);
+  rubberLineR.setAttribute('x1', a.x + spread);
+  rubberLineR.setAttribute('y1', a.y);
+  rubberLineR.setAttribute('x2', b.x);
+  rubberLineR.setAttribute('y2', b.y);
+  // Soft cool mint/white — brighten slightly with pull, never harsh red
+  const pull = Math.min(1, Math.hypot(b.x - a.x, b.y - a.y) / 180);
+  const alpha = 0.55 + pull * 0.3;
+  const col = `rgba(200,255,230,${alpha.toFixed(2)})`;
+  const w = (1.5 + pull * 0.45).toFixed(2);
+  rubberLineL.setAttribute('stroke', col);
+  rubberLineR.setAttribute('stroke', col);
+  rubberLineL.setAttribute('stroke-width', w);
+  rubberLineR.setAttribute('stroke-width', w);
+  // Aim line: from ball through opposite of pull direction
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  const aimLen = 70 + pull * 50;
+  const len = Math.hypot(dx, dy) || 1;
+  rubberAim.setAttribute('x1', b.x);
+  rubberAim.setAttribute('y1', b.y);
+  rubberAim.setAttribute('x2', b.x + (dx / len) * aimLen);
+  rubberAim.setAttribute('y2', b.y + (dy / len) * aimLen);
+  rubberAim.setAttribute('stroke', `rgba(230,255,245,${(0.18 + pull * 0.18).toFixed(2)})`);
+}
+
+function enterSlingIfNeeded() {
+  if (state === STATE.SLING) return;
+  state = STATE.SLING;
+  // Anchor at current ball so further downward pull charges (works at bottom too)
+  slingAnchor.copy(ballPos);
+  slingAnchor.x = THREE.MathUtils.clamp(slingAnchor.x, -worldHalfW * 0.75, worldHalfW * 0.75);
+  slingZoneEl.classList.add('active');
+}
+
+function clearDragVelHist() {
+  dragVelHist.length = 0;
+}
+
+function pushDragVelSample(vx, vy, t) {
+  dragVelHist.push({ vx, vy, t });
+  while (dragVelHist.length > DRAG_VEL_SAMPLES) dragVelHist.shift();
+}
+
+/** Average recent flick velocity (world units/sec), newer samples weighted slightly higher. */
+function sampleDragFlick() {
+  const now = performance.now();
+  let samples = dragVelHist.filter((s) => now - s.t <= DRAG_VEL_WINDOW_MS);
+  if (!samples.length) samples = dragVelHist.slice(-3);
+  if (!samples.length) return { x: 0, y: 0 };
+  let sx = 0, sy = 0, wsum = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const w = 1 + i * 0.35;
+    sx += samples[i].vx * w;
+    sy += samples[i].vy * w;
+    wsum += w;
+  }
+  return { x: sx / wsum, y: sy / wsum };
+}
+
+function onDown(e) {
+  if (pointerId !== null) return;
+  const sx = e.clientX, sy = e.clientY;
+  const onBall = hitTestBall(sx, sy);
+
+  // Interrupt flight / soft-stop / celebrate when pressing ON the ball
+  const canInterrupt =
+    state === STATE.FLY || state === STATE.SETTLE || state === STATE.CELEBRATE;
+
+  if (canInterrupt) {
+    if (!onBall) return;
+    vel.set(0, 0, 0);
+    particles.visible = false;
+    hideRubber();
+    slingZoneEl.classList.remove('active');
+  } else if (!onBall && state === STATE.REST) {
+    const s = worldToScreen(restWorld());
+    if (Math.hypot(sx - s.x, sy - s.y) > 48) return;
+  } else if (!onBall && state !== STATE.REST && state !== STATE.DRAG && state !== STATE.SLING) {
+    return;
+  } else if (!onBall && (state === STATE.DRAG || state === STATE.SLING)) {
+    return;
+  }
+
+  pointerId = e.pointerId;
+  try { canvas.setPointerCapture(pointerId); } catch (_) {}
+  pressStart = performance.now();
+  pressStartY = sy;
+  pressMoved = false;
+  longArmed = false;
+  lastPointer.x = sx; lastPointer.y = sy;
+  lastMoveT = performance.now();
+  clearDragVelHist();
+  clearTimeout(longTimer);
+  longTimer = setTimeout(() => {
+    longArmed = true;
+    // Long-press alone never starts sling — still need band + pull-down
+    if (pointerId !== null && state === STATE.DRAG && slingChargeReady(lastPointer.y)) {
+      enterSlingIfNeeded();
+    }
+  }, LONG_MS);
+
+  const pw = screenToWorld(sx, sy);
+  dragOffset.copy(ballPos).sub(pw);
+  vel.set(0, 0, 0);
+  state = STATE.DRAG;
+  e.preventDefault();
+}
+
+function onMove(e) {
+  if (e.pointerId !== pointerId) return;
+  const sx = e.clientX, sy = e.clientY;
+  const now = performance.now();
+  if (Math.hypot(sx - lastPointer.x, sy - lastPointer.y) > TAP_MAX_MOVE) pressMoved = true;
+
+  // Track flick velocity during DRAG (and while charging before release)
+  const dtSec = Math.max(0.004, (now - lastMoveT) / 1000);
+  if (state === STATE.DRAG || state === STATE.SLING) {
+    const w0 = screenToWorld(lastPointer.x, lastPointer.y);
+    const w1 = screenToWorld(sx, sy);
+    pushDragVelSample((w1.x - w0.x) / dtSec, (w1.y - w0.y) / dtSec, now);
+  }
+  lastPointer.x = sx; lastPointer.y = sy;
+  lastMoveT = now;
+
+  const pw = screenToWorld(sx, sy);
+  targetPos.copy(pw).add(dragOffset);
+
+  const margin = BALL_R * 1.2;
+  // During true sling charge, allow closer to bottom so bottom-band pull works
+  const bottomMargin = (state === STATE.SLING || slingChargeReady(sy)) ? BALL_R * 0.35 : margin;
+  targetPos.x = Math.max(-worldHalfW + margin, Math.min(worldHalfW - margin, targetPos.x));
+  targetPos.y = Math.max(-worldHalfH + bottomMargin, Math.min(worldHalfH - margin, targetPos.y));
+
+  if (state === STATE.DRAG || state === STATE.SLING) {
+    if (slingChargeReady(sy)) {
+      enterSlingIfNeeded();
+      const pull = targetPos.clone().sub(slingAnchor);
+      if (pull.y > 0) pull.y *= 0.12;
+      const len = pull.length();
+      if (len > MAX_PULL) pull.multiplyScalar(MAX_PULL / len);
+      targetPos.copy(slingAnchor).add(pull);
+      // Prefer downward charge; keep a small floor below anchor
+      if (targetPos.y > slingAnchor.y - 0.12) {
+        targetPos.y = slingAnchor.y - 0.12 - Math.abs(pull.x) * 0.04;
+      }
+      targetPos.y = Math.max(-worldHalfH + bottomMargin, targetPos.y);
+    } else if (state === STATE.SLING) {
+      // Left the thin band or released pull intent → back to pure drag
+      state = STATE.DRAG;
+      slingZoneEl.classList.remove('active');
+      hideRubber();
+    }
+  }
+  e.preventDefault();
+}
+
+function onUp(e) {
+  if (e.pointerId !== pointerId) return;
+  const dt = performance.now() - pressStart;
+  clearTimeout(longTimer);
+  try { canvas.releasePointerCapture(pointerId); } catch (_) {}
+  pointerId = null;
+
+  if (state === STATE.SLING) {
+    const pull = ballPos.clone().sub(slingAnchor);
+    const power = Math.min(pull.length(), MAX_PULL);
+    if (power < 0.25) {
+      hideRubber();
+      slingZoneEl.classList.remove('active');
+      beginSoftStop();
+    } else {
+      const dir = pull.clone().normalize().multiplyScalar(-1);
+      if (dir.y < 0.2) dir.y = 0.2 + Math.abs(dir.x) * 0.3;
+      dir.normalize();
+      vel.copy(dir).multiplyScalar(power * SHOT_SCALE);
+      hideRubber();
+      slingZoneEl.classList.remove('active');
+      state = STATE.FLY;
+    }
+  } else if (!pressMoved && dt < TAP_MAX_MS) {
+    showToast('打开 AI 聊天');
+    beginSoftStop();
+  } else if (state === STATE.DRAG) {
+    // Normal drag release: thrust / inertia from recent flick velocity
+    const flick = sampleDragFlick();
+    let speed = Math.hypot(flick.x, flick.y);
+    if (speed < DRAG_MIN_SPEED) {
+      beginSoftStop();
+    } else {
+      if (speed > DRAG_MAX_SPEED) {
+        const s = DRAG_MAX_SPEED / speed;
+        flick.x *= s;
+        flick.y *= s;
+        speed = DRAG_MAX_SPEED;
+      }
+      vel.set(flick.x, flick.y, 0);
+      state = STATE.FLY;
+    }
+  } else {
+    beginSoftStop();
+  }
+  e.preventDefault();
+}
+
+function onCancel(e) {
+  if (e.pointerId !== pointerId) return;
+  pointerId = null;
+  clearTimeout(longTimer);
+  hideRubber();
+  slingZoneEl.classList.remove('active');
+  beginSoftStop();
+}
+
+/** Soft-stop in place — do NOT spring back to home. */
+function beginSoftStop() {
+  state = STATE.SETTLE;
+  // keep current vel lightly, or zero if already near rest
+  if (vel.length() < 0.05) vel.set(0, 0, 0);
+}
+
+canvas.addEventListener('pointerdown', onDown);
+canvas.addEventListener('pointermove', onMove);
+canvas.addEventListener('pointerup', onUp);
+canvas.addEventListener('pointercancel', onCancel);
+
+function triggerCelebrate(at) {
+  state = STATE.CELEBRATE;
+  celebrateT = 0;
+  score += 1;
+  scoreVal.textContent = String(score);
+  showToast('⚽ 进球！', 1200);
+  particles.visible = true;
+  const colors = [
+    [1, 0.85, 0.2], [1, 0.4, 0.2], [0.4, 1, 0.5], [1, 1, 1], [0.3, 0.8, 1]
+  ];
+  for (let i = 0; i < MAX_P; i++) {
+    pPos[i * 3] = at.x;
+    pPos[i * 3 + 1] = at.y;
+    pPos[i * 3 + 2] = 0.1;
+    const c = colors[i % colors.length];
+    pCol[i * 3] = c[0]; pCol[i * 3 + 1] = c[1]; pCol[i * 3 + 2] = c[2];
+    const a = Math.random() * Math.PI * 2;
+    const sp = 2 + Math.random() * 6;
+    pVel[i].x = Math.cos(a) * sp;
+    pVel[i].y = Math.sin(a) * sp + 2;
+    pVel[i].life = 0.6 + Math.random() * 0.5;
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.color.needsUpdate = true;
+  document.body.style.background = '#1b5e20';
+  setTimeout(() => { document.body.style.background = '#0a1a0a'; }, 120);
+  vel.set(0, 0, 0);
+}
+
+function checkGoal() {
+  const s = worldToScreen(ballPos);
+  const g = getGoalRect();
+  // Strictly inside the inner mouth — no padding outside posts/crossbar
+  const insideMouth =
+    s.x > g.left && s.x < g.right &&
+    s.y > g.top && s.y < g.bottom;
+  // Must be approaching the goal from the field (world +Y = screen up)
+  const approaching = vel.y > 0.35;
+  if (insideMouth && approaching) {
+    triggerCelebrate(ballPos.clone());
+    return true;
+  }
+  return false;
+}
+
+let lastT = performance.now();
+function tick(now) {
+  const dt = Math.min(0.033, (now - lastT) / 1000);
+  lastT = now;
+
+  if (state === STATE.DRAG) {
+    ballPos.lerp(targetPos, 1 - Math.pow(0.001, dt));
+    showFollowSpin(dt);
+  } else if (state === STATE.SLING) {
+    ballPos.lerp(targetPos, 1 - Math.pow(0.0008, dt));
+    showRubber(slingAnchor, ballPos);
+    showFollowSpin(dt);
+  } else if (state === STATE.SETTLE) {
+    // Soft stop wherever it is — no auto-return home
+    ballPos.addScaledVector(vel, dt);
+    vel.multiplyScalar(Math.pow(SOFT_STOP_DAMP, dt * 60));
+    bounceEdges();
+    spinFromVel(dt);
+    if (vel.length() < 0.08) {
+      vel.set(0, 0, 0);
+      state = STATE.REST;
+    }
+  } else if (state === STATE.FLY) {
+    ballPos.addScaledVector(vel, dt);
+    vel.multiplyScalar(Math.pow(AIR_DAMP, dt * 60));
+    bounceEdges();
+    spinFromVel(dt);
+    if (!checkGoal()) {
+      // Leave ball where it stops — soft stop in place, never spring home
+      if (vel.length() < 0.32) {
+        beginSoftStop();
+      }
+    }
+  } else if (state === STATE.CELEBRATE) {
+    celebrateT += dt;
+    updateParticles(dt);
+    if (celebrateT > 1.1) {
+      particles.visible = false;
+      pMat.opacity = 1;
+      // After short celebrate, snap ball back to bottom rest for next shot
+      const home = restWorld();
+      ballPos.copy(home);
+      targetPos.copy(home);
+      vel.set(0, 0, 0);
+      hideRubber();
+      slingZoneEl.classList.remove('active');
+      state = STATE.REST;
+    }
+  } else {
+    // REST — stay put; gentle idle spin only
+    ball.rotation.y += dt * 0.28;
+    ball.rotation.x += dt * 0.08;
+  }
+
+  ball.position.copy(ballPos);
+  shadow.position.x = ballPos.x + 0.08;
+  shadow.position.y = ballPos.y - 0.12;
+  const spd = vel.length();
+  shadow.material.opacity = state === STATE.REST ? 0.24 : Math.min(0.38, 0.16 + spd * 0.03);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+function showFollowSpin(dt) {
+  const dx = targetPos.x - ballPos.x;
+  const dy = targetPos.y - ballPos.y;
+  ball.rotation.y += dx * 3.5 * dt * 60 * 0.02;
+  ball.rotation.x -= dy * 3.5 * dt * 60 * 0.02;
+}
+
+function spinFromVel(dt) {
+  ball.rotation.y += vel.x * 0.35 * dt * 60 * 0.02;
+  ball.rotation.x -= vel.y * 0.35 * dt * 60 * 0.02;
+}
+
+function bounceEdges() {
+  const m = BALL_R * 1.05;
+  let bounced = false;
+  if (ballPos.x > worldHalfW - m) {
+    ballPos.x = worldHalfW - m;
+    vel.x = -Math.abs(vel.x) * EDGE_DAMP;
+    bounced = true;
+  } else if (ballPos.x < -worldHalfW + m) {
+    ballPos.x = -worldHalfW + m;
+    vel.x = Math.abs(vel.x) * EDGE_DAMP;
+    bounced = true;
+  }
+  if (ballPos.y > worldHalfH - m) {
+    ballPos.y = worldHalfH - m;
+    vel.y = -Math.abs(vel.y) * EDGE_DAMP;
+    bounced = true;
+  } else if (ballPos.y < -worldHalfH + m) {
+    ballPos.y = -worldHalfH + m;
+    vel.y = Math.abs(vel.y) * EDGE_DAMP;
+    bounced = true;
+  }
+  if (bounced && vel.length() > 0.5) {
+    ball.scale.setScalar(0.92);
+    setTimeout(() => ball.scale.setScalar(1), 60);
+  }
+}
+
+function updateParticles(dt) {
+  let alive = false;
+  for (let i = 0; i < MAX_P; i++) {
+    const v = pVel[i];
+    if (v.life <= 0) {
+      pPos[i * 3 + 1] = -999;
+      continue;
+    }
+    alive = true;
+    v.life -= dt;
+    v.y -= 6 * dt;
+    pPos[i * 3] += v.x * dt;
+    pPos[i * 3 + 1] += v.y * dt;
+    pCol[i * 3] *= 0.98;
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  pGeo.attributes.color.needsUpdate = true;
+  pMat.opacity = alive ? Math.max(0, 1 - celebrateT * 0.7) : 0;
+}
+
+resize();
+ballPos.copy(restWorld());
+ball.position.copy(ballPos);
+requestAnimationFrame(tick);
+
+document.body.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+</script>
+</body>
+</html>
