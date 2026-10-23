@@ -54,12 +54,15 @@ UI：蓝色体育风、底部 5 Tab（首页/赛程/预测/数据/我的；开�
 
 ## 部署（当前服务器 120.77.152.74）
 
+完整清单（**保留 `/opt/jingcai/.env` 与 `data/`**、`rsync --exclude`、过程数据 `no_key` 排查）：**`docs/deploy-aliyun.md`**。
+
 ```bash
 # 服务器：/opt/jingcai，systemd 服务 jingcai，端口 8088，数据 /opt/jingcai/data
+# 从本机同步代码（勿覆盖 .env）：./tools/sync-prod.sh root@120.77.152.74:/opt/jingcai/
 cd /opt/jingcai && npm install --omit=dev --registry=https://registry.npmmirror.com   # better-sqlite3 在服务器上源码编译（需 gcc/make/python3，约 2 分钟）
 systemctl restart jingcai && systemctl status jingcai
 ```
-systemd 单元包含 `Environment=PORT=8088`、`DATA_DIR=/opt/jingcai/data`、`NODE_ENV=production`。升级时不要删除 `data/`。
+systemd 单元包含 `EnvironmentFile=-/opt/jingcai/.env`、`Environment=PORT=8088`、`DATA_DIR=/opt/jingcai/data`、`NODE_ENV=production`。升级时**不要删除 `data/` 或 `.env`**。
 外网资讯：在可访问 Sky/BBC/Guardian/ESPN 的机器（如本 box）定期执行 `DATA_DIR=/opt/jingcai/data npm run prefetch:en`，
 再把 `data/news/` 与 `data/news-images/` 同步到阿里云；国内手机只请求 `120.77.152.74`，不直连外网。
 阿里云本身可刷新天空体育 RSS/正文；ESPN 等若被墙则依赖上述预取缓存，失败时详情页显示摘要。
