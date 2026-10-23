@@ -365,6 +365,7 @@ const S = {
   columnFeed: { attitude: null, interact: null }, columnAuthors: null, columnMe: null, columnTab: 'attitude', columnSearch: '',
   columnCompose: { kind: 'match', topic: '分析', matchId: '', matchLabel: '', title: '', body: '', pick: '' },
   columnAuthorCache: {}, columnPostCache: {},
+  meBackToDrawer: false,
   searchQ: '', searchTab: 'all', searchCache: null,
   kb: { packs: null, picker: null, packItems: null, packId: null, selected: {}, intervention: 'medium', lastResult: null, loading: false, packsError: '', packItemsError: '' },
 };
@@ -1159,8 +1160,21 @@ function route() {
   if (qs) try { new URLSearchParams(qs).forEach((v, k) => { query[k] = v; }); } catch { }
   return { name: name || 'home', arg: decodeURIComponent(rest.join('/') || ''), query };
 }
+const ME_DRAWER_CHILD = new Set(['plans', 'favs', 'friends', 'membership', 'orders', 'kb', 'column', 'settings', 'about', 'profile', 'pay', 'password', 'delete', 'member-terms']);
+function isMeDrawerChildRoute(name) {
+  return ME_DRAWER_CHILD.has(name || '');
+}
+function routeFromHash(h) {
+  const raw = String(h || '#/home').replace(/^#/, '').replace(/^\//, '');
+  const qIdx = raw.indexOf('?');
+  const path = qIdx >= 0 ? raw.slice(0, qIdx) : raw;
+  const [name, ...rest] = path.split('/');
+  return { name: name || 'home', arg: decodeURIComponent(rest.join('/') || '') };
+}
 function go(h, replace) {
   closeMeDrawer();
+  const dest = routeFromHash(h);
+  if (!isMeDrawerChildRoute(dest.name)) S.meBackToDrawer = false;
   if (replace) { history.replaceState(null, '', h); if (typeof NAV !== 'undefined') { if (NAV.length) NAV[NAV.length - 1] = h; else NAV.push(h); } render(); window.scrollTo(0, 0); }
   else if (location.hash !== h) location.hash = h;
   else render();
@@ -1172,9 +1186,14 @@ function navNote(h) {
   else if (NAV[NAV.length - 1] !== h) { NAV.push(h); if (NAV.length > 50) NAV.shift(); }
 }
 function back() {
+  const reopenMe = S.meBackToDrawer && isMeDrawerChildRoute(route().name);
   if (NAV.length >= 2) {
     NAV.pop(); const prev = NAV.pop();
     history.replaceState(null, '', prev); navNote(prev); render(); window.scrollTo(0, 0);
+    if (reopenMe && !isMeDrawerChildRoute(route().name)) {
+      S.meBackToDrawer = false;
+      openMeDrawer();
+    }
   } else { NAV.length = 0; go('#/home', true); navNote('#/home'); }
 }
 window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || (detailTabOf(route().arg) !== 'data' && detailTabOf(route().arg) !== 'events')) stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'events') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); render(); window.scrollTo(0, 0); });
@@ -9422,7 +9441,11 @@ document.addEventListener('click', async e => {
   if (d.rlg) { S.rsLeague = d.rlg; if (softPatchResults()) return; return render({ force: true }); }
   if (d.pf) { S.prFilter = d.pf; return render(); }
   if (d.av) { S.pendingAv = d.av; document.querySelectorAll('[data-av]').forEach(b => b.classList.toggle('on', b === el)); return; }
-  if (d.go) { e.preventDefault(); return go(d.go); }
+  if (d.go) {
+    e.preventDefault();
+    if (el.closest('#me-drawer')) S.meBackToDrawer = true;
+    return go(d.go);
+  }
   switch (d.act) {
     case 'dataSection': {
       setDataSection(el.dataset.sec === 'star' ? 'star' : 'team');
