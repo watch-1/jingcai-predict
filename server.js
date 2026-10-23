@@ -1877,6 +1877,8 @@ app.get('/api/news/:id', async (req, res) => {
   }
 });
 
+// Tribe image upload sends base64 JSON (~2.8MB max); auth router JSON limit is 256kb — parse upload here first.
+app.use('/api/tribe/upload', express.json({ limit: '3mb' }));
 app.use('/api', require('./lib/admin'));
 app.use('/api', require('./lib/auth'));
 const kbApi = require('./lib/kb');
