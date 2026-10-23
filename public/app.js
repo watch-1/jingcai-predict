@@ -353,7 +353,7 @@ const S = {
   columnCompose: { kind: 'match', topic: '分析', matchId: '', matchLabel: '', title: '', body: '', pick: '' },
   columnAuthorCache: {}, columnPostCache: {},
   searchQ: '', searchTab: 'all', searchCache: null,
-  kb: { packs: null, picker: null, packItems: null, packId: null, selected: {}, intervention: 'medium', lastResult: null, loading: false },
+  kb: { packs: null, picker: null, packItems: null, packId: null, selected: {}, intervention: 'medium', lastResult: null, loading: false, packsError: '', packItemsError: '' },
 };
 const loggedIn = () => !!S.token;
 function loadLocalLists() {
@@ -368,7 +368,7 @@ function setSession(token, user) {
   S.token = token; S.user = user; LS.set('jc_token', token); LS.set('jc_user', user); LS.set('jc_guest', false); S.guest = false;
 }
 function clearSession() {
-  S.token = null; S.user = null; S.membership = null; S.orders = null; S.kb = { packs: null, picker: null, packItems: null, packId: null, selected: {}, intervention: 'medium', lastResult: null, loading: false };
+  S.token = null; S.user = null; S.membership = null; S.orders = null; S.kb = { packs: null, picker: null, packItems: null, packId: null, selected: {}, intervention: 'medium', lastResult: null, loading: false, packsError: '', packItemsError: '' };
   LS.del('jc_token'); LS.del('jc_user'); LS.del('jc_acct_cache'); LS.del(KB_PACKS_CACHE_KEY); loadLocalLists();
 }
 function sessionExpired() { if (!S.token) return; clearSession(); toast('登录已过期，请重新登录'); go('#/login'); }
@@ -830,10 +830,17 @@ function warnBar() {
 }
 
 // ---------- account lists (plans / favorites) ----------
+function prefetchKbPacksOnBoot() {
+  if (!loggedIn() || (S.kb && S.kb.packs)) return;
+  loadKbPacks(false).catch(() => {}).then(() => {
+    if (route().name === 'kb') render({ force: true });
+  });
+}
 async function refreshAccount() {
   if (!loggedIn()) return;
   try {
-    const [me, pl, fv, ms] = await Promise.all([api('/me'), api('/plans'), api('/favorites'), api('/membership/status')]);
+    const kbWarm = (S.kb && S.kb.packs == null) ? loadKbPacks(false).catch(() => {}) : Promise.resolve();
+    const [me, pl, fv, ms] = await Promise.all([api('/me'), api('/plans'), api('/favorites'), api('/membership/status'), kbWarm]);
     S.user = me.user; LS.set('jc_user', me.user); S.plans = pl.plans; S.favs = fv.favorites; S.membership = ms; persistLists();
     hydrateKbPacksCache();
     if (route().name === 'kb') ensureKbRouteData();
@@ -6971,10 +6978,17 @@ function kbRouteParts() {
 async function loadKbPacks(force) {
   if (!loggedIn()) return [];
   if (!force && S.kb && S.kb.packs) return S.kb.packs;
-  const j = await api('/kb/packs');
-  S.kb.packs = (j && j.packs) || [];
-  persistKbPacksCache(S.kb.packs);
-  return S.kb.packs;
+  S.kb = S.kb || {};
+  try {
+    const j = await api('/kb/packs', { timeout: 10000 });
+    S.kb.packs = (j && j.packs) || [];
+    S.kb.packsError = '';
+    persistKbPacksCache(S.kb.packs);
+    return S.kb.packs;
+  } catch (e) {
+    S.kb.packsError = (e && e.message) || '知识包加载失败，请检查网络';
+    throw e;
+  }
 }
 
 async function loadKbPicker(force) {
@@ -6988,10 +7002,17 @@ async function loadKbPicker(force) {
 async function loadKbPackItems(packId, force) {
   if (!loggedIn()) return null;
   if (!force && S.kb && S.kb.packId === packId && S.kb.packItems) return S.kb.packItems;
-  const j = await api('/kb/packs/' + encodeURIComponent(packId) + '/items');
-  S.kb.packId = packId;
-  S.kb.packItems = j;
-  return j;
+  S.kb = S.kb || {};
+  try {
+    const j = await api('/kb/packs/' + encodeURIComponent(packId) + '/items', { timeout: 12000 });
+    S.kb.packId = packId;
+    S.kb.packItems = j;
+    S.kb.packItemsError = '';
+    return j;
+  } catch (e) {
+    S.kb.packItemsError = (e && e.message) || '知识包内容加载失败';
+    throw e;
+  }
 }
 
 function syncKbCanvasEmptyHint() {
@@ -7141,13 +7162,16 @@ function pageKbHome() {
   }
   const packs = S.kb && S.kb.packs;
   const list = packs || [];
-  const pending = S.kb && (S.kb.loading || packs == null);
+  const packsErr = S.kb && S.kb.packsError;
+  const pending = S.kb && (S.kb.loading || (packs == null && !packsErr));
   let h = hdr('我的知识库', { back: true });
   h += `<div class="pad-card kb-intro"><p class="note" style="margin:0">知识包相当于标签；条目为标题+正文。个人预测<strong>不会</strong>写入或影响站内平台简报缓存。</p></div>`;
   h += `<div class="kb-form pad-card"><label>新建知识包<input type="text" name="kbPackName" maxlength="32" placeholder="例如：英超主场、伤停笔记"></label>
     <button type="button" class="btn pri sm" data-act="kbCreatePack">创建</button></div>`;
   if (pending && !list.length) h += skeleton(2);
-  else if (!list.length) {
+  else if (packsErr && !list.length) {
+    h += empty(esc(packsErr), '<button type="button" class="btn ghost sm" data-act="kbRetryPacks">重试</button>', '加载失败');
+  } else if (!list.length) {
     h += empty('还没有知识包，先创建一个吧。打开知识包可在画布上添加节点。', '', '暂无知识');
   } else {
     h += `<div class="list-meta" style="margin:8px 12px"><span>${list.length} 个知识包</span><button type="button" class="btn ghost sm" data-act="kbExport">导出备份</button></div>`;
@@ -7165,9 +7189,15 @@ function pageKbPack(packId) {
   const data = S.kb && S.kb.packItems && String(S.kb.packId) === String(packId) ? S.kb.packItems : null;
   const pack = data && data.pack;
   const items = (data && data.items) || [];
+  const itemsErr = S.kb && S.kb.packItemsError;
+  const itemsPending = S.kb && S.kb.loading && !data;
   let h = hdr(pack ? esc(pack.name) : '知识包', { back: true });
-  if (!data) {
+  if (itemsPending) {
     h += skeleton(3);
+    return h + foot();
+  }
+  if (!data) {
+    h += empty(itemsErr ? esc(itemsErr) : '无法打开该知识包', '<button type="button" class="btn ghost sm" data-act="kbRetryPack" data-id="' + esc(packId) + '">重试</button>', '加载失败');
     return h + foot();
   }
   h += `<div class="kb-canvas-page">
@@ -8549,7 +8579,7 @@ function render(opts) {
         return `kb:pack:${kid}:${sig}:${pk.updatedAt}:${pk.layoutPanX}:${pk.layoutPanY}:${pk.layoutZoom}`;
       }
       const pn = kb.packs == null ? 'u' : String((kb.packs && kb.packs.length) || 0);
-      return 'kb:' + sub + ':' + kid + ':' + pn + ':' + (kb.loading ? 1 : 0);
+      return 'kb:' + sub + ':' + kid + ':' + pn + ':' + (kb.loading ? 1 : 0) + ':' + (kb.packsError || '') + ':' + (kb.packItemsError || '');
     }
     return r.name + ':' + String(r.arg || '') + ':' + JSON.stringify(r.query || {});
   })();
@@ -8945,6 +8975,22 @@ document.addEventListener('click', async e => {
     case 'prHub': {
       S.prLane = 'hub';
       invalidateTabKeep('predict');
+      return render({ force: true });
+    }
+    case 'kbRetryPacks': {
+      S.kb = S.kb || {};
+      S.kb.packs = null;
+      S.kb.packsError = '';
+      ensureKbRouteData();
+      return render({ force: true });
+    }
+    case 'kbRetryPack': {
+      const pid = el.dataset.id || '';
+      if (!pid) return;
+      S.kb = S.kb || {};
+      S.kb.packItems = null;
+      S.kb.packItemsError = '';
+      ensureKbRouteData();
       return render({ force: true });
     }
     case 'kbCreatePack': {
@@ -9556,6 +9602,7 @@ document.addEventListener('submit', async e => {
 loadLocalLists();
 hydrateFromCache(); // 1.9.124: JSON lists
 hydrateKbPacksCache(); // 1.9.158: KB list before first /kb paint
+if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.159: warm KB list during boot (parallel to reloadData)
 hydratePredictCache(); // 1.9.125: predict reports so home sig matches snap
 loadDataCenterBootPack(); // 1.9.156: bundled slices for first install / empty LS
 ensurePartnerWatermark();
