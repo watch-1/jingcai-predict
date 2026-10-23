@@ -1976,8 +1976,11 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .dc-sc-stat { text-align: right; flex: none; }
 .dc-sc-stat b { display: block; font-size: 18px; color: var(--pri-d); line-height: 1.1; }
 .dc-sc-stat .dc-mv-amt {
-  font-size: 16px; font-weight: 700; color: var(--t1);
+  font-size: 16px; font-weight: 800; color: var(--gold);
   font-family: inherit; font-variant-numeric: normal; letter-spacing: 0;
+}
+.dc-scorers .dc-avatar.letter {
+  font-weight: 800; font-size: 15px; color: var(--pri);
 }
 .dc-sc-stat small { font-size: 10.5px; color: var(--t3); }
 .dc-sc-stat .sec { display: block; font-size: 11px; color: var(--t3); margin-top: 2px; }

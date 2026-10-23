@@ -718,13 +718,30 @@ function pumpDataCenterRefreshQueue() {
   }
 }
 function warmDataCenterPrefetch(lg, kind) {
-  const kinds = dataKindsForSection(dataSectionOf()).map(([k]) => k);
-  for (const k of kinds) scheduleDataCenterRefresh(lg, k, { urgent: false });
-  for (const l of DATA_DC_PREFETCH_LEAGUES) {
-    if (l === lg) continue;
-    const key = l + ':' + kind;
-    if (!dataCacheRenderable(ensureDataCacheSlice(key), kind)) scheduleDataCenterRefresh(l, kind, { urgent: false });
-  }
+  scheduleDataCenterRefresh(lg, kind, { urgent: false });
+  const fillSiblingKinds = () => {
+    const kinds = dataKindsForSection(dataSectionOf()).map(([k]) => k).filter((k) => k !== kind);
+    for (const k of kinds) {
+      const key = lg + ':' + k;
+      if (!dataCacheRenderable(ensureDataCacheSlice(key), k)) scheduleDataCenterRefresh(lg, k, { urgent: false });
+    }
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fillSiblingKinds, { timeout: 10000 });
+  else setTimeout(fillSiblingKinds, 2000);
+  if (kind === 'playervalues' || kind === 'clubvalues') return;
+  const fillCrossLeague = () => {
+    let n = 0;
+    for (const l of DATA_DC_PREFETCH_LEAGUES) {
+      if (l === lg) continue;
+      if (n >= 1) break;
+      const key = l + ':' + kind;
+      if (!dataCacheRenderable(ensureDataCacheSlice(key), kind)) {
+        scheduleDataCenterRefresh(l, kind, { urgent: false });
+        n++;
+      }
+    }
+  };
+  setTimeout(fillCrossLeague, 8000);
 }
 /** 1.9.157: no cold-start DC storm — boot JSON + LS hydrate cover standings/scorers; 身价等按需拉取。 */
 function bootWarmAllDataCenter() { /* intentionally empty */ }
@@ -761,15 +778,25 @@ function loadDataCenterBootPack() {
   })();
   return _bootPackInflight;
 }
+const DC_IMG_PREFETCH_MAX = 10;
 function prefetchDcImages(root) {
   try {
     const scope = root || document.getElementById('view') || document;
     const urls = Array.from(scope.querySelectorAll('.dc-avatar img, .dc-table .badge.crest img, .dc-scorers .badge.crest img'))
-      .map((img) => img.currentSrc || img.src).filter(Boolean).slice(0, 28);
+      .map((img) => img.currentSrc || img.src).filter(Boolean).slice(0, DC_IMG_PREFETCH_MAX);
     if (!urls.length) return;
-    const run = () => urls.forEach((u) => { try { const im = new Image(); im.decoding = 'async'; im.src = u; } catch (_) {} });
-    if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 2500 });
-    else setTimeout(run, 40);
+    const run = () => {
+      let i = 0;
+      const step = () => {
+        const batch = urls.slice(i, i + 3);
+        i += 3;
+        batch.forEach((u) => { try { const im = new Image(); im.decoding = 'async'; im.src = u; } catch (_) {} });
+        if (i < urls.length) setTimeout(step, 120);
+      };
+      step();
+    };
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 4000 });
+    else setTimeout(run, 200);
   } catch (_) {}
 }
 
@@ -830,19 +857,27 @@ function warnBar() {
 }
 
 // ---------- account lists (plans / favorites) ----------
+function kbLoadFailToastAllowed(routeName) {
+  return routeName === 'kb';
+}
 function prefetchKbPacksOnBoot() {
   if (!loggedIn() || (S.kb && S.kb.packs)) return;
-  loadKbPacks(false).catch(() => {}).then(() => {
-    if (route().name === 'kb') render({ force: true });
-  });
+  const run = () => {
+    if (!loggedIn() || (S.kb && S.kb.packs)) return;
+    loadKbPacks(false).catch(() => {}).then(() => {
+      if (route().name === 'kb') render({ force: true });
+    });
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 6000 });
+  else setTimeout(run, 3000);
 }
 async function refreshAccount() {
   if (!loggedIn()) return;
   try {
-    const kbWarm = (S.kb && S.kb.packs == null) ? loadKbPacks(false).catch(() => {}) : Promise.resolve();
-    const [me, pl, fv, ms] = await Promise.all([api('/me'), api('/plans'), api('/favorites'), api('/membership/status'), kbWarm]);
+    const [me, pl, fv, ms] = await Promise.all([api('/me'), api('/plans'), api('/favorites'), api('/membership/status')]);
     S.user = me.user; LS.set('jc_user', me.user); S.plans = pl.plans; S.favs = fv.favorites; S.membership = ms; persistLists();
     hydrateKbPacksCache();
+    prefetchKbPacksOnBoot();
     if (route().name === 'kb') ensureKbRouteData();
   } catch (e) { if (e.status !== 401) console.warn('account refresh failed', e.message); }
 }
@@ -2709,8 +2744,9 @@ function renderScorersList(payload, kind) {
   rows.forEach((r, i) => {
     const initial = esc([...(r.playerZh || r.player || '?')][0] || '?');
     const altPhoto = r.photoAlt || '';
+    const lazyAttr = i >= 6 ? ' loading="lazy"' : '';
     const photo = r.photo
-      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><img alt="" width="88" height="88" decoding="async" src="${esc(API + '/api/logo?url=' + encodeURIComponent(r.photo))}" onerror="var p=this.parentNode;if(!p)return;if(p.dataset.alt&&!p.dataset.retried){p.dataset.retried=1;this.src='${esc(API)}/api/logo?url='+encodeURIComponent(p.dataset.alt);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');p.textContent=p.dataset.letter||'?';this.remove();"></span>`
+      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><img alt="" width="88" height="88" decoding="async"${lazyAttr} src="${esc(API + '/api/logo?url=' + encodeURIComponent(r.photo))}" onerror="var p=this.parentNode;if(!p)return;if(p.dataset.alt&&!p.dataset.retried){p.dataset.retried=1;this.src='${esc(API)}/api/logo?url='+encodeURIComponent(p.dataset.alt);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');p.textContent=p.dataset.letter||'?';this.remove();"></span>`
       : `<span class="dc-avatar letter">${initial}</span>`;
     const teamLogo = r.teamLogo ? badge(r.teamZh || r.team, 'sm', r.teamLogo) : badge(r.teamZh || r.team, 'sm');
     const primary = isMv
@@ -2955,6 +2991,7 @@ function squadMvCorrupt(t) {
 }
 function prefetchDetailWarm(lg, payload, kind) {
   try {
+    if (kind === 'playervalues' || kind === 'clubvalues') return;
     const teams = [];
     const players = [];
     if (kind === 'standings' || kind === 'clubvalues') {
@@ -7124,8 +7161,9 @@ function ensureKbRouteData() {
     if (route().name === 'kb') render({ force: true });
   }).catch(() => {
     S.kb.loading = false;
-    toast('知识库加载失败');
-    if (route().name === 'kb') render({ force: true });
+    const onKb = route().name === 'kb';
+    if (onKb && kbLoadFailToastAllowed('kb')) toast('知识库加载失败');
+    if (onKb) render({ force: true });
   });
 }
 
@@ -9602,7 +9640,7 @@ document.addEventListener('submit', async e => {
 loadLocalLists();
 hydrateFromCache(); // 1.9.124: JSON lists
 hydrateKbPacksCache(); // 1.9.158: KB list before first /kb paint
-if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.159: warm KB list during boot (parallel to reloadData)
+if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.160: idle-deferred KB warm — do not fight data-tab API queue
 hydratePredictCache(); // 1.9.125: predict reports so home sig matches snap
 loadDataCenterBootPack(); // 1.9.156: bundled slices for first install / empty LS
 ensurePartnerWatermark();
