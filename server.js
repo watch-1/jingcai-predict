@@ -1575,14 +1575,28 @@ app.get('/api/predict-quota', (req, res) => {
 });
 
 
+function dataCacheHeader(payload) {
+  if (!payload || typeof payload !== 'object') return 'miss';
+  if (payload.cacheLayer) return String(payload.cacheLayer);
+  if (payload.cached) return payload.stale ? 'stale' : 'cached';
+  return 'fresh';
+}
+function sendDataPayload(res, payload) {
+  try { res.setHeader('X-JC-Data-Cache', dataCacheHeader(payload)); } catch (_) {}
+  res.json(payload);
+}
+
 app.get('/api/data-center-status', (req, res) => {
   try {
     const espn = require('./lib/espn-tables');
+    const lt = require('./lib/league-tables');
     res.json({
       ok: true,
       policy: '每日 06:10（北京时间）全量刷新；竞彩完场后约数分钟自动刷新该联赛积分/射手/助攻；另每 6 小时全量兜底；打开数据中心时若缓存>6h 则后台更新（先返回旧数据）。非分钟级实时。',
       freshHours: espn.FRESH_MS / 3600e3,
       lastRefresh: espn.lastRefreshInfo(),
+      prefetch: lt.prefetchStatus(),
+      prefetchLeagues: lt.PREFETCH_LEAGUE_KEYS,
     });
   } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
@@ -1600,7 +1614,7 @@ app.get('/api/standings', async (req, res) => {
     const league = String(req.query.league || 'epl').trim();
     const season = req.query.season;
     const payload = await require('./lib/league-tables').getStandings({ league, season });
-    res.json(payload);
+    sendDataPayload(res, payload);
   } catch (e) {
     const code = e.code === 'no_key' ? 503 : 502;
     res.status(code).json({ ok: false, reason: e.code || 'error', error: '积分榜暂时不可用', detail: e.message });
@@ -1612,7 +1626,7 @@ app.get('/api/topscorers', async (req, res) => {
     const league = String(req.query.league || 'epl').trim();
     const season = req.query.season;
     const payload = await require('./lib/league-tables').getTopScorers({ league, season });
-    res.json(payload);
+    sendDataPayload(res, payload);
   } catch (e) {
     const code = e.code === 'no_key' ? 503 : 502;
     res.status(code).json({ ok: false, reason: e.code || 'error', error: '射手榜暂时不可用', detail: e.message });
@@ -1624,7 +1638,7 @@ app.get('/api/topassists', async (req, res) => {
     const league = String(req.query.league || 'epl').trim();
     const season = req.query.season;
     const payload = await require('./lib/league-tables').getTopAssists({ league, season });
-    res.json(payload);
+    sendDataPayload(res, payload);
   } catch (e) {
     const code = e.code === 'no_key' ? 503 : 502;
     res.status(code).json({ ok: false, reason: e.code || 'error', error: '助攻榜暂时不可用', detail: e.message });
@@ -1636,7 +1650,7 @@ app.get('/api/club-values', async (req, res) => {
     const league = String(req.query.league || 'epl').trim();
     const season = req.query.season;
     const payload = await require('./lib/league-tables').getClubMarketValues({ league, season });
-    res.json(payload);
+    sendDataPayload(res, payload);
   } catch (e) {
     const code = e.code === 'no_key' ? 503 : 502;
     res.status(code).json({ ok: false, reason: e.code || 'error', error: '身价榜暂时不可用', detail: e.message });
@@ -1648,7 +1662,7 @@ app.get('/api/player-values', async (req, res) => {
     const league = String(req.query.league || 'epl').trim();
     const season = req.query.season;
     const payload = await require('./lib/league-tables').getPlayerMarketValues({ league, season });
-    res.json(payload);
+    sendDataPayload(res, payload);
   } catch (e) {
     const code = e.code === 'no_key' ? 503 : 502;
     res.status(code).json({ ok: false, reason: e.code || 'error', error: '球员身价榜暂时不可用', detail: e.message });
@@ -1660,7 +1674,7 @@ app.get('/api/topkeepers', async (req, res) => {
     const league = String(req.query.league || 'epl').trim();
     const season = req.query.season;
     const payload = await require('./lib/league-tables').getTopKeepers({ league, season });
-    res.json(payload);
+    sendDataPayload(res, payload);
   } catch (e) {
     const code = e.code === 'no_key' ? 503 : 502;
     res.status(code).json({ ok: false, reason: e.code || 'error', error: '门神榜暂时不可用', detail: e.message });
@@ -2141,6 +2155,20 @@ function scheduleEspnTablesJobs() {
   setInterval(() => { tickFtTableRefresh(); }, 3 * 60e3);
 }
 scheduleEspnTablesJobs();
+
+// 1.9.154: preload data-center payloads (ESPN disk + derived 身价榜) — fast first open
+function scheduleDataCenterPrefetch() {
+  const arm = (reason, delayMs) => {
+    setTimeout(() => {
+      require('./lib/league-tables').prefetchDataCenter({ reason }).catch((e) => {
+        console.warn('[data-center-prefetch]', reason, e.message);
+      });
+    }, delayMs);
+  };
+  arm('startup-early', 8e3);
+  arm('startup-after-espn', 55e3);
+}
+scheduleDataCenterPrefetch();
 
 // 1.9.12/1.9.13: live full-odds sheet (tiered) + kickoff snapshots
 (function scheduleOddsJobs() {
