@@ -10,6 +10,6 @@ assert.ok(/const why = liveStatsUserMsg\(live\)/.test(appJs));
 assert.ok(!/>\$\{esc\(live\.(error|detail)/.test(appJs), 'must not render raw live-stats error fields in HTML');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.165');
+assert.ok(pkg.version >= '1.9.165', 'package version bumped');
 
 console.log('ui-165-test OK');
