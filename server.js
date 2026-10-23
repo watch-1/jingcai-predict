@@ -2156,17 +2156,19 @@ function scheduleEspnTablesJobs() {
 }
 scheduleEspnTablesJobs();
 
-// 1.9.154: preload data-center payloads (ESPN disk + derived 身价榜) — fast first open
+// 1.9.155: preload data-center — fast standings/身价 first, then full warm
 function scheduleDataCenterPrefetch() {
-  const arm = (reason, delayMs) => {
+  const arm = (reason, delayMs, kinds) => {
     setTimeout(() => {
-      require('./lib/league-tables').prefetchDataCenter({ reason }).catch((e) => {
+      require('./lib/league-tables').prefetchDataCenter({ reason, kinds }).catch((e) => {
         console.warn('[data-center-prefetch]', reason, e.message);
       });
     }, delayMs);
   };
-  arm('startup-early', 8e3);
-  arm('startup-after-espn', 55e3);
+  const fastKinds = ['standings', 'clubvalues', 'topscorers', 'playervalues'];
+  arm('startup-fast', 2e3, fastKinds);
+  arm('startup-full', 10e3);
+  arm('startup-after-espn', 48e3);
 }
 scheduleDataCenterPrefetch();
 

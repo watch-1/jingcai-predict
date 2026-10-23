@@ -284,7 +284,7 @@ function badge(name, cls = '', logo) {
   const src = esc(API + '/api/logo?url=' + encodeURIComponent(logo));
   // Intrinsic 160≈3–4× of 40–42 CSS px crests; sources TSDB 512 / ESPN 500 (1.9.91 sharper).
   // Broken or missing crest (404) falls back to the letter badge. Do not invent a logo.
-  return `<span class="badge crest ${cls}" data-letter="${letter}"><img alt="" width="160" height="160" decoding="async" src="${src}" onerror="var p=this.parentNode;if(!p||p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter ${cls}';p.style.background='${bg}';p.textContent=p.dataset.letter||'';this.remove()"></span>`;
+  return `<span class="badge crest ${cls}" data-letter="${letter}"><img alt="" width="160" height="160" decoding="async" loading="lazy" src="${src}" onerror="var p=this.parentNode;if(!p||p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter ${cls}';p.style.background='${bg}';p.textContent=p.dataset.letter||'';this.remove()"></span>`;
 }
 const shortRk = s => (String(s || '').length <= 5 ? esc(s) : ''); // long group ranks like [亚运男足1] only shown on the detail page
 const lgTag = m => homeTheme() === 'pitch'
@@ -551,6 +551,58 @@ function revealBootShell() {
     try { el.classList.add('gone'); el.remove(); } catch (_) {}
   }, 200);
 }
+const DATA_DC_PREFETCH_LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'ucl'];
+const DATA_CACHE_LS_MAX = 28;
+
+function dataCacheRenderable(cached, kind) {
+  if (!cached || cached.ok === false) return false;
+  if (kind === 'topkeepers') return true;
+  if (kind === 'standings') return !!(cached.tables && cached.tables.some(t => (t.rows || []).length));
+  if (kind === 'clubvalues') return !!(cached.rows && cached.rows.length);
+  return !!(cached.rows && cached.rows.length);
+}
+function readDataCacheSlice(key) {
+  try {
+    const all = LS.get('jc_data_cache_v1', null);
+    if (!all || !all[key] || all[key].ok === false) return null;
+    return Object.assign({}, all[key], { fromCache: true });
+  } catch (_) { return null; }
+}
+/** Memory + localStorage hydrate for instant data-tab paint (1.9.155). */
+function ensureDataCacheSlice(key) {
+  S.dataCache = S.dataCache || {};
+  const kind = String(key).split(':')[1] || 'standings';
+  const mem = S.dataCache[key];
+  if (mem && mem.ok !== false && dataCacheRenderable(mem, kind)) return mem;
+  const ls = readDataCacheSlice(key);
+  if (ls && dataCacheRenderable(ls, kind)) {
+    S.dataCache[key] = ls;
+    return ls;
+  }
+  return (mem && mem.ok !== false) ? mem : (ls || mem || null);
+}
+function scheduleDataCenterRefresh(lg, kind, { urgent } = {}) {
+  const key = lg + ':' + kind;
+  const cached = ensureDataCacheSlice(key);
+  const needUrgent = urgent != null ? urgent : !dataCacheRenderable(cached, kind);
+  S._dataLoadInflight = S._dataLoadInflight || {};
+  if (S._dataLoadInflight[key]) return;
+  const run = () => {
+    S._dataLoadInflight[key] = true;
+    loadDataCenter(lg, kind, { soft: !needUrgent }).finally(() => { delete S._dataLoadInflight[key]; });
+  };
+  setTimeout(run, needUrgent ? 0 : 100);
+}
+function warmDataCenterPrefetch(lg, kind) {
+  const kinds = dataKindsForSection(dataSectionOf()).map(([k]) => k);
+  for (const k of kinds) scheduleDataCenterRefresh(lg, k, { urgent: false });
+  for (const l of DATA_DC_PREFETCH_LEAGUES) {
+    if (l === lg) continue;
+    const key = l + ':' + kind;
+    if (!dataCacheRenderable(ensureDataCacheSlice(key), kind)) scheduleDataCenterRefresh(l, kind, { urgent: false });
+  }
+}
+
 function persistDataCacheSlice(key, payload) {
   try {
     if (!key || !payload || payload.ok === false) return;
@@ -569,9 +621,10 @@ function persistDataCacheSlice(key, payload) {
       noteZh: payload.noteZh,
       pastSeason: payload.pastSeason,
       refreshHint: payload.refreshHint,
+      preparing: payload.preparing,
     };
     const keys = Object.keys(all);
-    if (keys.length > 10) keys.slice(0, keys.length - 10).forEach(k => { delete all[k]; });
+    if (keys.length > DATA_CACHE_LS_MAX) keys.slice(0, keys.length - DATA_CACHE_LS_MAX).forEach(k => { delete all[k]; });
     LS.set('jc_data_cache_v1', all);
   } catch (_) {}
 }
@@ -1398,6 +1451,7 @@ function isHotLeague(l) { return prio(l) < 99; }
 function isFinishedRow(x) { return x._t === 'r' || !!x.full || (x.status && /完场|已结束|Payout/i.test(String(x.status))); }
 const SCH_MODES = ['关注', '未开始', '已结束'];
 /** 1.9.148: 赛程主筛选项（关注 / 未开始 / 已结束）在顶栏中部；1.9.147 曾误放在日期条下。 */
+const SCH_MODE_ALL = '全部';
 function initSchMode() {
   const def = '未开始';
   try {
@@ -1415,15 +1469,18 @@ function initSchMode() {
       return mode;
     }
     const m = localStorage.getItem('jc_sch_mode');
+    if (m === SCH_MODE_ALL) return SCH_MODE_ALL;
     return SCH_MODES.includes(m) ? m : def;
   } catch (_) { return def; }
 }
 function schModeOf() {
-  const m = S.schMode || '未开始';
-  return SCH_MODES.includes(m) ? m : '未开始';
+  const m = S.schMode;
+  if (m === SCH_MODE_ALL) return SCH_MODE_ALL;
+  if (SCH_MODES.includes(m)) return m;
+  return '未开始';
 }
 function setSchMode(m) {
-  S.schMode = SCH_MODES.includes(m) ? m : '未开始';
+  S.schMode = (m === SCH_MODE_ALL || SCH_MODES.includes(m)) ? m : '未开始';
   try { localStorage.setItem('jc_sch_mode', S.schMode); } catch (_) {}
 }
 function setSchHideFinished(on) {
@@ -1705,24 +1762,28 @@ function scheduleBodyHtml(model) {
     </div>`;
   }
   const modeN = modeRows.length;
-  const hint = mode === '关注'
-    ? (S.favs.length ? `已关注 ${modeN} 场` : '点进详情可关注比赛')
-    : mode === '未开始'
-      ? `未开赛 ${modeN} 场`
-      : `已完场 ${modeN} 场`;
+  const hint = mode === SCH_MODE_ALL
+    ? `当日 ${modeN} 场`
+    : mode === '关注'
+      ? (S.favs.length ? `已关注 ${modeN} 场` : '点进详情可关注比赛')
+      : mode === '未开始'
+        ? `未开赛 ${modeN} 场`
+        : `已完场 ${modeN} 场`;
   h += `<div class="sch-toolbar">
-    <span class="sch-ch-hint">${counts.live && mode === '未开始' ? `<span class="ls-live-hint"><i class="ls-dot"></i>当日 ${counts.live} 场进行中 · 约 50 秒自动刷新</span>` : hint}</span>
+    <span class="sch-ch-hint">${counts.live && (mode === '未开始' || mode === SCH_MODE_ALL) ? `<span class="ls-live-hint"><i class="ls-dot"></i>当日 ${counts.live} 场进行中 · 约 50 秒自动刷新</span>` : hint}</span>
     <button type="button" class="btn ghost sm" data-act="schRefresh">${S.liveScoresLoading ? '刷新中…' : '刷新'}</button>
   </div>`;
   h += warnBar();
   const rows = scheduleListRows(modeRows);
   h += `<div class="list-meta"><span>${esc(S.schDate)} ${rows[0] ? issueWeek(rows[0]) : wd(S.schDate)} · ${esc(mode)}</span><span>${rows.length ? `${rows.length} 场` : '0 场'}</span></div>`;
   if (!rows.length) {
-    h += mode === '关注'
-      ? empty('在赛事详情点击「关注」后，已关注场次会出现在这里。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="未开始">查看未开始</button>', '暂无关注')
-      : mode === '已结束'
-        ? empty('该日期暂无已结束场次，可切换到「未开始」查看待赛。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="未开始">查看未开始</button>', '暂无场次')
-        : empty('该日期暂无未开始场次，可切换日期或查看「已结束」。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="已结束">查看已结束</button>', '暂无场次');
+    h += mode === SCH_MODE_ALL
+      ? empty('该日期暂无场次，可切换日期查看。', '', '暂无场次')
+      : mode === '关注'
+        ? empty('在赛事详情点击「关注」后，已关注场次会出现在这里。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="未开始">查看未开始</button>', '暂无关注')
+        : mode === '已结束'
+          ? empty('该日期暂无已结束场次，可切换到「未开始」查看待赛。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="未开始">查看未开始</button>', '暂无场次')
+          : empty('该日期暂无未开始场次，可切换日期或查看「已结束」。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="已结束">查看已结束</button>', '暂无场次');
   } else if (S.schLeague === '全部') {
     const groups = [];
     const map = new Map();
@@ -2533,11 +2594,11 @@ function pageData() {
   ).join('')}</div>`;
 
   const cacheKey = lg + ':' + kind;
-  const cached = S.dataCache && S.dataCache[cacheKey];
-  if (!cached) {
+  const cached = ensureDataCacheSlice(cacheKey);
+  if (!dataCacheRenderable(cached, kind)) {
     h += `<div class="dc-body" id="dcBody">${skeleton(3)}</div>`;
     h += foot();
-    setTimeout(() => loadDataCenter(lg, kind), 0);
+    scheduleDataCenterRefresh(lg, kind, { urgent: true });
     return h;
   }
   if (cached.ok === false) {
@@ -2563,12 +2624,15 @@ function pageData() {
   else body += renderScorersList(cached, kind);
   if (cached.noteZh) body += `<p class="note dc-note">${esc(cached.noteZh)}</p>`;
   h += `<div class="dc-body" id="dcBody">${body}</div>`;
+  scheduleDataCenterRefresh(lg, kind, { urgent: false });
+  warmDataCenterPrefetch(lg, kind);
   return h + foot();
 }
 
 async function loadDataCenter(lg, kind, { soft } = {}) {
   const key = lg + ':' + kind;
   S.dataCache = S.dataCache || {};
+  const hadRenderable = dataCacheRenderable(S.dataCache[key], kind);
   // api() already prefixes '/api' — do NOT pass '/api/standings' or it becomes /api/api/...
   const path = kind === 'standings' ? '/standings'
     : kind === 'topassists' ? '/topassists'
@@ -2588,9 +2652,15 @@ async function loadDataCenter(lg, kind, { soft } = {}) {
     }
     const j = await api(path + '?league=' + encodeURIComponent(lg), { timeout: 20000 });
     if (!j || j.ok === false) {
-      S.dataCache[key] = { ok: false, error: (j && (j.error || j.detail || j.reason)) || '加载失败' };
+      if (!(soft && hadRenderable)) {
+        S.dataCache[key] = { ok: false, error: (j && (j.error || j.detail || j.reason)) || '加载失败' };
+      }
     } else {
       j._fresh = true;
+      if (soft && hadRenderable && S.dataCache[key]) {
+        j.refreshing = false;
+        if (!j.updatedAt && S.dataCache[key].updatedAt) j.updatedAt = S.dataCache[key].updatedAt;
+      }
       S.dataCache[key] = j;
       persistDataCacheSlice(key, j);
       // 1.9.112: warm team/player detail when browsing 资料 / 身价榜
@@ -2602,7 +2672,10 @@ async function loadDataCenter(lg, kind, { soft } = {}) {
     const errText = isNet
       ? (msg && !/^请求失败/.test(msg) ? msg : '网络异常，请检查连接后重试')
       : msg;
-    if (!S.dataCache[key] || S.dataCache[key].ok === false) {
+    if (soft && hadRenderable && S.dataCache[key]) {
+      const cur = S.dataCache[key];
+      if (cur.refreshing) { cur.refreshing = false; S.dataCache[key] = cur; }
+    } else if (!S.dataCache[key] || S.dataCache[key].ok === false) {
       S.dataCache[key] = { ok: false, error: errText || '网络异常，请检查连接后重试' };
     }
   }
@@ -2649,7 +2722,7 @@ function softPatchDataBody(lg, kind) {
     document.querySelectorAll('.dc-kinds [data-act="dataKind"]').forEach(b => {
       b.classList.toggle('on', b.getAttribute('data-kind') === kind);
     });
-    const cached = S.dataCache && S.dataCache[lg + ':' + kind];
+    const cached = ensureDataCacheSlice(lg + ':' + kind);
     box.innerHTML = dataBodyInnerHtml(cached, kind);
     try { render.lastSig = tabContentSig('data'); } catch (_) {}
     saveTabKeep('data', document.getElementById('view'));
@@ -8384,6 +8457,11 @@ function render(opts) {
     if (kp[0] === 'pack' && kp[1]) setTimeout(() => mountKbPackCanvas(kp[1]), 0);
     else destroyKbCanvas();
   }
+  if (r.name === 'data') {
+    const lg = dataLeagueOf(), kind = dataKindOf();
+    ensureDataCacheSlice(lg + ':' + kind);
+    if (!canRestore) warmDataCenterPrefetch(lg, kind);
+  }
   tickClock();
 }
 
@@ -8438,11 +8516,15 @@ document.addEventListener('click', async e => {
       setDataSection(el.dataset.sec === 'star' ? 'star' : 'team');
       syncTopChrome('data');
       const lg = dataLeagueOf(), kind = dataKindOf();
-      if (!(S.dataCache && S.dataCache[lg + ':' + kind])) setTimeout(() => loadDataCenter(lg, kind), 0);
+      ensureDataCacheSlice(lg + ':' + kind);
+      scheduleDataCenterRefresh(lg, kind, { urgent: !dataCacheRenderable(S.dataCache[lg + ':' + kind], kind) });
+      warmDataCenterPrefetch(lg, kind);
+      invalidateTabKeep('data');
       return render({ force: true });
     }
     case 'schMode': {
-      setSchMode(el.dataset.mode || '未开始');
+      const pick = el.dataset.mode || '未开始';
+      setSchMode(pick === schModeOf() ? SCH_MODE_ALL : pick);
       invalidateTabKeep('schedule');
       if (softPatchSchedule()) { syncTopChrome('schedule'); return; }
       return render({ force: true });
@@ -8518,8 +8600,10 @@ document.addEventListener('click', async e => {
       setDataLeague(el.dataset.lg || 'epl');
       {
         const lg = dataLeagueOf(), kind = dataKindOf();
+        ensureDataCacheSlice(lg + ':' + kind);
         if (softPatchDataBody(lg, kind)) {
-          if (!(S.dataCache && S.dataCache[lg + ':' + kind])) setTimeout(() => loadDataCenter(lg, kind), 0);
+          scheduleDataCenterRefresh(lg, kind, { urgent: !dataCacheRenderable(S.dataCache[lg + ':' + kind], kind) });
+          warmDataCenterPrefetch(lg, kind);
           return;
         }
       }
@@ -8529,8 +8613,9 @@ document.addEventListener('click', async e => {
       setDataKind(el.dataset.kind || 'standings');
       {
         const lg = dataLeagueOf(), kind = dataKindOf();
+        ensureDataCacheSlice(lg + ':' + kind);
         if (softPatchDataBody(lg, kind)) {
-          if (!(S.dataCache && S.dataCache[lg + ':' + kind])) setTimeout(() => loadDataCenter(lg, kind), 0);
+          scheduleDataCenterRefresh(lg, kind, { urgent: !dataCacheRenderable(S.dataCache[lg + ':' + kind], kind) });
           return;
         }
       }
