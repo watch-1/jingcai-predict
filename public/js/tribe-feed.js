@@ -1,10 +1,11 @@
 /**
- * Tribe club feed UI (1.9.168). Depends on globals from app.js: api, esc, loggedIn, toast, go, badge, S, route, render, avatarHtml, timeAgo.
+ * Tribe club feed UI (1.9.169). Depends on globals from app.js: api, esc, loggedIn, toast, go, badge, S, route, render, avatarHtml, timeAgo, isTribeFollow.
  */
 (function (global) {
   'use strict';
 
   const MAX_IMAGES = 9;
+  const BODY_PREVIEW = 140;
   const pendingUploads = [];
 
   function fmtTime(ts) {
@@ -13,13 +14,53 @@
     return d.toLocaleString('zh-CN', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
-  function authorRow(a) {
-    const av = typeof global.avatarHtml === 'function' ? global.avatarHtml(a.avatar, 'sm') : '';
-    return `<div class="tf-author">${av}<span class="tf-nick">${esc(a.nickname || '球迷')}</span></div>`;
-  }
-
   function esc(s) {
     return typeof global.esc === 'function' ? global.esc(s) : String(s || '');
+  }
+
+  function badge(name, cls, logo) {
+    return typeof global.badge === 'function' ? global.badge(name, cls, logo) : '';
+  }
+
+  function feedUi() {
+    S.tribeFeedUi = S.tribeFeedUi || { tab: 'latest', sort: 'reply' };
+    return S.tribeFeedUi;
+  }
+
+  function isFeaturedPost(p) {
+    return !!(p.pinned || p.kind === 'match_vote');
+  }
+
+  function sortPosts(posts, sort) {
+    const pinned = [];
+    const rest = [];
+    for (const p of posts) {
+      if (p.pinned) pinned.push(p);
+      else rest.push(p);
+    }
+    const cmp = sort === 'reply'
+      ? (a, b) => (b.replyCount || 0) - (a.replyCount || 0) || (b.createdAt || 0) - (a.createdAt || 0)
+      : (a, b) => (b.createdAt || 0) - (a.createdAt || 0);
+    rest.sort(cmp);
+    return [...pinned, ...rest];
+  }
+
+  function filterPosts(posts) {
+    const ui = feedUi();
+    let list = (posts || []).slice();
+    if (ui.tab === 'featured') list = list.filter(isFeaturedPost);
+    return sortPosts(list, ui.sort);
+  }
+
+  function authorRow(a, metaExtra) {
+    const av = typeof global.avatarHtml === 'function' ? global.avatarHtml(a.avatar, 'sm') : '';
+    const meta = metaExtra ? esc(metaExtra) : '';
+    return `<div class="tf-author">${av}<div class="tf-author-txt"><span class="tf-nick">${esc(a.nickname || '球迷')}</span>${meta ? `<span class="tf-meta-line">${meta}</span>` : ''}</div></div>`;
+  }
+
+  function followPill(tribeId) {
+    if (typeof global.isTribeFollow === 'function' && global.isTribeFollow(tribeId)) return '';
+    return `<button type="button" class="tf-follow" data-act="tribeFollow" data-id="${esc(tribeId)}">关注</button>`;
   }
 
   function voteBlock(post) {
@@ -48,37 +89,78 @@
     </div>`;
   }
 
-  function badge(name, cls, logo) {
-    return typeof global.badge === 'function' ? global.badge(name, cls, logo) : '';
-  }
-
   function imagesHtml(images) {
     if (!images || !images.length) return '';
     const cls = images.length === 1 ? 'tf-imgs one' : 'tf-imgs';
     return `<div class="${cls}">${images.map((u) => `<img src="${esc(u)}" alt="" loading="lazy" decoding="async">`).join('')}</div>`;
   }
 
-  function postCard(post, { detail } = {}) {
-    const pin = post.pinned ? '<span class="tf-pin">置顶</span>' : '';
+  function bodyHtml(post) {
+    if (post.kind === 'match_vote' || !post.body) return '';
+    const raw = String(post.body);
+    const plain = raw.replace(/\s+/g, ' ');
+    if (plain.length <= BODY_PREVIEW) {
+      return `<p class="tf-body">${esc(post.body).replace(/\n/g, '<br>')}</p>`;
+    }
+    const short = plain.slice(0, BODY_PREVIEW);
+    return `<p class="tf-body">${esc(short)}… <button type="button" class="tf-fulltxt" data-act="tribePostOpen" data-post="${post.id}">全文</button></p>`;
+  }
+
+  function reactionsPlaceholder() {
+    return `<div class="tf-react" aria-hidden="true"><span class="tf-react-b">😂</span><span class="tf-react-b">👍</span><span class="tf-react-b">🔥</span></div>`;
+  }
+
+  function postCard(post, { detail, tribeId } = {}) {
+    const tid = tribeId || post.tribeId || '';
+    const essence = (post.pinned || post.kind === 'match_vote')
+      ? '<span class="tf-essence">精华</span>' : '';
     const kind = post.kind === 'match_vote' ? 'tf-card--match' : '';
-    const textBody = post.kind !== 'match_vote' && post.body
-      ? `<p class="tf-body">${esc(post.body).replace(/\n/g, '<br>')}</p>` : '';
-    const replies = post.replyCount > 0 ? `<span class="tf-replies">${post.replyCount} 回复</span>` : '';
-    const foot = detail ? '' : `<div class="tf-card-foot">${replies}<span class="tf-more">看帖</span></div>`;
     const vote = post.kind === 'match_vote' ? voteBlock(post) : '';
-    const tag = post.kind === 'match_vote' ? '<span class="tf-tag">今日比赛</span>' : '';
+    const titleLine = post.kind === 'match_vote' && post.body
+      ? `<p class="tf-title-line">${essence}${esc(post.body.split('\n')[0] || '今日比赛')}</p>` : '';
+    const textBody = post.kind !== 'match_vote' ? bodyHtml(post) : '';
+    const imgs = post.kind !== 'match_vote' ? imagesHtml(post.images) : '';
+    const rc = post.replyCount || 0;
+    const foot = detail ? '' : `<div class="tf-card-foot">
+      ${reactionsPlaceholder()}
+      <div class="tf-stat">
+        <span class="tf-stat-i">${rc > 0 ? rc + ' 评论' : '评论'}</span>
+        <span class="tf-stat-i tf-like">赞</span>
+      </div>
+    </div>`;
+    const follow = detail ? '' : followPill(tid);
+    const time = fmtTime(post.createdAt);
     return `<article class="tf-card ${kind}" data-post="${post.id}">
-      <div class="tf-card-hd">${authorRow(post.author)}${pin}${tag}<time class="tf-time">${fmtTime(post.createdAt)}</time></div>
+      <div class="tf-card-hd">
+        ${authorRow(post.author, time)}
+        ${follow}
+      </div>
+      ${titleLine || (essence && post.kind !== 'match_vote' ? `<div class="tf-essence-row">${essence}</div>` : '')}
       ${vote}
       ${textBody}
-      ${post.kind !== 'match_vote' ? imagesHtml(post.images) : ''}
+      ${imgs}
       ${foot}
     </article>`;
   }
 
-  function composeBar(tribeId) {
-    return `<div class="tf-compose-bar">
-      <button type="button" class="tf-compose-btn" data-act="tribeComposeOpen" data-tribe="${esc(tribeId)}">发帖…</button>
+  function clubFeedShell(tribeId, ui) {
+    ui = ui || feedUi();
+    const tabLatest = ui.tab !== 'featured';
+    const sortReply = ui.sort === 'reply';
+    return `<div class="tribe-club-body" id="tribe-feed-root">
+      <nav class="tribe-club-subnav" aria-label="圈子筛选">
+        <div class="tribe-club-tabs">
+          <button type="button" class="tribe-club-tab${tabLatest ? ' on' : ''}" data-act="tribeFeedTab" data-tab="latest">最新</button>
+          <button type="button" class="tribe-club-tab${!tabLatest ? ' on' : ''}" data-act="tribeFeedTab" data-tab="featured">精华</button>
+        </div>
+        <div class="tribe-club-sub-r">
+          <button type="button" class="tribe-club-sort${sortReply ? ' on' : ''}" data-act="tribeFeedSort" data-sort="reply">按最新回复</button>
+          <button type="button" class="tribe-club-list-ic" data-act="tribeFeedSort" data-sort="time" aria-label="按发帖时间" title="按发帖时间">${sortReply ? '≡' : '☰'}</button>
+        </div>
+      </nav>
+      <div class="tribe-club-scroll">
+        <div id="tribe-feed-list" class="tribe-feed-list"><div class="spinner" style="margin:24px auto"></div></div>
+      </div>
     </div>`;
   }
 
@@ -90,30 +172,66 @@
     return (j && j.posts) || [];
   }
 
-  function patchFeedList(posts) {
+  function patchFeedList(posts, tribeId) {
     const el = document.getElementById('tribe-feed-list');
     if (!el) return;
-    if (!posts.length) {
-      el.innerHTML = '<p class="tribe-feed-empty">还没有动态，来发第一条吧。</p>';
+    const list = filterPosts(posts);
+    if (!list.length) {
+      const ui = feedUi();
+      const msg = ui.tab === 'featured' ? '暂无精华帖，比赛态度帖与置顶会出现在这里。' : '还没有动态，来发第一条吧。';
+      el.innerHTML = `<p class="tribe-feed-empty">${msg}</p>`;
       return;
     }
-    el.innerHTML = posts.map((p) => postCard(p)).join('');
+    el.innerHTML = list.map((p) => postCard(p, { tribeId })).join('');
+  }
+
+  function syncSubnavUi() {
+    const ui = feedUi();
+    document.querySelectorAll('[data-act="tribeFeedTab"]').forEach((btn) => {
+      btn.classList.toggle('on', btn.dataset.tab === ui.tab);
+    });
+    const sortReply = ui.sort === 'reply';
+    document.querySelectorAll('[data-act="tribeFeedSort"]').forEach((btn) => {
+      if (btn.classList.contains('tribe-club-sort')) btn.classList.toggle('on', sortReply);
+    });
+    const ic = document.querySelector('.tribe-club-list-ic');
+    if (ic) ic.textContent = sortReply ? '≡' : '☰';
   }
 
   function mountClubFeed(tribeId, teamMeta) {
-    const root = document.getElementById('tribe-feed-root');
-    if (!root) return;
     const list = document.getElementById('tribe-feed-list');
     if (list) list.innerHTML = '<div class="spinner" style="margin:24px auto"></div>';
     loadFeed(tribeId, teamMeta).then((posts) => {
       if (route().name !== 'tribe-club' || String(route().arg) !== String(tribeId)) return;
       S.tribeFeedCache = S.tribeFeedCache || {};
       S.tribeFeedCache[tribeId] = posts;
-      patchFeedList(posts);
+      patchFeedList(posts, tribeId);
     }).catch(() => {
       const el = document.getElementById('tribe-feed-list');
-      if (el) el.innerHTML = '<p class="tribe-feed-empty">加载失败，请下拉刷新重试。</p>';
+      if (el) el.innerHTML = '<p class="tribe-feed-empty">加载失败，请点右下角刷新重试。</p>';
     });
+  }
+
+  function refreshFeed(tribeId) {
+    const meta = (S.tribeFeedTeamMeta && S.tribeFeedTeamMeta[tribeId]) || {};
+    mountClubFeed(tribeId, meta);
+    toast('刷新中…');
+  }
+
+  function setFeedTab(tab) {
+    feedUi().tab = tab === 'featured' ? 'featured' : 'latest';
+    syncSubnavUi();
+    const tid = route().arg;
+    const posts = (S.tribeFeedCache && S.tribeFeedCache[tid]) || [];
+    patchFeedList(posts, tid);
+  }
+
+  function setFeedSort(sort) {
+    feedUi().sort = sort === 'time' ? 'time' : 'reply';
+    syncSubnavUi();
+    const tid = route().arg;
+    const posts = (S.tribeFeedCache && S.tribeFeedCache[tid]) || [];
+    patchFeedList(posts, tid);
   }
 
   function openCompose(tribeId) {
@@ -122,8 +240,8 @@
     if (!sheet) return;
     pendingUploads.length = 0;
     sheet.innerHTML = `<div class="sheet tribe-compose-sheet">
-      <div class="sheet-hd"><h3>发帖</h3><button type="button" class="btn ghost sm" data-act="closeSheet">关闭</button></div>
-      <textarea id="tribe-compose-body" class="tf-compose-input" maxlength="2000" placeholder="说点什么…" rows="4"></textarea>
+      <div class="sheet-hd"><h3>发贴</h3><button type="button" class="btn ghost sm" data-act="closeSheet">关闭</button></div>
+      <textarea id="tribe-compose-body" class="tf-compose-input" maxlength="2000" placeholder="说点什么…" rows="5"></textarea>
       <div id="tribe-compose-previews" class="tf-compose-previews"></div>
       <div class="tf-compose-actions">
         <label class="btn ghost sm tf-pick-img"><input type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden id="tribe-compose-files">添加图片</label>
@@ -181,16 +299,26 @@
     if (!body && !urls.length) { toast('请输入文字或添加图片'); return; }
     try {
       await api('/tribe/' + encodeURIComponent(tribeId) + '/posts', { method: 'POST', body: { body, images: urls }, timeout: 15000 });
-      closeSheet();
+      if (typeof globalThis.closeSheet === 'function') globalThis.closeSheet();
+      else {
+        const sh = document.getElementById('sheet');
+        if (sh) { sh.classList.add('hidden'); sh.innerHTML = ''; }
+      }
       toast('已发布');
       mountClubFeed(tribeId, S.tribeFeedTeamMeta && S.tribeFeedTeamMeta[tribeId]);
+      feedUi().tab = 'latest';
+      syncSubnavUi();
     } catch (e) {
       toast(e.message || '发布失败');
     }
   }
 
+  function postDetailHdr(title) {
+    return `<header class="hdr center"><div class="hdr-side left"><button class="ic-btn" data-act="back" aria-label="返回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></button></div><h1 class="hdr-title">${esc(title)}</h1><div class="hdr-side right"><span class="ph"></span></div></header>`;
+  }
+
   function pagePostDetail(postId) {
-    return hdr('帖子', { back: true }) + `<div id="tribe-post-detail" class="pad-card tf-detail"><div class="spinner"></div></div>` + foot();
+    return postDetailHdr('帖子') + `<div id="tribe-post-detail" class="pad-card tf-detail"><div class="spinner"></div></div>`;
   }
 
   async function loadPostDetail(postId) {
@@ -203,10 +331,10 @@
       ]);
       const post = pj.post;
       const replies = (rj.replies) || [];
-      let h = postCard(post, { detail: true });
+      let h = postCard(post, { detail: true, tribeId: post.tribeId });
       h += `<div class="tf-reply-hd">回复 <small>${replies.length}</small></div>`;
       h += `<div class="tf-replies-list">${replies.map((r) =>
-        `<div class="tf-reply">${authorRow(r.author)}<p>${esc(r.body)}</p><time>${fmtTime(r.createdAt)}</time></div>`
+        `<div class="tf-reply">${authorRow(r.author, fmtTime(r.createdAt))}<p>${esc(r.body)}</p></div>`
       ).join('') || '<p class="note">暂无回复</p>'}</div>`;
       h += `<div class="tf-reply-bar">
         <input type="text" id="tribe-reply-input" maxlength="500" placeholder="${loggedIn() ? '写回复…' : '登录后回复'}" ${loggedIn() ? '' : 'disabled'}>
@@ -249,7 +377,7 @@
         const post = posts.find((p) => p.id === postId);
         if (post) {
           const tmp = document.createElement('div');
-          tmp.innerHTML = postCard(post);
+          tmp.innerHTML = postCard(post, { tribeId: tid });
           card.replaceWith(tmp.firstElementChild);
         }
       }
@@ -277,12 +405,17 @@
     }
     if (act === 'tribeReply') { submitReply(el.dataset.post); return true; }
     if (act === 'tribeVote') { castVote(el.dataset.post, el.dataset.choice, el.dataset.mid); return true; }
+    if (act === 'tribeFeedRefresh') { refreshFeed(el.dataset.tribe); return true; }
+    if (act === 'tribeFeedTab') { setFeedTab(el.dataset.tab); return true; }
+    if (act === 'tribeFeedSort') { setFeedSort(el.dataset.sort); return true; }
+    if (act === 'tribePostOpen') { go('#/tribe-post/' + el.dataset.post); return true; }
     return false;
   }
 
   function onFeedClick(ev) {
+    if (ev.target.closest('[data-act]')) return;
     const card = ev.target.closest('.tf-card');
-    if (!card || ev.target.closest('[data-act]')) return;
+    if (!card) return;
     const id = card.dataset.post;
     if (id) go('#/tribe-post/' + id);
   }
@@ -294,6 +427,6 @@
     onClick,
     onFeedClick,
     postCard,
-    composeBar,
+    clubFeedShell,
   };
 })(typeof window !== 'undefined' ? window : global);
