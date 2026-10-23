@@ -1,5 +1,5 @@
 /**
- * Tribe club feed UI (1.9.173). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isTribeFollow, tribeById, API.
+ * Tribe club feed UI (1.9.174). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isTribeFollow, tribeById, API.
  */
 (function (global) {
   'use strict';
@@ -450,9 +450,15 @@
     return n.endsWith('圈') ? n : n + '圈';
   }
 
-  function detailFollowBtn(tribeId) {
-    if (typeof global.isTribeFollow === 'function' && global.isTribeFollow(tribeId)) return '';
-    return `<button type="button" class="tf-post-follow" data-act="tribeFollow" data-id="${esc(tribeId)}">+ 关注</button>`;
+  function detailUserFollowBtn(author) {
+    const uid = author && author.userId;
+    if (!uid) return '';
+    if (global.S && global.S.user && String(global.S.user.id) === String(uid)) return '';
+    if (!loggedIn()) {
+      return `<button type="button" class="tf-post-follow" data-go="#/login">+ 关注</button>`;
+    }
+    const on = typeof global.isUserFollow === 'function' && global.isUserFollow(uid);
+    return `<button type="button" class="tf-post-follow${on ? ' on' : ''}" data-act="userFollow" data-uid="${esc(String(uid))}">${on ? '已关注' : '+ 关注'}</button>`;
   }
 
   function detailImagesHtml(images) {
@@ -475,7 +481,7 @@
           <div class="tf-post-author-name">${esc(post.author.nickname || '球迷')}</div>
           <time class="tf-post-author-time">${fmtTime(post.createdAt)}</time>
         </div>
-        ${detailFollowBtn(tid)}
+        ${detailUserFollowBtn(post.author)}
       </div>
       ${vote}
       ${body}
@@ -524,17 +530,10 @@
   }
 
   function detailBottomBar(post) {
-    const rc = post.replyCount || 0;
-    const likeStub = post.kind === 'match_vote' ? 0 : Math.max(0, Math.min(99, rc * 2 + 3));
     const ph = loggedIn() ? '回复楼主' : '登录后回复';
     return `<footer class="tf-post-foot">
       <input type="text" id="tribe-reply-input" class="tf-post-reply-inp" maxlength="500" placeholder="${ph}" aria-label="回复楼主" ${loggedIn() ? '' : 'readonly data-go="#/login"'}>
-      <div class="tf-post-foot-acts" aria-label="互动">
-        <span class="tf-post-act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.4 8.4 0 01-8.4 8.4H7l-4 3v-4.5A8.4 8.4 0 0112.6 3.1 8.4 8.4 0 0121 11.5z"/></svg><em>${rc}</em></span>
-        <span class="tf-post-act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 10v12M17 10v12M2 10h20l-2 8H4L2 10z"/></svg><em>${likeStub}</em></span>
-        <span class="tf-post-act"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7M12 16V4m0 0l4 4m-4-4L8 8"/></svg></span>
-      </div>
-      <button type="button" class="tf-post-reply-send" data-act="tribeReply" data-post="${post.id}" aria-label="发送回复"></button>
+      <button type="button" class="btn pri sm tf-post-reply-btn" data-act="tribeReply" data-post="${post.id}">发送</button>
     </footer>`;
   }
 
@@ -642,6 +641,11 @@
     if (act === 'tribeFeedTab') { setFeedTab(el.dataset.tab); return true; }
     if (act === 'tribeFeedSort') { setFeedSort(el.dataset.sort); return true; }
     if (act === 'tribePostOpen') { go('#/tribe-post/' + el.dataset.post); return true; }
+    if (act === 'userFollow' && typeof global.toggleUserFollow === 'function') {
+      const root = document.getElementById('tribe-post-detail');
+      global.toggleUserFollow(el.dataset.uid, { refreshDetail: root && root.dataset.postId });
+      return true;
+    }
     return false;
   }
 
