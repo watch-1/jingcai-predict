@@ -342,7 +342,9 @@ function initDataSectionEarly() {
 const S = {
   token: LS.get('jc_token', null), user: LS.get('jc_user', null), guest: LS.get('jc_guest', false),
   matches: null, schedule: null, results: null, msrc: null, ssrc: null, rsrc: null,
-  plans: [], favs: [],
+  plans: [], favs: [], tribeFollows: [],
+  tribeCat: null, tribeCatBusy: false, tribeSide: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_tribe_side')) || '__hot__',
+  tribeSub: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_tribe_sub')) || 'enter',
   sel: {}, types: [], mult: 1, navDepth: 0,
   schDate: null, schLeague: '全部', schMode: initSchMode(),
   schHideFinished: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_hide_fin') === '1'),
@@ -361,12 +363,20 @@ const S = {
 };
 const loggedIn = () => !!S.token;
 function loadLocalLists() {
-  if (loggedIn()) { const c = LS.get('jc_acct_cache', {}); S.plans = c.plans || []; S.favs = c.favs || []; }
-  else { S.plans = LS.get('jc_plans_local', []); S.favs = LS.get('jc_favs_local', []); }
+  if (loggedIn()) {
+    const c = LS.get('jc_acct_cache', {});
+    S.plans = c.plans || []; S.favs = c.favs || []; S.tribeFollows = c.tribeFollows || [];
+  } else {
+    S.plans = LS.get('jc_plans_local', []); S.favs = LS.get('jc_favs_local', []);
+    S.tribeFollows = LS.get('jc_tribe_follows_local', []);
+  }
 }
 function persistLists() {
-  if (loggedIn()) LS.set('jc_acct_cache', { plans: S.plans, favs: S.favs });
-  else { LS.set('jc_plans_local', S.plans); LS.set('jc_favs_local', S.favs); }
+  if (loggedIn()) LS.set('jc_acct_cache', { plans: S.plans, favs: S.favs, tribeFollows: S.tribeFollows });
+  else {
+    LS.set('jc_plans_local', S.plans); LS.set('jc_favs_local', S.favs);
+    LS.set('jc_tribe_follows_local', S.tribeFollows);
+  }
 }
 function setSession(token, user) {
   S.token = token; S.user = user; LS.set('jc_token', token); LS.set('jc_user', user); LS.set('jc_guest', false); S.guest = false;
@@ -963,8 +973,8 @@ function prefetchKbPacksOnBoot() {
 async function refreshAccount() {
   if (!loggedIn()) return;
   try {
-    const [me, pl, fv, ms] = await Promise.all([api('/me'), api('/plans'), api('/favorites'), api('/membership/status')]);
-    S.user = me.user; LS.set('jc_user', me.user); S.plans = pl.plans; S.favs = fv.favorites; S.membership = ms; persistLists();
+    const [me, pl, fv, tf, ms] = await Promise.all([api('/me'), api('/plans'), api('/favorites'), api('/tribe-follows'), api('/membership/status')]);
+    S.user = me.user; LS.set('jc_user', me.user); S.plans = pl.plans; S.favs = fv.favorites; S.tribeFollows = tf.tribeFollows || []; S.membership = ms; persistLists();
     hydrateKbPacksCache();
     prefetchKbPacksOnBoot();
     if (route().name === 'kb') ensureKbRouteData();
@@ -1133,6 +1143,7 @@ function noteFeedTop(rName) {
   try { localStorage.setItem('jc_feed_top', rName); } catch (_) {}
 }
 function activeTopTab(rName) {
+  if (rName === 'tribe-club') return 'tribe';
   return TOP_TABS.includes(rName) ? rName : '';
 }
 
@@ -1224,6 +1235,13 @@ function topChromeCenterHtml(rName) {
     ).join('');
     return `<nav class="tc-tabs tc-tabs--data" aria-label="数据分类">${tabs}</nav>`;
   }
+  if (rName === 'tribe') {
+    const sub = tribeSubOf();
+    const tabs = [['enter', '进圈'], ['featured', '精选'], ['following', '关注']].map(([k, lab]) =>
+      `<button type="button" class="tc-tab tc-tab--tribe${sub === k ? ' on' : ''}" data-act="tribeSub" data-sub="${k}"${sub === k ? ' aria-current="true"' : ''}>${esc(lab)}</button>`
+    ).join('');
+    return `<nav class="tc-tabs tc-tabs--tribe" aria-label="部落">${tabs}</nav>`;
+  }
   const activeTop = activeTopTab(rName);
   const tabs = TOP_TAB_DEF.map(([k, lab]) =>
     `<button type="button" class="tc-tab${k === activeTop ? ' on' : ''}" data-go="#/${k}"${k === activeTop ? ' aria-current="page"' : ''}>${esc(lab)}</button>`
@@ -1239,6 +1257,7 @@ function syncTopChrome(rName) {
   app.classList.toggle('has-top-chrome', show);
   el.classList.toggle('top-chrome--schedule', show && rName === 'schedule');
   el.classList.toggle('top-chrome--data', show && rName === 'data');
+  el.classList.toggle('top-chrome--tribe', show && rName === 'tribe');
   if (!show) return;
   const activeTop = activeTopTab(rName);
   if (activeTop) noteFeedTop(activeTop);
@@ -1744,13 +1763,206 @@ function pageHome() {
   return h + foot();
 }
 
-/** 1.9.146: 部落 — future social surface; not the home feed. */
+/** 1.9.166: 部落圈子 — 联赛侧栏 + 球队部落格；关注同步账号。 */
+const TRIBE_LEAGUES = [
+  { key: 'epl', nameZh: '英超' }, { key: 'laliga', nameZh: '西甲' }, { key: 'seriea', nameZh: '意甲' },
+  { key: 'bundesliga', nameZh: '德甲' }, { key: 'ligue1', nameZh: '法甲' }, { key: 'csl', nameZh: '中超' },
+  { key: 'ucl', nameZh: '欧冠' },
+];
+const TRIBE_SIDE_META = [
+  { key: '__followed__', nameZh: '我的关注' },
+  { key: '__hot__', nameZh: '当前热门' },
+  { key: '__rec__', nameZh: '推荐' },
+  ...TRIBE_LEAGUES.map(l => ({ key: l.key, nameZh: l.nameZh })),
+];
+function tribeSubOf() {
+  const s = S.tribeSub || 'enter';
+  return (s === 'featured' || s === 'following') ? s : 'enter';
+}
+function setTribeSub(sub) {
+  S.tribeSub = (sub === 'featured' || sub === 'following') ? sub : 'enter';
+  try { localStorage.setItem('jc_tribe_sub', S.tribeSub); } catch (_) {}
+  if (S.tribeSub === 'following') setTribeSide('__followed__');
+  else if (S.tribeSub === 'featured') setTribeSide('__hot__');
+}
+function tribeSideOf() {
+  const k = S.tribeSide || '__hot__';
+  return TRIBE_SIDE_META.some(x => x.key === k) ? k : '__hot__';
+}
+function setTribeSide(k) {
+  S.tribeSide = k;
+  try { localStorage.setItem('jc_tribe_side', k); } catch (_) {}
+}
+function tribeLeagueName(key) {
+  const m = TRIBE_LEAGUES.find(l => l.key === key);
+  return m ? m.nameZh : key;
+}
+function buildTribeCatalogFromSlices(slices) {
+  const teams = [];
+  const byId = {};
+  if (!slices || typeof slices !== 'object') return { teams, byId };
+  for (const lg of TRIBE_LEAGUES) {
+    const slice = slices[lg.key + ':standings'];
+    if (!slice || slice.ok === false) continue;
+    const leagueZh = slice.leagueZh || lg.nameZh;
+    for (const tb of slice.tables || []) {
+      for (const r of tb.rows || []) {
+        if (!r.teamId) continue;
+        const id = lg.key + '-' + String(r.teamId);
+        if (byId[id]) continue;
+        const rank = Number(r.rank) || 99;
+        const pts = Number(r.points) || 0;
+        const heat = Math.max(1, pts + Math.max(0, 22 - rank));
+        const t = {
+          tribeId: id, leagueKey: lg.key, leagueZh, teamId: String(r.teamId),
+          nameZh: r.teamZh || r.team || '球队', logo: r.logo || '', points: pts, rank, heat,
+        };
+        byId[id] = t;
+        teams.push(t);
+      }
+    }
+  }
+  teams.sort((a, b) => b.heat - a.heat || a.nameZh.localeCompare(b.nameZh, 'zh-CN'));
+  return { teams, byId };
+}
+function ensureTribeCatalog() {
+  if (S.tribeCat && S.tribeCat.byId) return Promise.resolve(S.tribeCat);
+  if (S.tribeCatBusy) return (S._tribeCatWait || Promise.resolve(S.tribeCat));
+  S.tribeCatBusy = true;
+  S._tribeCatWait = loadDataCenterBootPack().then(() => {
+    const slices = {};
+    try {
+      const dc = S.dataCache || {};
+      for (const k of Object.keys(dc)) {
+        if (k.endsWith(':standings') && dc[k]) slices[k] = dc[k];
+      }
+    } catch (_) {}
+    S.tribeCat = buildTribeCatalogFromSlices(slices);
+    S.tribeCatBusy = false;
+    if (route().name === 'tribe' || route().name === 'tribe-club') render({ force: true });
+    return S.tribeCat;
+  }).catch(() => { S.tribeCatBusy = false; S.tribeCat = { teams: [], byId: {} }; return S.tribeCat; });
+  return S._tribeCatWait;
+}
+function tribeById(id) {
+  const cat = S.tribeCat;
+  if (!cat || !cat.byId) return null;
+  return cat.byId[String(id)] || null;
+}
+const isTribeFollow = id => (S.tribeFollows || []).some(f => f.tribeId === String(id));
+function tribeFollowSnap(t) {
+  return {
+    tribeId: String(t.tribeId), nameZh: t.nameZh, leagueKey: t.leagueKey, leagueZh: t.leagueZh,
+    teamId: t.teamId, logo: t.logo || '', savedAt: Date.now(),
+  };
+}
+async function toggleTribeFollow(id) {
+  const t = tribeById(id);
+  if (!t) return toast('球队信息加载中，请稍后再试');
+  const on = isTribeFollow(id);
+  const snap = tribeFollowSnap(t);
+  if (loggedIn()) {
+    try {
+      if (on) await api('/tribe-follows/' + encodeURIComponent(t.tribeId), { method: 'DELETE' });
+      else await api('/tribe-follows/' + encodeURIComponent(t.tribeId), { method: 'PUT', body: snap });
+    } catch (e) { return toast(e.message); }
+  }
+  S.tribeFollows = on
+    ? S.tribeFollows.filter(f => f.tribeId !== String(id))
+    : [snap, ...S.tribeFollows.filter(f => f.tribeId !== String(id))];
+  persistLists();
+  toast(on ? '已取消入驻' : (loggedIn() ? '已入驻，已同步到账号' : '已入驻（本机保存，登录后可同步）'));
+  render();
+}
+function tribeTeamsForSide(sideKey) {
+  const cat = S.tribeCat || { teams: [], byId: {} };
+  const all = cat.teams || [];
+  if (sideKey === '__followed__') {
+    const ids = (S.tribeFollows || []).map(f => f.tribeId);
+    return ids.map(id => cat.byId[id] || {
+      tribeId: id, nameZh: (S.tribeFollows.find(f => f.tribeId === id) || {}).nameZh || '球队',
+      leagueZh: (S.tribeFollows.find(f => f.tribeId === id) || {}).leagueZh || '',
+      logo: (S.tribeFollows.find(f => f.tribeId === id) || {}).logo || '', heat: 0,
+    }).filter(Boolean);
+  }
+  if (sideKey === '__hot__') return all.slice(0, 36);
+  if (sideKey === '__rec__') {
+    const out = [];
+    for (const lg of TRIBE_LEAGUES) {
+      const chunk = all.filter(t => t.leagueKey === lg.key).slice(0, 6);
+      out.push(...chunk);
+    }
+    return out;
+  }
+  return all.filter(t => t.leagueKey === sideKey);
+}
+function tribeGridHtml(teams, title) {
+  if (!teams.length) {
+    const side = tribeSideOf();
+    if (side === '__followed__') {
+      return empty('登录后入驻喜欢的球队，或先在下方联赛里点选球队并入驻。', '', '还没有关注的球队');
+    }
+    return empty('该分类暂无球队数据，请稍后重试。', '<button type="button" class="btn ghost sm" data-act="tribeReload">重新加载</button>', '暂无球队');
+  }
+  const head = title ? `<div class="tribe-sec-hd">${esc(title)}<small>${teams.length}个</small></div>` : '';
+  const cells = teams.map(t => {
+    const crest = badge(t.nameZh, 'tribe', t.logo);
+    const heat = t.heat > 0 ? `<span class="tribe-heat num">🔥 ${t.heat}</span>` : '';
+    const fol = isTribeFollow(t.tribeId) ? '<span class="tribe-fol-dot" aria-hidden="true"></span>' : '';
+    return `<button type="button" class="tribe-cell" data-go="#/tribe-club/${encodeURIComponent(t.tribeId)}" aria-label="${esc(t.nameZh)}">
+      <span class="tribe-crest-wrap">${fol}${crest}</span>
+      <span class="tribe-name">${esc(t.nameZh)}</span>${heat}</button>`;
+  }).join('');
+  return head + `<div class="tribe-grid">${cells}</div>`;
+}
 function pageTribe() {
-  return empty(
-    '这里将汇聚球队动态、热议话题与球迷真实发帖。功能还在打磨中，欢迎先用底部「首页」查看焦点赛事与比赛态度。',
-    '<button type="button" class="btn ghost sm" data-go="#/home">去首页</button>',
-    '部落即将开放'
-  ) + foot();
+  ensureTribeCatalog();
+  const side = tribeSideOf();
+  const sub = tribeSubOf();
+  const busy = S.tribeCatBusy && !(S.tribeCat && S.tribeCat.teams && S.tribeCat.teams.length);
+  const sideBtns = TRIBE_SIDE_META.map(s =>
+    `<button type="button" class="tribe-side-btn${side === s.key ? ' on' : ''}" data-act="tribeSide" data-side="${esc(s.key)}">${esc(s.nameZh)}</button>`
+  ).join('');
+  let body = '';
+  if (busy) {
+    body = '<div class="tribe-main"><div class="spinner" style="margin:48px auto"></div></div>';
+  } else {
+    const teams = tribeTeamsForSide(side);
+    const meta = TRIBE_SIDE_META.find(s => s.key === side);
+    let title = meta ? meta.nameZh : '';
+    if (side === '__followed__' && teams.length) title = '❤️ ' + title;
+    if (side === '__hot__') title = '🔥 ' + (title || '当前热门');
+    if (sub === 'featured' && side === '__hot__') title = '精选 · ' + title;
+    body = `<div class="tribe-main">${tribeGridHtml(teams, title)}</div>`;
+  }
+  return `<div class="tribe-hub">
+    <aside class="tribe-side" aria-label="联赛分类">${sideBtns}</aside>
+    ${body}
+  </div>` + foot();
+}
+function pageTribeClub(id) {
+  ensureTribeCatalog();
+  const tid = String(id || '').trim();
+  let t = tribeById(tid);
+  if (!t && (S.tribeFollows || []).length) {
+    const f = S.tribeFollows.find(x => x.tribeId === tid);
+    if (f) t = { tribeId: tid, nameZh: f.nameZh, leagueZh: f.leagueZh, leagueKey: f.leagueKey, logo: f.logo || '', heat: 0 };
+  }
+  if (!t) {
+    return hdr('球队部落', { back: true }) + empty('球队信息加载中或暂无数据。', '<button type="button" class="btn ghost sm" data-go="#/tribe">返回部落</button>', '未找到球队') + foot();
+  }
+  const crest = badge(t.nameZh, 'lg', t.logo);
+  const folOn = isTribeFollow(t.tribeId);
+  const folBtn = `<button type="button" class="fav-btn tribe-fol-btn${folOn ? ' on' : ''}" data-act="tribeFollow" data-id="${esc(t.tribeId)}">${folOn ? I.star + '已入驻' : I.starO + '入驻'}</button>`;
+  const sub = [t.leagueZh, t.points > 0 ? `积分榜 ${t.points} 分` : ''].filter(Boolean).join(' · ');
+  return hdr('球队部落', { back: true, right: folBtn })
+    + `<div class="tribe-club-hd pad-card">
+      <div class="tribe-club-id">${crest}<div><h2 class="tribe-club-name">${esc(t.nameZh)}</h2><p class="tribe-club-sub">${esc(sub)}</p></div></div>
+    </div>
+    <div class="pad-card tribe-feed-ph">
+      <h3 class="tribe-feed-t">动态</h3>
+      <p class="tribe-feed-empty">暂无动态，发帖功能即将开放。</p>
+    </div>` + foot();
 }
 
 function dateStrip(dates, cur, key, { light = true } = {}) {
@@ -8580,10 +8792,10 @@ function softPatchLiveScoreCards() {
 }
 
 // ======================= render (1.9.124 keep-alive + 1.9.125 home snap / boot-shell) =======================
-const PAGES = { home: pageHome, tribe: pageTribe, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs,
+const PAGES = { home: pageHome, tribe: pageTribe, 'tribe-club': pageTribeClub, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs,
   news: pageNews, login: pageLogin, register: pageRegister, profile: pageProfile, password: pagePassword, delete: pageDelete, settings: pageSettings, about: pageAbout, terms: pageTerms, privacy: pagePrivacy,
   membership: pageMembership, pay: pagePay, orders: pageOrders, 'member-terms': pageMemberTerms, column: pageColumn, kb: pageKb };
-const TITLES = { home: '首页', tribe: '部落', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库' };
+const TITLES = { home: '首页', tribe: '部落', 'tribe-club': '球队部落', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库' };
 
 /** In-memory keep-alive for bottom-tab pages — restore DOM HTML instead of wiping to skeleton. */
 const TAB_KEEP = Object.create(null);
@@ -8636,6 +8848,10 @@ function tabContentSig(name) {
     if (name === 'results') {
       const n = (S.results && S.results.length) || 0;
       return 'rs:' + n + ':' + (S.rsDate || '') + ':' + (S.rsLeague || '');
+    }
+    if (name === 'tribe') {
+      const n = (S.tribeCat && S.tribeCat.teams && S.tribeCat.teams.length) || 0;
+      return 'tr:' + tribeSubOf() + ':' + tribeSideOf() + ':' + n + ':' + ((S.tribeFollows && S.tribeFollows.length) || 0);
     }
   } catch (_) {}
   return String(name || '') + ':x';
@@ -8996,6 +9212,26 @@ document.addEventListener('click', async e => {
       setSchMode(pick === schModeOf() ? SCH_MODE_ALL : pick);
       invalidateTabKeep('schedule');
       if (softPatchSchedule()) { syncTopChrome('schedule'); return; }
+      return render({ force: true });
+    }
+    case 'tribeSub': {
+      setTribeSub(el.dataset.sub || 'enter');
+      syncTopChrome('tribe');
+      invalidateTabKeep('tribe');
+      return render({ force: true });
+    }
+    case 'tribeSide': {
+      setTribeSide(el.dataset.side || '__hot__');
+      if (tribeSubOf() === 'following' && el.dataset.side !== '__followed__') setTribeSub('enter');
+      else if (tribeSubOf() === 'featured' && el.dataset.side !== '__hot__') setTribeSub('enter');
+      invalidateTabKeep('tribe');
+      return render({ force: true });
+    }
+    case 'tribeFollow': return toggleTribeFollow(el.dataset.id);
+    case 'tribeReload': {
+      S.tribeCat = null; S.tribeCatBusy = false;
+      invalidateTabKeep('tribe');
+      ensureTribeCatalog();
       return render({ force: true });
     }
     case 'schRefresh': {
@@ -9675,15 +9911,16 @@ const pwOk = p => typeof p === 'string' && p.length >= 8 && p.length <= 32 && /[
 async function afterAuth(res, isNew) {
   setSession(res.token, res.user);
   // merge guest (local) plans/favorites into the account, then drop the local copies
-  const lp = LS.get('jc_plans_local', []), lf = LS.get('jc_favs_local', []);
+  const lp = LS.get('jc_plans_local', []), lf = LS.get('jc_favs_local', []), lt = LS.get('jc_tribe_follows_local', []);
   try {
-    const s = await api('/sync', { method: 'POST', body: { plans: lp, favorites: lf } });
-    S.plans = s.plans; S.favs = s.favorites; LS.set('jc_plans_local', []); LS.set('jc_favs_local', []);
-  } catch { S.plans = []; S.favs = []; }
+    const s = await api('/sync', { method: 'POST', body: { plans: lp, favorites: lf, tribeFollows: lt } });
+    S.plans = s.plans; S.favs = s.favorites; S.tribeFollows = s.tribeFollows || [];
+    LS.set('jc_plans_local', []); LS.set('jc_favs_local', []); LS.set('jc_tribe_follows_local', []);
+  } catch { S.plans = []; S.favs = []; S.tribeFollows = []; }
   persistLists();
   try { S.membership = await api('/membership/status'); } catch { S.membership = null; }
   S.memberCatalog = null;
-  toast(isNew ? '注册成功，欢迎你！' : `欢迎回来，${res.user.nickname}` + (lp.length || lf.length ? '（本机数据已同步）' : ''));
+  toast(isNew ? '注册成功，欢迎你！' : `欢迎回来，${res.user.nickname}` + (lp.length || lf.length || lt.length ? '（本机数据已同步）' : ''));
   go('#/home', true);
 }
 document.addEventListener('submit', async e => {
