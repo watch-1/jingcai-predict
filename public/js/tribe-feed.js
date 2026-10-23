@@ -1,12 +1,15 @@
 /**
- * Tribe club feed UI (1.9.169). Depends on globals from app.js: api, esc, loggedIn, toast, go, badge, S, route, render, avatarHtml, timeAgo, isTribeFollow.
+ * Tribe club feed UI (1.9.170). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isTribeFollow.
  */
 (function (global) {
   'use strict';
 
   const MAX_IMAGES = 9;
   const BODY_PREVIEW = 140;
+  const DRAFT_LS = 'jc_tribe_compose_draft_v1';
   const pendingUploads = [];
+  let composeTribeId = '';
+  let draftSaveTimer = null;
 
   function fmtTime(ts) {
     if (typeof global.timeAgo === 'function') return global.timeAgo(ts);
@@ -234,24 +237,105 @@
     patchFeedList(posts, tid);
   }
 
+  function draftStorageKey(tribeId) {
+    return DRAFT_LS + ':' + String(tribeId || '');
+  }
+
+  function readDraft(tribeId) {
+    try {
+      const raw = localStorage.getItem(draftStorageKey(tribeId));
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      if (!d || typeof d !== 'object') return null;
+      return {
+        body: typeof d.body === 'string' ? d.body : '',
+        images: Array.isArray(d.images) ? d.images.filter((x) => x && x.data) : [],
+      };
+    } catch (_) { return null; }
+  }
+
+  function writeDraft(tribeId) {
+    if (!tribeId) return;
+    const bodyEl = document.getElementById('tribe-compose-body');
+    const body = bodyEl ? bodyEl.value : '';
+    const images = pendingUploads.map((p) => ({ mime: p.mime || 'image/jpeg', data: p.data }));
+    try {
+      if (!body.trim() && !images.length) {
+        localStorage.removeItem(draftStorageKey(tribeId));
+        return;
+      }
+      localStorage.setItem(draftStorageKey(tribeId), JSON.stringify({ body, images, savedAt: Date.now() }));
+    } catch (_) {}
+  }
+
+  function clearDraft(tribeId) {
+    try { localStorage.removeItem(draftStorageKey(tribeId)); } catch (_) {}
+  }
+
+  function scheduleDraftSave(tribeId) {
+    if (draftSaveTimer) clearTimeout(draftSaveTimer);
+    draftSaveTimer = setTimeout(() => writeDraft(tribeId), 280);
+  }
+
   function openCompose(tribeId) {
     if (!loggedIn()) { toast('登录后可发帖'); return go('#/login'); }
-    const sheet = document.getElementById('sheet');
-    if (!sheet) return;
-    pendingUploads.length = 0;
-    sheet.innerHTML = `<div class="sheet tribe-compose-sheet">
-      <div class="sheet-hd"><h3>发贴</h3><button type="button" class="btn ghost sm" data-act="closeSheet">关闭</button></div>
-      <textarea id="tribe-compose-body" class="tf-compose-input" maxlength="2000" placeholder="说点什么…" rows="5"></textarea>
-      <div id="tribe-compose-previews" class="tf-compose-previews"></div>
-      <div class="tf-compose-actions">
-        <label class="btn ghost sm tf-pick-img"><input type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden id="tribe-compose-files">添加图片</label>
-        <button type="button" class="btn pri sm" data-act="tribeComposeSubmit" data-tribe="${esc(tribeId)}">发布</button>
+    go('#/tribe-compose/' + encodeURIComponent(tribeId));
+  }
+
+  function pageCompose(tribeId, teamName) {
+    return `<div class="tribe-compose-page" data-tribe="${esc(tribeId)}">
+      <header class="tribe-compose-hdr">
+        <button type="button" class="tribe-compose-cancel" data-act="tribeComposeCancel" data-tribe="${esc(tribeId)}">取消</button>
+        <h1 class="tribe-compose-title">发布帖子</h1>
+        <button type="button" class="tribe-compose-pub" data-act="tribeComposeSubmit" data-tribe="${esc(tribeId)}">发布</button>
+      </header>
+      <div class="tribe-compose-main">
+        <textarea id="tribe-compose-body" class="tribe-compose-body" maxlength="2000" placeholder="输入内容：默认第一段内容为标题" rows="8"></textarea>
+        <div id="tribe-compose-previews" class="tf-compose-previews"></div>
       </div>
-      <p class="note">最多 ${MAX_IMAGES} 张图，单张不超过 2MB。</p>
+      <div class="tribe-compose-toolbar" aria-label="发帖工具">
+        <button type="button" class="tribe-compose-tb" disabled aria-hidden="true" title="表情">😊</button>
+        <button type="button" class="tribe-compose-tb" disabled aria-hidden="true" title="@">@</button>
+        <label class="tribe-compose-tb tf-pick-img" title="添加图片">
+          <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden id="tribe-compose-files">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5.5-5.5a2 2 0 00-2.8 0L3 18"/></svg>
+        </label>
+        <button type="button" class="tribe-compose-tb" disabled aria-hidden="true" title="视频">▶</button>
+        <button type="button" class="tribe-compose-tb" disabled aria-hidden="true" title="球场">⚽</button>
+      </div>
+      <p class="tribe-compose-hint note">最多 ${MAX_IMAGES} 张图，单张不超过 2MB。${teamName ? '发布到「' + esc(teamName) + '」圈子' : ''}</p>
     </div>`;
-    sheet.classList.remove('hidden');
+  }
+
+  function mountCompose(tribeId) {
+    composeTribeId = String(tribeId || '');
+    pendingUploads.length = 0;
+    const draft = readDraft(composeTribeId);
+    if (draft) {
+      pendingUploads.push(...draft.images.map((img) => ({
+        mime: img.mime || 'image/jpeg',
+        data: img.data,
+        preview: 'data:' + (img.mime || 'image/jpeg') + ';base64,' + img.data,
+      })));
+      const bodyEl = document.getElementById('tribe-compose-body');
+      if (bodyEl) bodyEl.value = draft.body || '';
+    }
+    renderPreviews();
+    const bodyEl = document.getElementById('tribe-compose-body');
+    if (bodyEl) {
+      bodyEl.addEventListener('input', () => scheduleDraftSave(composeTribeId));
+      setTimeout(() => { try { bodyEl.focus(); } catch (_) {} }, 50);
+    }
     const inp = document.getElementById('tribe-compose-files');
     if (inp) inp.addEventListener('change', onPickImages);
+  }
+
+  function cancelCompose(tribeId) {
+    writeDraft(tribeId);
+    pendingUploads.length = 0;
+    composeTribeId = '';
+    if (typeof global.back === 'function') global.back();
+    else go('#/tribe-club/' + encodeURIComponent(tribeId), true);
   }
 
   function onPickImages(ev) {
@@ -264,6 +348,7 @@
       reader.onload = () => {
         pendingUploads.push({ mime: file.type, data: String(reader.result).split(',')[1] || reader.result });
         renderPreviews();
+        scheduleDraftSave(composeTribeId || (route().name === 'tribe-compose' ? route().arg : ''));
       };
       reader.readAsDataURL(file);
     });
@@ -299,15 +384,18 @@
     if (!body && !urls.length) { toast('请输入文字或添加图片'); return; }
     try {
       await api('/tribe/' + encodeURIComponent(tribeId) + '/posts', { method: 'POST', body: { body, images: urls }, timeout: 15000 });
-      if (typeof globalThis.closeSheet === 'function') globalThis.closeSheet();
-      else {
-        const sh = document.getElementById('sheet');
-        if (sh) { sh.classList.add('hidden'); sh.innerHTML = ''; }
-      }
+      clearDraft(tribeId);
+      pendingUploads.length = 0;
+      composeTribeId = '';
       toast('已发布');
-      mountClubFeed(tribeId, S.tribeFeedTeamMeta && S.tribeFeedTeamMeta[tribeId]);
-      feedUi().tab = 'latest';
-      syncSubnavUi();
+      go('#/tribe-club/' + encodeURIComponent(tribeId), true);
+      setTimeout(() => {
+        if (route().name === 'tribe-club' && String(route().arg) === String(tribeId)) {
+          mountClubFeed(tribeId, S.tribeFeedTeamMeta && S.tribeFeedTeamMeta[tribeId]);
+          feedUi().tab = 'latest';
+          syncSubnavUi();
+        }
+      }, 0);
     } catch (e) {
       toast(e.message || '发布失败');
     }
@@ -397,10 +485,12 @@
     if (!el) return false;
     const act = el.dataset.act;
     if (act === 'tribeComposeOpen') { openCompose(el.dataset.tribe); return true; }
+    if (act === 'tribeComposeCancel') { cancelCompose(el.dataset.tribe); return true; }
     if (act === 'tribeComposeSubmit') { submitCompose(el.dataset.tribe); return true; }
     if (act === 'tribeComposeRm') {
       pendingUploads.splice(parseInt(el.dataset.i, 10), 1);
       renderPreviews();
+      scheduleDraftSave(composeTribeId || el.closest('[data-tribe]')?.dataset?.tribe || route().arg);
       return true;
     }
     if (act === 'tribeReply') { submitReply(el.dataset.post); return true; }
@@ -424,6 +514,8 @@
     mountClubFeed,
     pagePostDetail,
     loadPostDetail,
+    pageCompose,
+    mountCompose,
     onClick,
     onFeedClick,
     postCard,

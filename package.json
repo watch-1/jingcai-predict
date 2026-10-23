@@ -1,12 +1,12 @@
 {
   "name": "tiicai-site",
-  "version": "1.9.169",
+  "version": "1.9.170",
   "description": "竞彩赛事资讯与赔率概率预测（用户端）。资讯会员 mock 订阅。仅供参考。",
   "main": "server.js",
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "test": "node test/scrub-vendor-labels-test.js && node test/parse-test.js && node test/post-match-review-test.js && node test/selective-speak-test.js && node test/fixture-players-test.js && node test/fixture-map-test.js && node test/live-scores-phase-test.js && node test/live-score-var-test.js && node test/live-stats-upstream-test.js && node test/process-stats-test.js && node test/team-evidence-test.js && node test/deepseek-prematch-test.js && node test/player-match-db-test.js && node test/market-value-match-test.js && node test/player-db-api-test.js && node test/column-test.js && node test/platform-attitude-test.js && node test/kb-test.js && node test/kb-client-159-test.js && node test/playervalues-photo-159-test.js && node test/cold-start-158-test.js && node test/ui-160-test.js && node test/ui-162-test.js && node test/ui-163-test.js && node test/ui-164-test.js && node test/ui-165-test.js && node test/ui-166-test.js && node test/ui-167-test.js && node test/tribe-follow-test.js && node test/tribe-feed-test.js && node test/ui-168-test.js && node test/dc-kb-161-test.js && node test/api-test.js && node test/data-center-prefetch-test.js",
+    "test": "node test/scrub-vendor-labels-test.js && node test/parse-test.js && node test/post-match-review-test.js && node test/selective-speak-test.js && node test/fixture-players-test.js && node test/fixture-map-test.js && node test/live-scores-phase-test.js && node test/live-score-var-test.js && node test/live-stats-upstream-test.js && node test/process-stats-test.js && node test/team-evidence-test.js && node test/deepseek-prematch-test.js && node test/player-match-db-test.js && node test/market-value-match-test.js && node test/player-db-api-test.js && node test/column-test.js && node test/platform-attitude-test.js && node test/kb-test.js && node test/kb-client-159-test.js && node test/playervalues-photo-159-test.js && node test/cold-start-158-test.js && node test/ui-160-test.js && node test/ui-162-test.js && node test/ui-163-test.js && node test/ui-164-test.js && node test/ui-165-test.js && node test/ui-166-test.js && node test/ui-167-test.js && node test/tribe-follow-test.js && node test/tribe-feed-test.js && node test/ui-168-test.js && node test/ui-169-test.js && node test/ui-170-test.js && node test/dc-kb-161-test.js && node test/api-test.js && node test/data-center-prefetch-test.js",
     "build:apk": "./android/build-apk.sh",
     "prefetch:en": "node tools/prefetch-en-news.js",
     "smoke:schedule": "node tools/smoke-schedule-filter.js",

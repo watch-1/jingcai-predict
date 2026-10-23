@@ -15,6 +15,6 @@ assert.ok(/\.tf-card/.test(css));
 assert.ok(fs.existsSync(path.join(__dirname, '../lib/tribe-feed.js')));
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.169');
+assert.ok(pkg.version >= '1.9.168', 'package version bumped');
 
 console.log('ui-168-test OK');
