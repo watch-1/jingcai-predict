@@ -2038,15 +2038,9 @@ function pageTribeCompose(id) {
   if (!t) {
     return hdr('发布帖子', { back: true }) + empty('球队信息加载中或暂无数据。', '<button type="button" class="btn ghost sm" data-go="#/tribe">返回部落</button>', '未找到球队') + foot();
   }
-  const h = typeof JCTribeFeed !== 'undefined'
+  return typeof JCTribeFeed !== 'undefined'
     ? JCTribeFeed.pageCompose(t.tribeId, t.nameZh)
     : hdr('发布帖子', { back: true }) + empty('加载中…') + foot();
-  setTimeout(() => {
-    if (typeof JCTribeFeed !== 'undefined' && route().name === 'tribe-compose' && String(route().arg) === String(t.tribeId)) {
-      JCTribeFeed.mountCompose(t.tribeId);
-    }
-  }, 0);
-  return h;
 }
 function pageTribePost(id) {
   const pid = String(id || '').trim();
@@ -9254,6 +9248,14 @@ function render(opts) {
     ensureDataCacheSlice(lg + ':' + kind);
     if (!canRestore) warmDataCenterPrefetch(lg, kind);
     setTimeout(() => prefetchDcImages(document.getElementById('dcBody') || v), 0);
+  }
+  if (r.name === 'tribe-compose' && typeof JCTribeFeed !== 'undefined') {
+    const composeTid = String(r.arg || '');
+    setTimeout(() => {
+      if (route().name === 'tribe-compose' && String(route().arg) === composeTid) {
+        JCTribeFeed.mountCompose(composeTid);
+      }
+    }, 0);
   }
   tickClock();
 }
