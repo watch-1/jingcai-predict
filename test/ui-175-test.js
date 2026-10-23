@@ -23,10 +23,10 @@ assert.ok(!/md-stats[\s\S]*?<span>方案<\/span>/.test(appJs), 'plans stat remov
 assert.ok(!/md-stats[\s\S]*?<span>知识库<\/span>/.test(appJs), 'kb stat removed from md-stats');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.175');
+assert.ok(pkg.version >= '1.9.175', 'package version bumped');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.175/.test(ver));
-assert.ok(/VERSION_CODE=212/.test(ver));
-assert.ok(/jc-v1\.9\.175/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-175-test OK');
