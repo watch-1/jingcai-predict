@@ -1,5 +1,5 @@
 /**
- * Tribe club feed UI (1.9.172). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isTribeFollow, tribeById.
+ * Tribe club feed UI (1.9.173). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isTribeFollow, tribeById, API.
  */
 (function (global) {
   'use strict';
@@ -92,10 +92,20 @@
     </div>`;
   }
 
+
+  /** Prefix relative media paths with API base (Capacitor WebView origin is not the API host). */
+  function mediaUrl(u) {
+    if (!u) return '';
+    const s = String(u);
+    if (/^https?:/i.test(s) || s.startsWith('data:') || s.startsWith('blob:')) return s;
+    const base = (typeof API !== 'undefined' && API) || (typeof global.API === 'string' ? global.API : '') || '';
+    return String(base) + s;
+  }
+
   function imagesHtml(images) {
     if (!images || !images.length) return '';
     const cls = images.length === 1 ? 'tf-imgs one' : 'tf-imgs';
-    return `<div class="${cls}">${images.map((u) => `<img src="${esc(u)}" alt="" loading="lazy" decoding="async">`).join('')}</div>`;
+    return `<div class="${cls}">${images.map((u) => `<img src="${esc(mediaUrl(u))}" alt="" loading="lazy" decoding="async">`).join('')}</div>`;
   }
 
   function bodyHtml(post) {
@@ -448,7 +458,7 @@
   function detailImagesHtml(images) {
     if (!images || !images.length) return '';
     return `<div class="tf-post-imgs">${images.map((u) =>
-      `<figure class="tf-post-img"><img src="${esc(u)}" alt="" loading="lazy" decoding="async"></figure>`
+      `<figure class="tf-post-img"><img src="${esc(mediaUrl(u))}" alt="" loading="lazy" decoding="async"></figure>`
     ).join('')}</div>`;
   }
 
