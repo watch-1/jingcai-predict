@@ -5979,6 +5979,57 @@ html[data-edge="1"] .auth-hd {
   box-shadow: 0 2px 12px rgba(0,0,0,.2);
 }
 .hero-edge-nav .tribe-join-btn.on svg { color: var(--tab-green); }
-.tribe-feed-ph { margin-top: 10px; }
-.tribe-feed-t { margin: 0 0 8px; font-size: 15px; }
+.tribe-feed-sec { margin: 10px 12px 24px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+.tribe-feed-hd { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.tribe-feed-t { margin: 0; font-size: 16px; font-weight: 700; }
+.tribe-feed-list { display: flex; flex-direction: column; gap: 10px; }
 .tribe-feed-empty { margin: 0; font-size: 14px; color: var(--t3); text-align: center; padding: 32px 12px; }
+.tf-compose-bar { flex-shrink: 0; }
+.tf-compose-btn {
+  border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px;
+  font-size: 13px; font-weight: 600; color: var(--tab-green);
+}
+.tf-card {
+  background: #fff; border-radius: 14px; padding: 12px 14px;
+  box-shadow: 0 2px 12px rgba(27, 42, 74, 0.06); border: 1px solid rgba(226, 232, 240, 0.9);
+}
+.tf-card--match { border-color: color-mix(in srgb, var(--tab-green) 35%, #e2e8f0); }
+.tf-card-hd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 8px; }
+.tf-author { display: inline-flex; align-items: center; gap: 6px; }
+.tf-nick { font-size: 13px; font-weight: 600; color: var(--t1); }
+.tf-time { margin-left: auto; font-size: 11px; color: var(--t3); }
+.tf-pin { font-size: 10px; font-weight: 700; color: #fff; background: var(--red); padding: 2px 6px; border-radius: 4px; }
+.tf-tag { font-size: 10px; font-weight: 600; color: var(--tab-green); background: var(--pri-l); padding: 2px 6px; border-radius: 4px; }
+.tf-body { margin: 0 0 8px; font-size: 15px; line-height: 1.55; color: var(--t1); word-break: break-word; }
+.tf-imgs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; border-radius: 10px; overflow: hidden; margin-bottom: 8px; }
+.tf-imgs.one { grid-template-columns: 1fr; max-height: 280px; }
+.tf-imgs img { width: 100%; height: 100%; min-height: 72px; object-fit: cover; display: block; background: #f1f5f9; }
+.tf-card-foot { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--t3); padding-top: 6px; border-top: 1px solid var(--line); }
+.tf-more { color: var(--pri); font-weight: 600; }
+.tf-match-card { margin: 4px 0 6px; }
+.tf-match-meta { font-size: 12px; color: var(--t3); margin-bottom: 8px; }
+.tf-match-teams { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; font-size: 14px; font-weight: 600; }
+.tf-match-hint { margin: 0 0 8px; font-size: 12px; color: var(--t2); }
+.tf-vote-bars { margin-bottom: 8px; }
+.tf-detail-inner { padding: 0 0 80px; }
+.tf-reply-hd { font-size: 15px; font-weight: 700; margin: 16px 0 10px; }
+.tf-replies-list { display: flex; flex-direction: column; gap: 12px; }
+.tf-reply { background: #fff; border-radius: 12px; padding: 10px 12px; border: 1px solid var(--line); }
+.tf-reply p { margin: 6px 0 4px; font-size: 14px; line-height: 1.45; }
+.tf-reply time { font-size: 11px; color: var(--t3); }
+.tf-reply-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: flex; gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0,0,0,.06);
+}
+.tf-reply-bar input { flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 15px; }
+.tribe-compose-sheet .tf-compose-input {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px; font-size: 15px; min-height: 96px; resize: vertical;
+}
+.tf-compose-previews { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.tf-prev { position: relative; width: 72px; height: 72px; border-radius: 8px; overflow: hidden; }
+.tf-prev img { width: 100%; height: 100%; object-fit: cover; }
+.tf-prev button { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border: 0; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; font-size: 14px; }
+.tf-compose-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.tf-pick-img input { display: none; }
