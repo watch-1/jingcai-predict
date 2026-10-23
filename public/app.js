@@ -404,9 +404,10 @@ function patchUserFollowButtons(uid) {
   const on = isUserFollow(uid);
   document.querySelectorAll('[data-act="userFollow"]').forEach((btn) => {
     if (String(btn.dataset.uid) !== String(uid)) return;
-    if (btn.classList.contains('tf-post-follow')) {
+    if (btn.classList.contains('tf-post-follow') || btn.classList.contains('tf-follow')) {
       btn.classList.toggle('on', on);
-      btn.textContent = on ? '已关注' : '+ 关注';
+      if (btn.classList.contains('tf-post-follow')) btn.textContent = on ? '已关注' : '+ 关注';
+      else btn.textContent = on ? '已关注' : '关注';
     }
   });
 }
@@ -1260,10 +1261,8 @@ function meDrawerHtml() {
       <span class="md-id"><b class="md-name">${nick}${mem ? '<span class="vip-chip">会员</span>' : ''}</b><span class="md-sub">${sub}</span></span>
     </button>
     <div class="md-stats">
-      <button type="button" data-go="#/plans"><b class="num">${plansN}</b><span>方案</span></button>
-      <button type="button" data-go="#/column"><b class="num">${(S.user && S.user.coinBalance != null) ? esc(String(S.user.coinBalance)) : '0'}</b><span>云朵</span></button>
-      <button type="button" data-go="#/favs"><b class="num">${favsN}</b><span>关注</span></button>
-      <button type="button" data-go="#/kb"><b class="num">${li ? '开' : '—'}</b><span>知识库</span></button>
+      <button type="button" data-go="#/column/wallet"><b class="num">${(S.user && S.user.coinBalance != null) ? esc(String(S.user.coinBalance)) : '0'}</b><span>云朵</span></button>
+      <button type="button" data-go="#/friends"><b class="num">${friendsN}</b><span>好友</span></button>
     </div>
   </div>`;
   h += `<div class="md-body">

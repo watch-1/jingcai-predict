@@ -38,6 +38,18 @@ async function call(method, path, body, token) {
     ok(r.s === 201 && r.j.reply && r.j.reply.body === '沙发', 'reply');
     r = await call('GET', '/tribe/posts/' + postId + '/replies', undefined, tok);
     ok(r.s === 200 && r.j.replies.length >= 1, 'list replies');
+    const replyId = r.j.replies[0].id;
+    r = await call('POST', '/tribe/posts/' + postId + '/reactions', { kind: 'like' }, tok);
+    ok(r.s === 200 && r.j.reactions && r.j.reactions.like === 1 && r.j.myReaction === 'like', 'post reaction toggle on');
+    r = await call('POST', '/tribe/posts/' + postId + '/reactions', { kind: 'like' }, tok);
+    ok(r.s === 200 && r.j.reactions.like === 0 && !r.j.myReaction, 'post reaction toggle off');
+    r = await call('POST', '/tribe/replies/' + replyId + '/like', {}, tok);
+    ok(r.s === 200 && r.j.likeCount === 1 && r.j.myLiked, 'reply like on');
+    r = await call('POST', '/tribe/replies/' + replyId + '/like', {}, tok);
+    ok(r.s === 200 && r.j.likeCount === 0 && !r.j.myLiked, 'reply like off');
+    r = await call('GET', '/tribe/' + tribeId + '/feed?limit=5', undefined, tok);
+    const fp = (r.j.posts || []).find((p) => p.id === postId);
+    ok(fp && fp.reactions, 'feed posts include reactions');
     r = await call('POST', '/tribe/' + tribeId + '/feed/ensure-match', { teamId: '382', teamName: '曼城' }, tok);
     ok(r.s === 200 && r.j.ok, 'ensure-match endpoint');
     r = await call('GET', '/tribe/' + tribeId + '/feed?ensure=1&teamId=382&teamName=' + encodeURIComponent('曼城'), undefined, tok);

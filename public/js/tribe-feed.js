@@ -1,5 +1,5 @@
 /**
- * Tribe club feed UI (1.9.174). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isTribeFollow, tribeById, API.
+ * Tribe club feed UI (1.9.175). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isUserFollow, tribeById, API.
  */
 (function (global) {
   'use strict';
@@ -61,9 +61,34 @@
     return `<div class="tf-author">${av}<div class="tf-author-txt"><span class="tf-nick">${esc(a.nickname || '球迷')}</span>${meta ? `<span class="tf-meta-line">${meta}</span>` : ''}</div></div>`;
   }
 
-  function followPill(tribeId) {
-    if (typeof global.isTribeFollow === 'function' && global.isTribeFollow(tribeId)) return '';
-    return `<button type="button" class="tf-follow" data-act="tribeFollow" data-id="${esc(tribeId)}">关注</button>`;
+  function followPill(author) {
+    const uid = author && author.userId;
+    if (!uid) return '';
+    if (global.S && global.S.user && String(global.S.user.id) === String(uid)) return '';
+    const on = typeof global.isUserFollow === 'function' && global.isUserFollow(uid);
+    return `<button type="button" class="tf-follow${on ? ' on' : ''}" data-act="userFollow" data-uid="${esc(String(uid))}">${on ? '已关注' : '关注'}</button>`;
+  }
+
+  const REACT_DEFS = [
+    ['laugh', '😂'],
+    ['like', '👍'],
+    ['fire', '🔥'],
+  ];
+
+  function defaultReactions() {
+    return { laugh: 0, like: 0, fire: 0, total: 0 };
+  }
+
+  function reactionsHtml(post) {
+    const rx = post.reactions || defaultReactions();
+    const mine = post.myReaction || '';
+    const btns = REACT_DEFS.map(([kind, emo]) => {
+      const on = mine === kind;
+      const n = rx[kind] || 0;
+      const cnt = n > 0 ? `<span class="tf-react-n">${n}</span>` : '';
+      return `<button type="button" class="tf-react-b${on ? ' on' : ''}" data-act="tribeReact" data-post="${post.id}" data-kind="${kind}" aria-label="${kind}">${emo}${cnt}</button>`;
+    }).join('');
+    return `<div class="tf-react">${btns}</div>`;
   }
 
   function voteBlock(post) {
@@ -119,10 +144,6 @@
     return `<p class="tf-body">${esc(short)}… <button type="button" class="tf-fulltxt" data-act="tribePostOpen" data-post="${post.id}">全文</button></p>`;
   }
 
-  function reactionsPlaceholder() {
-    return `<div class="tf-react" aria-hidden="true"><span class="tf-react-b">😂</span><span class="tf-react-b">👍</span><span class="tf-react-b">🔥</span></div>`;
-  }
-
   function postCard(post, { detail, tribeId } = {}) {
     const tid = tribeId || post.tribeId || '';
     const essence = (post.pinned || post.kind === 'match_vote')
@@ -134,14 +155,16 @@
     const textBody = post.kind !== 'match_vote' ? bodyHtml(post) : '';
     const imgs = post.kind !== 'match_vote' ? imagesHtml(post.images) : '';
     const rc = post.replyCount || 0;
+    const likeN = (post.reactions && post.reactions.like) || 0;
+    const likeLab = likeN > 0 ? likeN + ' 赞' : '赞';
     const foot = detail ? '' : `<div class="tf-card-foot">
-      ${reactionsPlaceholder()}
+      ${reactionsHtml(post)}
       <div class="tf-stat">
         <span class="tf-stat-i">${rc > 0 ? rc + ' 评论' : '评论'}</span>
-        <span class="tf-stat-i tf-like">赞</span>
+        <span class="tf-stat-i tf-like">${likeLab}</span>
       </div>
     </div>`;
-    const follow = detail ? '' : followPill(tid);
+    const follow = detail ? '' : followPill(post.author);
     const time = fmtTime(post.createdAt);
     return `<article class="tf-card ${kind}" data-post="${post.id}">
       <div class="tf-card-hd">
@@ -507,7 +530,7 @@
           <span class="tf-huitie-name">${esc(r.author.nickname || '球迷')}</span>
           <time class="tf-huitie-time">${fmtTime(r.createdAt)}</time>
         </div>
-        <span class="tf-huitie-like" aria-hidden="true">👍</span>
+        <button type="button" class="tf-huitie-like${r.myLiked ? ' on' : ''}" data-act="tribeReplyLike" data-reply="${r.id}" aria-label="点赞">👍${(r.likeCount || 0) > 0 ? `<span class="tf-huitie-like-n">${r.likeCount}</span>` : ''}</button>
       </div>
       <p class="tf-huitie-body">${esc(r.body)}</p>
     </div>`;
@@ -590,6 +613,101 @@
     } catch (e) { toast(e.message || '回复失败'); }
   }
 
+  function bumpReactAnim(el) {
+    if (!el) return;
+    el.classList.remove('tf-pop');
+    void el.offsetWidth;
+    el.classList.add('tf-pop');
+    const done = () => { el.classList.remove('tf-pop'); el.removeEventListener('animationend', done); };
+    el.addEventListener('animationend', done);
+  }
+
+  function patchPostInCache(tribeId, postId, patch) {
+    S.tribeFeedCache = S.tribeFeedCache || {};
+    const pid = String(postId);
+    const posts = (S.tribeFeedCache[tribeId] || []).map((p) => (String(p.id) === pid ? Object.assign({}, p, patch) : p));
+    S.tribeFeedCache[tribeId] = posts;
+    return posts.find((p) => String(p.id) === pid);
+  }
+
+  async function togglePostReaction(postId, kind, btnEl) {
+    if (!loggedIn()) { toast('登录后可表态'); return go('#/login'); }
+    const tid = route().arg;
+    const posts = (S.tribeFeedCache && S.tribeFeedCache[tid]) || [];
+    const post = posts.find((p) => String(p.id) === String(postId));
+    const prevRx = post ? Object.assign({}, post.reactions || defaultReactions()) : defaultReactions();
+    const prevMine = post ? post.myReaction || null : null;
+    const nextRx = Object.assign({}, prevRx);
+    let nextMine = prevMine;
+    if (prevMine === kind) {
+      nextMine = null;
+      if (nextRx[kind] > 0) { nextRx[kind] -= 1; nextRx.total = Math.max(0, (nextRx.total || 0) - 1); }
+    } else {
+      if (prevMine && nextRx[prevMine] > 0) {
+        nextRx[prevMine] -= 1;
+        nextRx.total = Math.max(0, (nextRx.total || 0) - 1);
+      }
+      nextMine = kind;
+      nextRx[kind] = (nextRx[kind] || 0) + 1;
+      nextRx.total = (nextRx.total || 0) + 1;
+    }
+    if (post) patchPostInCache(tid, postId, { reactions: nextRx, myReaction: nextMine });
+    bumpReactAnim(btnEl);
+    const card = document.querySelector('.tf-card[data-post="' + postId + '"]');
+    const updated = post ? patchPostInCache(tid, post.id, { reactions: nextRx, myReaction: nextMine }) : null;
+    if (card && updated) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = postCard(updated, { tribeId: tid });
+      card.replaceWith(tmp.firstElementChild);
+    }
+    try {
+      const j = await api('/tribe/posts/' + encodeURIComponent(postId) + '/reactions', { method: 'POST', body: { kind }, timeout: 10000 });
+      if (post && j.reactions) patchPostInCache(tid, postId, { reactions: j.reactions, myReaction: j.myReaction || null });
+    } catch (e) {
+      if (post) patchPostInCache(tid, postId, { reactions: prevRx, myReaction: prevMine });
+      const card2 = document.querySelector('.tf-card[data-post="' + postId + '"]');
+      const restored = (S.tribeFeedCache[tid] || []).find((p) => String(p.id) === String(postId));
+      if (card2 && restored) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = postCard(restored, { tribeId: tid });
+        card2.replaceWith(tmp.firstElementChild);
+      }
+      toast(e.message || '表态失败');
+    }
+  }
+
+  async function toggleReplyLike(replyId, btnEl) {
+    if (!loggedIn()) { toast('登录后可点赞'); return go('#/login'); }
+    const on = btnEl && btnEl.classList.contains('on');
+    bumpReactAnim(btnEl);
+    if (btnEl) {
+      btnEl.classList.toggle('on', !on);
+      const nEl = btnEl.querySelector('.tf-huitie-like-n');
+      const n = parseInt(nEl && nEl.textContent, 10) || 0;
+      const next = on ? Math.max(0, n - 1) : n + 1;
+      if (next > 0) {
+        if (nEl) nEl.textContent = String(next);
+        else btnEl.insertAdjacentHTML('beforeend', `<span class="tf-huitie-like-n">${next}</span>`);
+      } else if (nEl) nEl.remove();
+    }
+    try {
+      const j = await api('/tribe/replies/' + encodeURIComponent(replyId) + '/like', { method: 'POST', body: {}, timeout: 10000 });
+      if (btnEl) {
+        btnEl.classList.toggle('on', !!j.myLiked);
+        const nEl = btnEl.querySelector('.tf-huitie-like-n');
+        if ((j.likeCount || 0) > 0) {
+          if (nEl) nEl.textContent = String(j.likeCount);
+          else btnEl.insertAdjacentHTML('beforeend', `<span class="tf-huitie-like-n">${j.likeCount}</span>`);
+        } else if (nEl) nEl.remove();
+      }
+    } catch (e) {
+      if (btnEl) {
+        btnEl.classList.toggle('on', on);
+        toast(e.message || '点赞失败');
+      }
+    }
+  }
+
   async function castVote(postId, choice, matchId) {
     if (!loggedIn()) { toast('请先登录后再投票'); return go('#/login'); }
     try {
@@ -646,6 +764,8 @@
       global.toggleUserFollow(el.dataset.uid, { refreshDetail: root && root.dataset.postId });
       return true;
     }
+    if (act === 'tribeReact') { togglePostReaction(el.dataset.post, el.dataset.kind, el); return true; }
+    if (act === 'tribeReplyLike') { toggleReplyLike(el.dataset.reply, el); return true; }
     return false;
   }
 
