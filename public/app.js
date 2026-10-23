@@ -381,7 +381,7 @@ async function loadData(kind, force) {
     if (j.source === 'live') LS.set('jc_cache_' + kind, j);
   } catch (e) {
     const c = LS.get('jc_cache_' + kind, null);
-    if (c) j = { ...c, offline: true, note: '网络不可用，显示上次缓存的数据' };
+    if (c) j = { ...c, fromCache: true };
     else { const SM = window.SAMPLE; j = { source: 'sample', local: true, note: '无法连接服务器，当前展示内置示例数据（非真实赛事/赔率）', fetchedAt: new Date().toISOString(), data: kind === 'results' ? SM.results() : SM.matches() }; }
   }
   if (kind === 'matches') { S.matches = j.data; S.msrc = j; }
@@ -625,17 +625,34 @@ function ensureDataCacheSlice(key) {
   }
   return (mem && mem.ok !== false) ? mem : (ls || mem || null);
 }
+const DC_REFRESH_MAX = 2;
 function scheduleDataCenterRefresh(lg, kind, { urgent } = {}) {
   const key = lg + ':' + kind;
   const cached = ensureDataCacheSlice(key);
   const needUrgent = urgent != null ? urgent : !dataCacheRenderable(cached, kind);
+  S._dcRefreshQ = S._dcRefreshQ || [];
   S._dataLoadInflight = S._dataLoadInflight || {};
   if (S._dataLoadInflight[key]) return;
-  const run = () => {
-    S._dataLoadInflight[key] = true;
-    loadDataCenter(lg, kind, { soft: !needUrgent }).finally(() => { delete S._dataLoadInflight[key]; });
-  };
-  setTimeout(run, needUrgent ? 0 : 100);
+  if (S._dcRefreshQ.some((j) => j.key === key)) return;
+  S._dcRefreshQ.push({ key, lg, kind, urgent: needUrgent, at: Date.now() });
+  pumpDataCenterRefreshQueue();
+}
+function pumpDataCenterRefreshQueue() {
+  S._dcRefreshActive = S._dcRefreshActive || 0;
+  S._dcRefreshQ = S._dcRefreshQ || [];
+  while (S._dcRefreshActive < DC_REFRESH_MAX && S._dcRefreshQ.length) {
+    S._dcRefreshQ.sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0) || a.at - b.at);
+    const job = S._dcRefreshQ.shift();
+    if (!job || S._dataLoadInflight[job.key]) continue;
+    S._dataLoadInflight[job.key] = true;
+    S._dcRefreshActive++;
+    const soft = !job.urgent;
+    loadDataCenter(job.lg, job.kind, { soft }).finally(() => {
+      delete S._dataLoadInflight[job.key];
+      S._dcRefreshActive--;
+      pumpDataCenterRefreshQueue();
+    });
+  }
 }
 function warmDataCenterPrefetch(lg, kind) {
   const kinds = dataKindsForSection(dataSectionOf()).map(([k]) => k);
@@ -646,22 +663,8 @@ function warmDataCenterPrefetch(lg, kind) {
     if (!dataCacheRenderable(ensureDataCacheSlice(key), kind)) scheduleDataCenterRefresh(l, kind, { urgent: false });
   }
 }
-/** 1.9.156: on cold start, warm missing slices (staggered — avoid 30 parallel hits / networkidle hangs). */
-function bootWarmAllDataCenter() {
-  try {
-    const secKinds = ['standings', 'topscorers', 'topassists', 'clubvalues', 'playervalues'];
-    let delay = 200;
-    for (const l of DATA_DC_PREFETCH_LEAGUES) {
-      for (const k of secKinds) {
-        const key = l + ':' + k;
-        if (dataCacheRenderable(ensureDataCacheSlice(key), k)) continue;
-        const d = delay;
-        delay += 180;
-        setTimeout(() => scheduleDataCenterRefresh(l, k, { urgent: false }), d);
-      }
-    }
-  } catch (_) {}
-}
+/** 1.9.157: no cold-start DC storm — boot JSON + LS hydrate cover standings/scorers; 身价等按需拉取。 */
+function bootWarmAllDataCenter() { /* intentionally empty */ }
 let _bootPackInflight = null;
 function mergeBootPackSlice(key, payload) {
   if (!key || !payload || payload.ok === false) return;
@@ -760,7 +763,6 @@ function tickClock() {
 function warnBar() {
   const s = S.msrc; if (!s) return '';
   if (s.source === 'sample') return `<div class="warn-bar">⚠️ <b>示例数据</b>：${esc(s.note || '官方接口暂不可达')}。以下赛事与赔率仅作演示，<b>非真实数据</b>。</div>`;
-  if (s.offline) return `<div class="warn-bar">📶 ${esc(s.note)}（${new Date(s.fetchedAt).toLocaleString('zh-CN', { hour12: false })}）</div>`;
   return '';
 }
 
@@ -2627,7 +2629,7 @@ function renderScorersList(payload, kind) {
     const initial = esc([...(r.playerZh || r.player || '?')][0] || '?');
     const altPhoto = r.photoAlt || '';
     const photo = r.photo
-      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><span class="dc-av-fallback" aria-hidden="true">${initial}</span><img alt="" width="88" height="88" decoding="async" loading="lazy" src="${esc(API + '/api/logo?url=' + encodeURIComponent(r.photo))}" onerror="var p=this.parentNode;if(!p)return;if(p.dataset.alt&&!p.dataset.retried){p.dataset.retried=1;this.src='${esc(API)}/api/logo?url='+encodeURIComponent(p.dataset.alt);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');this.remove();"></span>`
+      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><img alt="" width="88" height="88" decoding="async" src="${esc(API + '/api/logo?url=' + encodeURIComponent(r.photo))}" onerror="var p=this.parentNode;if(!p)return;if(p.dataset.alt&&!p.dataset.retried){p.dataset.retried=1;this.src='${esc(API)}/api/logo?url='+encodeURIComponent(p.dataset.alt);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');p.textContent=p.dataset.letter||'?';this.remove();"></span>`
       : `<span class="dc-avatar letter">${initial}</span>`;
     const teamLogo = r.teamLogo ? badge(r.teamZh || r.team, 'sm', r.teamLogo) : badge(r.teamZh || r.team, 'sm');
     const primary = isMv
@@ -2647,7 +2649,7 @@ function renderScorersList(payload, kind) {
         <div class="nm">${esc(r.playerZh || r.player)}${yiMark(r.playerZhAuto)}</div>
         <div class="sub"${teamHref ? ` data-go="${esc(teamHref)}"` : ''}>${teamLogo}<span>${esc(r.teamZh || r.team || '')}</span></div>
       </div>
-      <div class="dc-sc-stat"><b class="num">${isMv ? esc(primary) : primary}</b><small>${isMv ? '身价' : (isAst ? '助攻' : '进球')}</small>${secondary && !isMv ? `<span class="sec">${esc(secondary)}</span>` : ''}</div>
+      <div class="dc-sc-stat"><b class="${isMv ? 'dc-mv-amt' : 'num'}">${isMv ? esc(primary) : primary}</b><small>${isMv ? '身价' : (isAst ? '助攻' : '进球')}</small>${secondary && !isMv ? `<span class="sec">${esc(secondary)}</span>` : ''}</div>
     </div>`;
   });
   h += `</div>`;
@@ -9530,7 +9532,7 @@ NAV.push(location.hash || '#/home');
 window.__partnerGateReady.then((ok) => {
   if (!ok) return;
   // Soft: render() no-ops when content signature unchanged after network reload
-  loadDataCenterBootPack().finally(() => bootWarmAllDataCenter());
+  loadDataCenterBootPack();
   reloadData().then(() => {
     const r = route();
     if (r.name === 'home' && bootShellHeld() && !(S.matches && S.matches.length) && !window.__homeSnapRestored) {

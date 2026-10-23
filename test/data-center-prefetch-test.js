@@ -17,6 +17,14 @@ const lt = require('../lib/league-tables');
   const cv2 = await lt.getClubMarketValues({ league: 'epl' });
   assert.ok(cv2.cacheLayer === 'mem' || cv2.cacheLayer === 'disk', 'club values should be mem/disk on repeat, got ' + cv2.cacheLayer);
 
+  const pv = await lt.getPlayerMarketValues({ league: 'epl' });
+  if (pv && pv.ok && (pv.rows || []).length) {
+    const withPh = (pv.rows || []).filter((r) => r && r.photo).length;
+    assert.ok(withPh >= 1, 'player values rows should include photos when MV index present, got ' + withPh);
+  } else {
+    console.log('data-center-prefetch-test: skip playervalues photo assert (no MV index in env)');
+  }
+
   const ps = lt.prefetchStatus();
   assert.ok(ps.leagueKeys && ps.leagueKeys.includes('epl'), 'prefetch status lists leagues');
   console.log('data-center-prefetch-test ok', { prefetch: st, cacheLayer: cv2.cacheLayer });
