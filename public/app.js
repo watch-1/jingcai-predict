@@ -368,7 +368,8 @@ function setSession(token, user) {
   S.token = token; S.user = user; LS.set('jc_token', token); LS.set('jc_user', user); LS.set('jc_guest', false); S.guest = false;
 }
 function clearSession() {
-  S.token = null; S.user = null; S.membership = null; S.orders = null; LS.del('jc_token'); LS.del('jc_user'); LS.del('jc_acct_cache'); loadLocalLists();
+  S.token = null; S.user = null; S.membership = null; S.orders = null; S.kb = { packs: null, picker: null, packItems: null, packId: null, selected: {}, intervention: 'medium', lastResult: null, loading: false };
+  LS.del('jc_token'); LS.del('jc_user'); LS.del('jc_acct_cache'); LS.del(KB_PACKS_CACHE_KEY); loadLocalLists();
 }
 function sessionExpired() { if (!S.token) return; clearSession(); toast('登录已过期，请重新登录'); go('#/login'); }
 
@@ -448,7 +449,13 @@ function hydrateFromCache() {
 const HOME_SNAP_KEY = 'jc_home_snap_v1';
 const PRED_CACHE_KEY = 'jc_pred_cache_v1';
 const DATA_TAB_SNAP_KEY = 'jc_data_snap_v1';
+const HOME_ATT_CACHE_KEY = 'jc_home_att_v1';
+const KB_PACKS_CACHE_KEY = 'jc_kb_packs_v1';
+/** Must match lib/home-snap-guard.js HOME_SNAP_VER (invalidates legacy offline-bar snaps). */
+const HOME_SNAP_VER = 2;
 const HOME_SNAP_MAX_AGE = 12 * 3600e3;
+const HOME_ATT_CACHE_MAX_AGE = 6 * 3600e3;
+const KB_PACKS_CACHE_MAX_AGE = 30 * 24 * 3600e3;
 const HOME_SNAP_MAX_LEN = 480000;
 const DATA_TAB_SNAP_MAX_AGE = 7 * 24 * 3600e3;
 const DATA_TAB_SNAP_MAX_LEN = 380000;
@@ -485,31 +492,87 @@ function persistPredictCache() {
     if (n) LS.set(PRED_CACHE_KEY, { at: Date.now(), data: out });
   } catch (_) {}
 }
+function homeSnapPersistBlocked(html) {
+  if (!html || html.indexOf('home-hero') < 0) return true;
+  if (html.indexOf('focus-card skel') >= 0 || html.indexOf('focus-bar skel') >= 0) return true;
+  if (html.indexOf('sk-line') >= 0 && html.indexOf('hc-item') < 0) return true;
+  if (html.indexOf('ha-skel') >= 0) return true;
+  if (html.indexOf('网络不可用') >= 0) return true;
+  return false;
+}
+function rejectHomeSnapRecord(s) {
+  if (!s || !s.html || s.html.length < 200) return true;
+  if ((s.ver || 0) < HOME_SNAP_VER) return true;
+  if (s.html.indexOf('网络不可用') >= 0) return true;
+  if (s.html.indexOf('ha-skel') >= 0) return true;
+  return false;
+}
+function stripLegacyHomeSnapWarn(html) {
+  if (!html || html.indexOf('网络不可用') < 0) return html;
+  return html.replace(/<div class="warn-bar">[^<]*网络不可用[\s\S]*?<\/div>/gi, '');
+}
 function persistHomeSnap(viewEl) {
   try {
     if (!viewEl || route().name !== 'home') return;
-    const html = viewEl.innerHTML;
+    let html = viewEl.innerHTML;
     if (!html || html.length < 200 || html.length > HOME_SNAP_MAX_LEN) return;
-    if (html.indexOf('home-hero') < 0) return;
-    if (html.indexOf('focus-card skel') >= 0 || html.indexOf('focus-bar skel') >= 0) return;
-    if (html.indexOf('sk-line') >= 0 && html.indexOf('hc-item') < 0) return;
+    if (homeSnapPersistBlocked(html)) return;
     LS.set(HOME_SNAP_KEY, {
       html, y: window.scrollY || 0, sig: tabContentSig('home'),
-      theme: homeTheme(), at: Date.now(), ver: 1
+      theme: homeTheme(), at: Date.now(), ver: HOME_SNAP_VER
     });
   } catch (_) {}
 }
 function readHomeSnap() {
   try {
     const s = LS.get(HOME_SNAP_KEY, null);
-    if (!s || !s.html || s.html.length < 200) return null;
+    if (rejectHomeSnapRecord(s)) return null;
     if (Date.now() - (s.at || 0) > HOME_SNAP_MAX_AGE) return null;
     if (s.theme && s.theme !== homeTheme()) return null;
+    s.html = stripLegacyHomeSnapWarn(s.html);
     return s;
   } catch (_) { return null; }
 }
+function readHomeAttitudeCacheHtml() {
+  try {
+    const c = LS.get(HOME_ATT_CACHE_KEY, null);
+    if (!c || !c.html || c.html.length < 40) return null;
+    if (Date.now() - (c.at || 0) > HOME_ATT_CACHE_MAX_AGE) return null;
+    return c.html;
+  } catch (_) { return null; }
+}
+function persistHomeAttitudeCache(html) {
+  try {
+    if (!html || html.length < 40 || html.indexOf('ha-skel') >= 0) return;
+    LS.set(HOME_ATT_CACHE_KEY, { html, at: Date.now() });
+  } catch (_) {}
+}
+function kbCacheUserKey() {
+  const u = S.user && S.user.id;
+  return u != null ? String(u) : '';
+}
+function hydrateKbPacksCache() {
+  if (!loggedIn()) return;
+  const uid = kbCacheUserKey();
+  if (!uid) return;
+  try {
+    const c = LS.get(KB_PACKS_CACHE_KEY, null);
+    if (!c || String(c.userId) !== uid || !Array.isArray(c.packs)) return;
+    if (Date.now() - (c.at || 0) > KB_PACKS_CACHE_MAX_AGE) return;
+    S.kb = S.kb || {};
+    if (S.kb.packs == null) S.kb.packs = c.packs;
+  } catch (_) {}
+}
+function persistKbPacksCache(packs) {
+  if (!loggedIn() || !Array.isArray(packs)) return;
+  const uid = kbCacheUserKey();
+  if (!uid) return;
+  try { LS.set(KB_PACKS_CACHE_KEY, { userId: uid, packs, at: Date.now() }); } catch (_) {}
+}
 function clearHomeSnap() {
-  try { LS.del(HOME_SNAP_KEY); LS.del(PRED_CACHE_KEY); LS.del(DATA_TAB_SNAP_KEY); } catch (_) {}
+  try {
+    LS.del(HOME_SNAP_KEY); LS.del(PRED_CACHE_KEY); LS.del(DATA_TAB_SNAP_KEY); LS.del(HOME_ATT_CACHE_KEY);
+  } catch (_) {}
 }
 function readDataTabSnap() {
   try {
@@ -772,6 +835,8 @@ async function refreshAccount() {
   try {
     const [me, pl, fv, ms] = await Promise.all([api('/me'), api('/plans'), api('/favorites'), api('/membership/status')]);
     S.user = me.user; LS.set('jc_user', me.user); S.plans = pl.plans; S.favs = fv.favorites; S.membership = ms; persistLists();
+    hydrateKbPacksCache();
+    if (route().name === 'kb') ensureKbRouteData();
   } catch (e) { if (e.status !== 401) console.warn('account refresh failed', e.message); }
 }
 async function loadMembershipCatalog() {
@@ -1441,39 +1506,48 @@ function homeAttitudeCard({ m, pr }) {
 }
 function homeAttitudeSection(ms) {
   let h = `<div class="ha-sec-h"><h2>比赛态度</h2></div>`;
-  const sk = `<div class="ha-feed" id="homeAttitudeFeed">${[1, 2, 3].map(() =>
+  const attCached = readHomeAttitudeCacheHtml();
+  const sk = `<div class="ha-feed" id="homeAttitudeFeed">${attCached || [1, 2, 3].map(() =>
     '<div class="ha-card ha-skel"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line" style="height:36px;margin-top:10px"></div><div class="sk sk-line" style="width:90%;margin-top:8px"></div></div>').join('')}</div>`;
   h += `<div id="homeAttitudeWrap" class="home-attitude-wrap" style="--ha-p:0;--ha-diag:0%">`;
   h += '<div class="ha-pastel" aria-hidden="true"></div><div class="ha-shell" aria-hidden="true"></div>';
   h += sk + '</div>';
   return h;
 }
+function paintHomeAttitudeFeed(feedEl, ms, posts) {
+  if (!posts.length) {
+    if (!ms) return false;
+    const rows = homeAttitudeRows(ms);
+    if (!rows.length) {
+      feedEl.innerHTML = empty('今日暂无可展示的未开赛预测场次，开售后将按信心指数排序出现在这里。',
+        '<button type="button" class="btn ghost sm" data-go="#/results">查看最新开奖</button>', '暂无场次');
+    } else {
+      feedEl.innerHTML = rows.map(homeAttitudeCard).join('');
+    }
+    return true;
+  }
+  const byId = new Map((ms || []).map(m => [String(m.id), m]));
+  feedEl.innerHTML = posts.map((p) => {
+    const m = byId.get(String(p.matchId)) || null;
+    return homeAttitudeCardFromPost(p, m);
+  }).join('');
+  return true;
+}
 async function fillHomePlatformAttitude() {
   const feedEl = document.getElementById('homeAttitudeFeed');
   if (!feedEl || route().name !== 'home') return;
   const ms = S.matches;
+  const cached = readHomeAttitudeCacheHtml();
+  if (cached && !feedEl.querySelector('.ha-card:not(.ha-skel)')) feedEl.innerHTML = cached;
   try {
     const j = await api('/column/feed?tab=attitude&author=platform&limit=12', { timeout: 14000 });
     if (!feedEl.isConnected) return;
     const posts = (j && j.posts) || [];
-    if (!posts.length) {
-      if (!ms) return;
-      const rows = homeAttitudeRows(ms);
-      if (!rows.length) {
-        feedEl.innerHTML = empty('今日暂无可展示的未开赛预测场次，开售后将按信心指数排序出现在这里。',
-          '<button type="button" class="btn ghost sm" data-go="#/results">查看最新开奖</button>', '暂无场次');
-      } else {
-        feedEl.innerHTML = rows.map(homeAttitudeCard).join('');
-      }
-      return;
-    }
-    const byId = new Map((ms || []).map(m => [String(m.id), m]));
-    feedEl.innerHTML = posts.map((p) => {
-      const m = byId.get(String(p.matchId)) || null;
-      return homeAttitudeCardFromPost(p, m);
-    }).join('');
+    if (paintHomeAttitudeFeed(feedEl, ms, posts)) persistHomeAttitudeCache(feedEl.innerHTML);
   } catch (e) {
     if (!feedEl.isConnected) return;
+    if (feedEl.querySelector('.ha-card:not(.ha-skel)')) return;
+    if (cached) { feedEl.innerHTML = cached; return; }
     if (ms) {
       const rows = homeAttitudeRows(ms);
       feedEl.innerHTML = rows.length
@@ -6899,6 +6973,7 @@ async function loadKbPacks(force) {
   if (!force && S.kb && S.kb.packs) return S.kb.packs;
   const j = await api('/kb/packs');
   S.kb.packs = (j && j.packs) || [];
+  persistKbPacksCache(S.kb.packs);
   return S.kb.packs;
 }
 
@@ -7008,6 +7083,7 @@ function ensureKbRouteData() {
   if (!loggedIn() || route().name !== 'kb') return;
   const { sub, id } = kbRouteParts();
   S.kb = S.kb || { selected: {}, intervention: 'medium' };
+  hydrateKbPacksCache();
   const jobs = [];
   if (sub === 'predict' && id) {
     if (S.kb.picker == null) jobs.push(loadKbPicker(false));
@@ -7063,17 +7139,19 @@ function pageKbHome() {
   if (!loggedIn()) {
     return hdr('我的知识库') + `<div class="pad-card"><p class="note">登录后可创建知识包、录入笔记，并在单场预测中勾选使用。</p><button class="btn pri block" data-go="#/login">去登录</button></div>` + foot();
   }
-  const packs = (S.kb && S.kb.packs) || [];
+  const packs = S.kb && S.kb.packs;
+  const list = packs || [];
+  const pending = S.kb && (S.kb.loading || packs == null);
   let h = hdr('我的知识库', { back: true });
   h += `<div class="pad-card kb-intro"><p class="note" style="margin:0">知识包相当于标签；条目为标题+正文。个人预测<strong>不会</strong>写入或影响站内平台简报缓存。</p></div>`;
   h += `<div class="kb-form pad-card"><label>新建知识包<input type="text" name="kbPackName" maxlength="32" placeholder="例如：英超主场、伤停笔记"></label>
     <button type="button" class="btn pri sm" data-act="kbCreatePack">创建</button></div>`;
-  if (S.kb && S.kb.loading && !packs.length) h += skeleton(2);
-  else if (!packs.length) {
+  if (pending && !list.length) h += skeleton(2);
+  else if (!list.length) {
     h += empty('还没有知识包，先创建一个吧。打开知识包可在画布上添加节点。', '', '暂无知识');
   } else {
-    h += `<div class="list-meta" style="margin:8px 12px"><span>${packs.length} 个知识包</span><button type="button" class="btn ghost sm" data-act="kbExport">导出备份</button></div>`;
-    h += `<div class="kb-pack-list">${packs.map(p => `<div class="kb-pack-row">
+    h += `<div class="list-meta" style="margin:8px 12px"><span>${list.length} 个知识包</span><button type="button" class="btn ghost sm" data-act="kbExport">导出备份</button></div>`;
+    h += `<div class="kb-pack-list">${list.map(p => `<div class="kb-pack-row">
       <button type="button" class="kb-pack-main" data-go="#/kb/pack/${p.id}"><b>${esc(p.name)}</b><span>${p.itemCount || 0} 条</span></button>
       <button type="button" class="btn ghost sm" data-act="kbRenamePack" data-id="${p.id}" data-name="${esc(p.name)}">改名</button>
       <button type="button" class="btn ghost sm danger" data-act="kbDeletePack" data-id="${p.id}">删除</button>
@@ -8470,7 +8548,8 @@ function render(opts) {
         const pk = kb.packItems.pack || {};
         return `kb:pack:${kid}:${sig}:${pk.updatedAt}:${pk.layoutPanX}:${pk.layoutPanY}:${pk.layoutZoom}`;
       }
-      return 'kb:' + sub + ':' + kid + ':' + ((kb.packs && kb.packs.length) || 0);
+      const pn = kb.packs == null ? 'u' : String((kb.packs && kb.packs.length) || 0);
+      return 'kb:' + sub + ':' + kid + ':' + pn + ':' + (kb.loading ? 1 : 0);
     }
     return r.name + ':' + String(r.arg || '') + ':' + JSON.stringify(r.query || {});
   })();
@@ -8501,6 +8580,11 @@ function render(opts) {
     applyViewWrapClass(v, r);
     window.scrollTo(0, keep.y || 0);
   } else {
+    if (r.name === 'kb' && loggedIn()) {
+      S.kb = S.kb || { selected: {}, intervention: 'medium' };
+      hydrateKbPacksCache();
+      ensureKbRouteData();
+    }
     const nextHtml = PAGES[r.name](r.arg);
     // 1.9.129: rs-wrap / md-wrap = intentional navy list bg (match-detail hero #1B2A4A)
     applyViewWrapClass(v, r);
@@ -8569,7 +8653,6 @@ function render(opts) {
     else if (parts[0] === 'player' && parts[1]) setTimeout(() => loadPlayerDbPlayer(parts[1]), 0);
     else setTimeout(() => loadPlayerDbHome(false), 0);
   }
-  if (r.name === 'kb' && loggedIn()) ensureKbRouteData();
   if (r.name === 'kb') {
     const kp = String(r.arg || '').split('/').filter(Boolean);
     if (kp[0] === 'pack' && kp[1]) setTimeout(() => mountKbPackCanvas(kp[1]), 0);
@@ -8876,6 +8959,7 @@ document.addEventListener('click', async e => {
         if (j && j.pack) {
           const prev = Array.isArray(S.kb.packs) ? S.kb.packs : [];
           S.kb.packs = [j.pack, ...prev.filter(p => p.id !== j.pack.id)];
+          persistKbPacksCache(S.kb.packs);
         } else {
           S.kb.packs = null;
           await loadKbPacks(true);
@@ -8894,7 +8978,7 @@ document.addEventListener('click', async e => {
       if (!name || name === cur) return;
       try {
         await api('/kb/packs/' + pid, { method: 'PATCH', body: { name } });
-        S.kb.packs = null;
+        await loadKbPacks(true);
         toast('已改名');
         render({ force: true });
       } catch (err) { toast(err.message || '改名失败'); }
@@ -8905,8 +8989,8 @@ document.addEventListener('click', async e => {
       if (!window.confirm('删除知识包将同时删除其中所有条目，确定？')) return;
       try {
         await api('/kb/packs/' + pid, { method: 'DELETE' });
-        S.kb.packs = null;
         S.kb.picker = null;
+        await loadKbPacks(true);
         toast('已删除');
         render({ force: true });
       } catch (err) { toast(err.message || '删除失败'); }
@@ -9471,6 +9555,7 @@ document.addEventListener('submit', async e => {
 // ======================= boot =======================
 loadLocalLists();
 hydrateFromCache(); // 1.9.124: JSON lists
+hydrateKbPacksCache(); // 1.9.158: KB list before first /kb paint
 hydratePredictCache(); // 1.9.125: predict reports so home sig matches snap
 loadDataCenterBootPack(); // 1.9.156: bundled slices for first install / empty LS
 ensurePartnerWatermark();
@@ -9517,6 +9602,7 @@ NAV.push(location.hash || '#/home');
       try {
         fillHomeNews();
         fillHomeColumnAuthors();
+        fillHomePlatformAttitude();
         // Banner: only refresh if track looks stale/empty
         const track = document.getElementById('bnTrack');
         if (track && track.children.length < 2) fillHomeBanners();
