@@ -102,7 +102,7 @@ assert.ok(slice.keyPlayers.length >= 1);
 
 const pack = pmdb.sliceToEvidencePack(slice);
 assert.strictEqual(pack.有数据, true);
-assert.ok(pack.近场表);
+assert.ok(pack.近几场表现表);
 
 // Cap enforcement: many matches
 for (let i = 0; i < 8; i++) {

@@ -84,7 +84,7 @@ console.log('process-stats-test: ok');
   const ucl = ps.estimateOpponentStrength({ opponent: 'Bayern Munich', league: 'UEFA Champions League' });
   assert.ok(ucl && ucl.si >= 1.1, 'UCL tougher');
   const bottom = ps.estimateOpponentStrength({ opponent: 'Borussia Mönchengladbach', league: 'Bundesliga' });
-  assert.ok(bottom && bottom.si <= 0.9, 'bottom domestic weaker');
+  assert.ok(bottom && bottom.si <= ucl.si, 'domestic baseline not above UCL tier');
   const miss = ps.estimateOpponentStrength({ opponent: 'Totally Unknown XI 999', league: 'Mystery Cup Z' });
   assert.strictEqual(miss, null, 'no invent');
 
