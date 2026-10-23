@@ -361,6 +361,7 @@ const S = {
   searchQ: '', searchTab: 'all', searchCache: null,
   kb: { packs: null, picker: null, packItems: null, packId: null, selected: {}, intervention: 'medium', lastResult: null, loading: false, packsError: '', packItemsError: '' },
 };
+globalThis.S = S;
 const loggedIn = () => !!S.token;
 function loadLocalLists() {
   if (loggedIn()) {
@@ -1080,6 +1081,7 @@ function openPlanSheet() {
     <button class="btn pri block" data-act="savePlan">保存方案</button></div>`;
 }
 function closeSheet() { $('#sheet').classList.add('hidden'); $('#sheet').innerHTML = ''; }
+globalThis.closeSheet = closeSheet;
 
 // ======================= router =======================
 /** 1.9.146: top feed tabs (部落/头条/开奖) + bottom tabs (首页/赛程/预测/数据). */
@@ -1976,42 +1978,35 @@ function pageTribeClub(id) {
   if (!t) {
     return hdr('球队部落', { back: true }) + empty('球队信息加载中或暂无数据。', '<button type="button" class="btn ghost sm" data-go="#/tribe">返回部落</button>', '未找到球队') + foot();
   }
-  const crest = badge(t.nameZh, 'lg tribe-club-crest', t.logo);
-  const folOn = isTribeFollow(t.tribeId);
-  const folBtn = tribeJoinBtnHtml(t, folOn);
-  const sub = [t.leagueZh, t.points > 0 ? `积分榜 ${t.points} 分` : ''].filter(Boolean).join(' · ');
   const accent = tribeHeroAccent(t.leagueKey);
-  const logoRaw = t.logo ? String(t.logo) : '';
-  const heroCls = 'tribe-club-hero hero hero--edge' + (logoRaw ? ' has-logo' : '');
-  const logoCss = logoRaw.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  const heroStyle = `--tribe-accent:${accent};` + (logoRaw ? `--tribe-logo:url("${logoCss}")` : '');
-  const nav = matchEdgeNavBar(folBtn);
-  S.tribeFeedTeamMeta = S.tribeFeedTeamMeta || {};
+  const crestSm = badge(t.nameZh, 'sm tribe-club-bar-crest', t.logo);
   const teamId = t.teamId || (String(t.tribeId || '').includes('-') ? String(t.tribeId).split('-').slice(1).join('-') : '');
-  S.tribeFeedTeamMeta[t.tribeId] = { teamId, nameZh: t.nameZh };
+  const teamGo = teamId ? `#/team/${encodeURIComponent(teamId)}?league=${encodeURIComponent(t.leagueKey || '')}` : '';
+  S.tribeFeedTeamMeta = S.tribeFeedTeamMeta || {};
+  S.tribeFeedTeamMeta[t.tribeId] = { teamId, nameZh: t.nameZh, leagueKey: t.leagueKey || '' };
+  S.tribeFeedUi = S.tribeFeedUi || { tab: 'latest', sort: 'reply' };
+  const feedShell = typeof JCTribeFeed !== 'undefined' ? JCTribeFeed.clubFeedShell(t.tribeId, S.tribeFeedUi) : '';
   setTimeout(() => {
     if (typeof JCTribeFeed !== 'undefined' && route().name === 'tribe-club' && String(route().arg) === String(t.tribeId)) {
       JCTribeFeed.mountClubFeed(t.tribeId, S.tribeFeedTeamMeta[t.tribeId]);
     }
   }, 0);
-  return `<div class="tribe-club-page">
-    <section class="${heroCls}" style="${heroStyle}">
-      ${nav}
-      <div class="tribe-club-hero-body">
-        ${crest}
-        <div class="tribe-club-hero-text">
-          <h1 class="tribe-club-hero-name">${esc(t.nameZh)}</h1>
-          ${sub ? `<p class="tribe-club-hero-sub">${esc(sub)}</p>` : ''}
-        </div>
+  return `<div class="tribe-club-page" style="--tribe-accent:${accent}">
+    <header class="tribe-club-bar" aria-label="${esc(t.nameZh)}圈子">
+      <button type="button" class="tribe-club-bar-ic" data-act="back" aria-label="返回">${I.back}</button>
+      <div class="tribe-club-bar-title">${crestSm}<span class="tribe-club-bar-name">${esc(t.nameZh)}</span></div>
+      <div class="tribe-club-bar-r">
+        ${teamGo ? `<button type="button" class="tribe-club-bar-ic" data-go="${teamGo}" aria-label="球队资料">${I.shield}</button>` : ''}
+        <button type="button" class="tribe-club-bar-ic" data-act="tribeClubMore" data-tribe="${esc(t.tribeId)}" aria-label="更多">${I.gear}</button>
       </div>
-    </section>
-    <section class="tribe-feed-sec" id="tribe-feed-root">
-      <div class="tribe-feed-hd">
-        <h3 class="tribe-feed-t">动态</h3>
-        ${typeof JCTribeFeed !== 'undefined' ? JCTribeFeed.composeBar(t.tribeId) : ''}
-      </div>
-      <div id="tribe-feed-list" class="tribe-feed-list"><div class="spinner" style="margin:24px auto"></div></div>
-    </section>
+    </header>
+    ${feedShell}
+    <div class="tribe-club-fabs" aria-label="快捷操作">
+      <button type="button" class="tribe-fab tribe-fab--post" data-act="tribeComposeOpen" data-tribe="${esc(t.tribeId)}">
+        <span class="tribe-fab-ic">${I.pen}</span><span class="tribe-fab-lab">发贴</span>
+      </button>
+      <button type="button" class="tribe-fab tribe-fab--refresh" data-act="tribeFeedRefresh" data-tribe="${esc(t.tribeId)}" aria-label="刷新">${I.refresh}</button>
+    </div>
   </div>` + foot();
 }
 function pageTribePost(id) {
@@ -9099,7 +9094,8 @@ function render(opts) {
     if (r.name === 'tribe-club') {
       const tid = String(r.arg || '');
       const fc = (S.tribeFeedCache && S.tribeFeedCache[tid] && S.tribeFeedCache[tid].length) || 0;
-      return 'tribe-club:' + tid + ':' + (isTribeFollow(tid) ? 1 : 0) + ':' + fc;
+      const ui = S.tribeFeedUi || {};
+      return 'tribe-club:' + tid + ':' + (isTribeFollow(tid) ? 1 : 0) + ':' + fc + ':' + (ui.tab || 'latest') + ':' + (ui.sort || 'reply');
     }
     if (r.name === 'tribe-post') return 'tribe-post:' + String(r.arg || '');
     return r.name + ':' + String(r.arg || '') + ':' + JSON.stringify(r.query || {});
@@ -9303,6 +9299,21 @@ document.addEventListener('click', async e => {
       return render({ force: true });
     }
     case 'tribeFollow': return toggleTribeFollow(el.dataset.id);
+    case 'tribeClubMore': {
+      const tid = el.dataset.tribe || '';
+      const tm = tribeById(tid);
+      if (!tm) return toast('球队信息加载中');
+      const sh = $('#sheet');
+      if (!sh) return;
+      const folOn = isTribeFollow(tid);
+      sh.innerHTML = `<div class="sheet tribe-compose-sheet">
+        <div class="sheet-hd"><h3>${esc(tm.nameZh)}</h3><button type="button" class="btn ghost sm" data-act="closeSheet">关闭</button></div>
+        <p class="note" style="margin:0 0 12px">${esc(tm.leagueZh || '')}${tm.points > 0 ? ' · 积分榜 ' + tm.points + ' 分' : ''}</p>
+        ${tribeJoinBtnHtml(tm, folOn)}
+      </div>`;
+      sh.classList.remove('hidden');
+      return;
+    }
     case 'tribeReload': {
       S.tribeCat = null; S.tribeCatBusy = false;
       invalidateTabKeep('tribe');
