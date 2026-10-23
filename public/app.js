@@ -1656,48 +1656,54 @@ function ensureLiveScorePoll(ids, hasLive) {
   }, 50000);
 }
 
-function pageSchedule() {
-  let h = '';
-  const ms = (S.schedule && S.schedule.length) ? S.schedule : S.matches, rs = S.results;
-  if (!ms) return h + `<div class="dstrip" style="height:50px"></div>` + skeleton(4);
-  // Group by 竞彩 issue date (businessDate), not kickoff calendar date.
+/** Shared schedule day model (date strip + league chips + list body). */
+function scheduleDayModel() {
+  const ms = (S.schedule && S.schedule.length) ? S.schedule : S.matches;
+  const rs = S.results;
+  if (!ms) return null;
   const dates = [...new Set([...(rs || []).map(issueDate), ...ms.map(issueDate)])].sort();
   const today = bjDate(0);
-  if (!S.schDate || !dates.includes(S.schDate)) S.schDate = dates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || dates.find(d => d >= today) || dates[dates.length - 1];
+  if (!S.schDate || !dates.includes(S.schDate)) {
+    S.schDate = dates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || dates.find(d => d >= today) || dates[dates.length - 1];
+  }
   const mode = schModeOf();
-  h += dateStrip(dates, S.schDate, 'sdate');
   const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
   const dayAll = [...ms.filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)).map(m => ({ ...m, _t: 'm' })), ...dayRes.map(r => ({ ...r, _t: 'r' }))];
-  let classifiedDay = dayAll.map(classifyScoreRow);
+  const classifiedDay = dayAll.map(classifyScoreRow);
   let modeRows = schModeFilterRows(classifiedDay, mode);
   if (S.schLeague !== '全部' && !modeRows.some(x => x.league === S.schLeague)) S.schLeague = '全部';
-  h += leagueChips(modeRows, S.schLeague, 'slg', { strong: true });
   const gapInfo = S.ssrc && S.ssrc.meta && S.ssrc.meta.gaps && S.ssrc.meta.gaps[S.schDate];
-  if (gapInfo && gapInfo.missing && gapInfo.missing.length) {
-    h += `<div class="sch-filter-banner warn" role="status">
-      <span>编号缺口：当日缺 ${gapInfo.missing.map(n => '「' + n + '」').join('、')}（已显示 ${gapInfo.have}/${gapInfo.max}）。下拉刷新或稍后再试。</span>
-    </div>`;
-  }
-  if (typeof console !== 'undefined' && console.debug) {
-    console.debug('[schedule]', S.schDate, 'src=', dayAll.length, 'mode=', mode, 'shown=', modeRows.length, 'gaps=', gapInfo || null);
-  }
-
-  // Kick off live-score fetch for the day's ids (async → re-render)
-  const allDayIds = classifiedDay.map(x => String(x.id));
-  const needFetch = !S.liveScoresAt || Date.now() - S.liveScoresAt > 35000;
-  if (needFetch && allDayIds.length) {
-    setTimeout(async () => {
-      await loadLiveScores(allDayIds);
-      if (route().name === 'schedule') render();
-    }, 0);
-  }
-
   const counts = {
     all: classifiedDay.length,
     live: classifiedDay.filter(x => x._kind === 'live').length,
     ns: classifiedDay.filter(x => x._kind === 'ns').length,
     ft: classifiedDay.filter(x => x._kind === 'ft').length,
   };
+  return { ms, rs, dates, mode, dayAll, classifiedDay, modeRows, gapInfo, counts };
+}
+
+function scheduleListRows(modeRows) {
+  let rows = modeRows.filter(x => S.schLeague === '全部' || x.league === S.schLeague);
+  rows.sort((a, b) => {
+    const rank = k => (k === 'live' ? 0 : k === 'ns' ? 1 : 2);
+    const d = rank(a._kind) - rank(b._kind);
+    if (d) return d;
+    if (a._kind === 'live') return (b._minute || 0) - (a._minute || 0) || kickoff(a) - kickoff(b);
+    if (a._kind === 'ns') return kickoff(a) - kickoff(b);
+    return kickoff(b) - kickoff(a);
+  });
+  return rows;
+}
+
+function scheduleBodyHtml(model) {
+  if (!model) return '';
+  const { mode, modeRows, gapInfo, counts, classifiedDay } = model;
+  let h = '';
+  if (gapInfo && gapInfo.missing && gapInfo.missing.length) {
+    h += `<div class="sch-filter-banner warn" role="status">
+      <span>编号缺口：当日缺 ${gapInfo.missing.map(n => '「' + n + '」').join('、')}（已显示 ${gapInfo.have}/${gapInfo.max}）。下拉刷新或稍后再试。</span>
+    </div>`;
+  }
   const modeN = modeRows.length;
   const hint = mode === '关注'
     ? (S.favs.length ? `已关注 ${modeN} 场` : '点进详情可关注比赛')
@@ -1709,29 +1715,14 @@ function pageSchedule() {
     <button type="button" class="btn ghost sm" data-act="schRefresh">${S.liveScoresLoading ? '刷新中…' : '刷新'}</button>
   </div>`;
   h += warnBar();
-
-  let rows = modeRows.filter(x => S.schLeague === '全部' || x.league === S.schLeague);
-  // Sort: live first (by minute desc), then NS by kickoff, then FT by kickoff desc
-  rows.sort((a, b) => {
-    const rank = k => (k === 'live' ? 0 : k === 'ns' ? 1 : 2);
-    const d = rank(a._kind) - rank(b._kind);
-    if (d) return d;
-    if (a._kind === 'live') return (b._minute || 0) - (a._minute || 0) || kickoff(a) - kickoff(b);
-    if (a._kind === 'ns') return kickoff(a) - kickoff(b);
-    return kickoff(b) - kickoff(a);
-  });
-
-  ensureLiveScorePoll(allDayIds, counts.live > 0);
-
+  const rows = scheduleListRows(modeRows);
   h += `<div class="list-meta"><span>${esc(S.schDate)} ${rows[0] ? issueWeek(rows[0]) : wd(S.schDate)} · ${esc(mode)}</span><span>${rows.length ? `${rows.length} 场` : '0 场'}</span></div>`;
-
   if (!rows.length) {
-    const tip = mode === '关注'
+    h += mode === '关注'
       ? empty('在赛事详情点击「关注」后，已关注场次会出现在这里。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="未开始">查看未开始</button>', '暂无关注')
       : mode === '已结束'
         ? empty('该日期暂无已结束场次，可切换到「未开始」查看待赛。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="未开始">查看未开始</button>', '暂无场次')
         : empty('该日期暂无未开始场次，可切换日期或查看「已结束」。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="已结束">查看已结束</button>', '暂无场次');
-    h += tip;
   } else if (S.schLeague === '全部') {
     const groups = [];
     const map = new Map();
@@ -1747,6 +1738,71 @@ function pageSchedule() {
     }).join('');
   } else {
     h += `<div class="ls-list">${rows.map(scoreCard).join('')}</div>`;
+  }
+  if (typeof console !== 'undefined' && console.debug) {
+    console.debug('[schedule]', S.schDate, 'mode=', mode, 'shown=', modeRows.length, 'league=', S.schLeague, 'gaps=', gapInfo || null);
+  }
+  ensureLiveScorePoll(classifiedDay.map(x => String(x.id)), counts.live > 0);
+  return h;
+}
+
+function applySchLeagueFromChip(el) {
+  const pick = String((el && (el.getAttribute('data-slg') || el.dataset.slg)) || '').trim();
+  if (!pick) return false;
+  const next = (pick === S.schLeague && pick !== '全部') ? '全部' : pick;
+  if (next === S.schLeague) return false;
+  S.schLeague = next;
+  return true;
+}
+
+/** 1.9.154: patch schedule league chips + list in place (avoid TAB_KEEP / render no-op flash). */
+function softPatchSchedule() {
+  try {
+    if (route().name !== 'schedule') return false;
+    const model = scheduleDayModel();
+    if (!model) return false;
+    const v = document.getElementById('view');
+    if (!v) return false;
+    const chips = v.querySelector('.league-chips');
+    if (!chips) return false;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = leagueChips(model.modeRows, S.schLeague, 'slg', { strong: true });
+    const nextChips = wrap.firstElementChild;
+    if (nextChips) chips.replaceWith(nextChips);
+    let body = document.getElementById('schBody');
+    if (!body) {
+      body = document.createElement('div');
+      body.id = 'schBody';
+      body.className = 'sch-body';
+      const footEl = v.querySelector('.foot');
+      if (footEl) v.insertBefore(body, footEl);
+      else v.appendChild(body);
+    }
+    body.innerHTML = scheduleBodyHtml(model);
+    try {
+      render.lastSig = tabContentSig('schedule');
+      render.last = location.hash;
+    } catch (_) {}
+    saveTabKeep('schedule', v);
+    return true;
+  } catch (_) { return false; }
+}
+
+function pageSchedule() {
+  let h = '';
+  const model = scheduleDayModel();
+  if (!model) return h + `<div class="dstrip" style="height:50px"></div>` + skeleton(4);
+  const { dates, modeRows, classifiedDay } = model;
+  h += dateStrip(dates, S.schDate, 'sdate');
+  h += leagueChips(modeRows, S.schLeague, 'slg', { strong: true });
+  h += `<div id="schBody" class="sch-body">${scheduleBodyHtml(model)}</div>`;
+  const allDayIds = classifiedDay.map(x => String(x.id));
+  const needFetch = !S.liveScoresAt || Date.now() - S.liveScoresAt > 35000;
+  if (needFetch && allDayIds.length) {
+    setTimeout(async () => {
+      await loadLiveScores(allDayIds);
+      if (route().name === 'schedule') render();
+    }, 0);
   }
   return h + foot();
 }
@@ -8360,10 +8416,17 @@ document.addEventListener('click', async e => {
   if (d.key) return toggleSel(d.mid, d.key);
   if (d.type) { const n = +d.type; S.types = S.types.includes(n) ? S.types.filter(x => x !== n) : [...S.types, n]; if (!S.types.length) S.types = [n]; return openPlanSheet(); }
   if (d.mult) { S.mult = Math.max(1, Math.min(99, S.mult + +d.mult)); return openPlanSheet(); }
-  if (d.sdate) { S.schDate = d.sdate; return render(); }
+  if (d.sdate) {
+    S.schDate = d.sdate;
+    invalidateTabKeep('schedule');
+    if (softPatchSchedule()) { syncTopChrome('schedule'); return; }
+    return render({ force: true });
+  }
   if (d.slg) {
-    S.schLeague = (d.slg === S.schLeague && d.slg !== '全部') ? '全部' : d.slg;
-    return render();
+    if (!applySchLeagueFromChip(el)) return;
+    invalidateTabKeep('schedule');
+    if (softPatchSchedule()) { syncTopChrome('schedule'); return; }
+    return render({ force: true });
   }
   if (d.rdate) { S.rsDate = d.rdate; if (softPatchResults()) return; return render({ force: true }); }
   if (d.rlg) { S.rsLeague = d.rlg; if (softPatchResults()) return; return render({ force: true }); }
@@ -8380,7 +8443,9 @@ document.addEventListener('click', async e => {
     }
     case 'schMode': {
       setSchMode(el.dataset.mode || '未开始');
-      return render();
+      invalidateTabKeep('schedule');
+      if (softPatchSchedule()) { syncTopChrome('schedule'); return; }
+      return render({ force: true });
     }
     case 'schRefresh': {
       S.liveScoresAt = 0;
