@@ -2166,7 +2166,8 @@ function scheduleDataCenterPrefetch() {
     }, delayMs);
   };
   const fastKinds = ['standings', 'clubvalues', 'topscorers', 'playervalues'];
-  arm('startup-fast', 2e3, fastKinds);
+  arm('startup-fast', 500, fastKinds);
+  arm('startup-fast-2', 2e3, fastKinds);
   arm('startup-full', 10e3);
   arm('startup-after-espn', 48e3);
 }

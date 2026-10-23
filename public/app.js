@@ -440,14 +440,18 @@ function hydrateFromCache() {
         if (v && v.ok !== false && !S.dataCache[k]) S.dataCache[k] = Object.assign({}, v, { fromCache: true });
       }
     }
+    hydrateDataTabPrefsFromSnap();
   } catch (_) {}
 }
 
 /** 1.9.125: persist last complete home DOM + slim predict cache (survives process death; TAB_KEEP does not). */
 const HOME_SNAP_KEY = 'jc_home_snap_v1';
 const PRED_CACHE_KEY = 'jc_pred_cache_v1';
+const DATA_TAB_SNAP_KEY = 'jc_data_snap_v1';
 const HOME_SNAP_MAX_AGE = 12 * 3600e3;
 const HOME_SNAP_MAX_LEN = 480000;
+const DATA_TAB_SNAP_MAX_AGE = 7 * 24 * 3600e3;
+const DATA_TAB_SNAP_MAX_LEN = 380000;
 
 /** Full brief has html; slim LS hydrate only has predict for list speakMode (1.9.127). */
 function predictReportFull(j) {
@@ -505,7 +509,47 @@ function readHomeSnap() {
   } catch (_) { return null; }
 }
 function clearHomeSnap() {
-  try { LS.del(HOME_SNAP_KEY); LS.del(PRED_CACHE_KEY); } catch (_) {}
+  try { LS.del(HOME_SNAP_KEY); LS.del(PRED_CACHE_KEY); LS.del(DATA_TAB_SNAP_KEY); } catch (_) {}
+}
+function readDataTabSnap() {
+  try {
+    const s = LS.get(DATA_TAB_SNAP_KEY, null);
+    if (!s || !s.dcHtml || s.dcHtml.length < 80) return null;
+    if (Date.now() - (s.at || 0) > DATA_TAB_SNAP_MAX_AGE) return null;
+    return s;
+  } catch (_) { return null; }
+}
+function persistDataTabSnap(viewEl) {
+  try {
+    if (!viewEl || route().name !== 'data') return;
+    const body = viewEl.querySelector('#dcBody');
+    if (!body) return;
+    const html = body.innerHTML;
+    if (!html || html.length < 120 || html.length > DATA_TAB_SNAP_MAX_LEN) return;
+    if (html.indexOf('sk-card') >= 0 && html.indexOf('dc-table') < 0 && html.indexOf('dc-scorer') < 0 && html.indexOf('dc-mv') < 0) return;
+    LS.set(DATA_TAB_SNAP_KEY, {
+      dcHtml: html,
+      lg: dataLeagueOf(),
+      kind: dataKindOf(),
+      sec: dataSectionOf(),
+      at: Date.now(),
+      ver: 1,
+    });
+  } catch (_) {}
+}
+function hydrateDataTabPrefsFromSnap() {
+  try {
+    const s = readDataTabSnap();
+    if (!s) return;
+    if (s.lg) S.dataLeague = s.lg;
+    if (s.sec === 'team' || s.sec === 'star') S.dataSection = s.sec;
+    if (s.kind) S.dataKind = s.kind;
+  } catch (_) {}
+}
+function dataTabSnapBodyHtml(lg, kind) {
+  const snap = readDataTabSnap();
+  if (!snap || snap.lg !== lg || snap.kind !== kind || snap.sec !== dataSectionOf()) return null;
+  return snap.dcHtml;
 }
 function bootShellEl() {
   return document.getElementById('boot-shell');
@@ -601,6 +645,66 @@ function warmDataCenterPrefetch(lg, kind) {
     const key = l + ':' + kind;
     if (!dataCacheRenderable(ensureDataCacheSlice(key), kind)) scheduleDataCenterRefresh(l, kind, { urgent: false });
   }
+}
+/** 1.9.156: on cold start, warm missing slices (staggered — avoid 30 parallel hits / networkidle hangs). */
+function bootWarmAllDataCenter() {
+  try {
+    const secKinds = ['standings', 'topscorers', 'topassists', 'clubvalues', 'playervalues'];
+    let delay = 200;
+    for (const l of DATA_DC_PREFETCH_LEAGUES) {
+      for (const k of secKinds) {
+        const key = l + ':' + k;
+        if (dataCacheRenderable(ensureDataCacheSlice(key), k)) continue;
+        const d = delay;
+        delay += 180;
+        setTimeout(() => scheduleDataCenterRefresh(l, k, { urgent: false }), d);
+      }
+    }
+  } catch (_) {}
+}
+let _bootPackInflight = null;
+function mergeBootPackSlice(key, payload) {
+  if (!key || !payload || payload.ok === false) return;
+  const kind = String(key).split(':')[1] || 'standings';
+  if (dataCacheRenderable(ensureDataCacheSlice(key), kind)) return;
+  if (!dataCacheRenderable(payload, kind)) return;
+  const row = Object.assign({}, payload, { fromCache: true, bootPack: true });
+  S.dataCache = S.dataCache || {};
+  S.dataCache[key] = row;
+  persistDataCacheSlice(key, row);
+}
+function loadDataCenterBootPack() {
+  if (_bootPackInflight) return _bootPackInflight;
+  _bootPackInflight = (async () => {
+    try {
+      const base = (typeof CFG !== 'undefined' && CFG.apiBase) ? CFG.apiBase : '';
+      const r = await fetch(base + '/data-center-boot.json', { cache: 'force-cache' });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!j || !j.slices || typeof j.slices !== 'object') return;
+      for (const [key, payload] of Object.entries(j.slices)) mergeBootPackSlice(key, payload);
+      try {
+        if (route().name === 'data') {
+          const lg = dataLeagueOf(), kind = dataKindOf();
+          if (dataCacheRenderable(ensureDataCacheSlice(lg + ':' + kind), kind)) {
+            if (!softPatchDataBody(lg, kind)) render({ force: true });
+          }
+        }
+      } catch (_) {}
+    } catch (_) {}
+  })();
+  return _bootPackInflight;
+}
+function prefetchDcImages(root) {
+  try {
+    const scope = root || document.getElementById('view') || document;
+    const urls = Array.from(scope.querySelectorAll('.dc-avatar img, .dc-table .badge.crest img, .dc-scorers .badge.crest img'))
+      .map((img) => img.currentSrc || img.src).filter(Boolean).slice(0, 28);
+    if (!urls.length) return;
+    const run = () => urls.forEach((u) => { try { const im = new Image(); im.decoding = 'async'; im.src = u; } catch (_) {} });
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 2500 });
+    else setTimeout(run, 40);
+  } catch (_) {}
 }
 
 function persistDataCacheSlice(key, payload) {
@@ -2523,7 +2627,7 @@ function renderScorersList(payload, kind) {
     const initial = esc([...(r.playerZh || r.player || '?')][0] || '?');
     const altPhoto = r.photoAlt || '';
     const photo = r.photo
-      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><img alt="" width="88" height="88" decoding="async" src="${esc(API + '/api/logo?url=' + encodeURIComponent(r.photo))}" onerror="var p=this.parentNode;if(!p)return;if(p.dataset.alt&&!p.dataset.retried){p.dataset.retried=1;this.src='${esc(API)}/api/logo?url='+encodeURIComponent(p.dataset.alt);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');p.textContent=p.dataset.letter||'?';"></span>`
+      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><span class="dc-av-fallback" aria-hidden="true">${initial}</span><img alt="" width="88" height="88" decoding="async" loading="lazy" src="${esc(API + '/api/logo?url=' + encodeURIComponent(r.photo))}" onerror="var p=this.parentNode;if(!p)return;if(p.dataset.alt&&!p.dataset.retried){p.dataset.retried=1;this.src='${esc(API)}/api/logo?url='+encodeURIComponent(p.dataset.alt);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');this.remove();"></span>`
       : `<span class="dc-avatar letter">${initial}</span>`;
     const teamLogo = r.teamLogo ? badge(r.teamZh || r.team, 'sm', r.teamLogo) : badge(r.teamZh || r.team, 'sm');
     const primary = isMv
@@ -2596,6 +2700,14 @@ function pageData() {
   const cacheKey = lg + ':' + kind;
   const cached = ensureDataCacheSlice(cacheKey);
   if (!dataCacheRenderable(cached, kind)) {
+    const snapBody = dataTabSnapBodyHtml(lg, kind);
+    if (snapBody) {
+      h += `<div class="dc-body" id="dcBody">${snapBody}</div>`;
+      h += foot();
+      scheduleDataCenterRefresh(lg, kind, { urgent: false });
+      warmDataCenterPrefetch(lg, kind);
+      return h;
+    }
     h += `<div class="dc-body" id="dcBody">${skeleton(3)}</div>`;
     h += foot();
     scheduleDataCenterRefresh(lg, kind, { urgent: true });
@@ -2725,7 +2837,10 @@ function softPatchDataBody(lg, kind) {
     const cached = ensureDataCacheSlice(lg + ':' + kind);
     box.innerHTML = dataBodyInnerHtml(cached, kind);
     try { render.lastSig = tabContentSig('data'); } catch (_) {}
-    saveTabKeep('data', document.getElementById('view'));
+    const v = document.getElementById('view');
+    saveTabKeep('data', v);
+    persistDataTabSnap(v);
+    prefetchDcImages(box);
     return true;
   } catch (_) { return false; }
 }
@@ -8190,6 +8305,7 @@ function saveTabKeep(name, viewEl) {
     // Skip pure-skeleton data shells so we don't "keep" a flash forever
     if (name === 'data' && html.indexOf('sk-card') >= 0 && html.indexOf('dc-table') < 0 && html.indexOf('dc-scorer') < 0 && html.indexOf('dc-mv') < 0) return;
     TAB_KEEP[name] = { html, y: window.scrollY, sig: tabContentSig(name), at: Date.now() };
+    if (name === 'data') persistDataTabSnap(viewEl);
   } catch (_) {}
 }
 
@@ -8461,6 +8577,7 @@ function render(opts) {
     const lg = dataLeagueOf(), kind = dataKindOf();
     ensureDataCacheSlice(lg + ':' + kind);
     if (!canRestore) warmDataCenterPrefetch(lg, kind);
+    setTimeout(() => prefetchDcImages(document.getElementById('dcBody') || v), 0);
   }
   tickClock();
 }
@@ -9353,6 +9470,7 @@ document.addEventListener('submit', async e => {
 loadLocalLists();
 hydrateFromCache(); // 1.9.124: JSON lists
 hydratePredictCache(); // 1.9.125: predict reports so home sig matches snap
+loadDataCenterBootPack(); // 1.9.156: bundled slices for first install / empty LS
 ensurePartnerWatermark();
 try { document.documentElement.setAttribute('data-boot', '1'); } catch (_) {}
 window.__partnerGateReady = checkPartnerGate().then((ok) => {
@@ -9412,6 +9530,7 @@ NAV.push(location.hash || '#/home');
 window.__partnerGateReady.then((ok) => {
   if (!ok) return;
   // Soft: render() no-ops when content signature unchanged after network reload
+  loadDataCenterBootPack().finally(() => bootWarmAllDataCenter());
   reloadData().then(() => {
     const r = route();
     if (r.name === 'home' && bootShellHeld() && !(S.matches && S.matches.length) && !window.__homeSnapRestored) {
