@@ -9049,6 +9049,7 @@ function viewWrapClass(r, viewEl) {
   if (r.name === 'tribe') wrap += ' view--tribe-hub';
   if (r.name === 'tribe-club') wrap += ' view--tribe-club';
   if (r.name === 'tribe-compose') wrap += ' view--tribe-compose';
+  if (r.name === 'tribe-post') wrap += ' view--tribe-post';
   return 'view' + (isTab ? '' : ' sub') + wrap;
 }
 

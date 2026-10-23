@@ -25,6 +25,13 @@ async function call(method, path, body, token) {
     r = await call('POST', '/tribe/' + tribeId + '/posts', { body: '测试圈内发帖 ' + Date.now() }, tok);
     ok(r.s === 201 && r.j.post && r.j.post.id, 'create text post');
     const postId = r.j.post.id;
+    const imgBuf = Buffer.alloc(210 * 1024, 0xff);
+    imgBuf[0] = 0xff; imgBuf[1] = 0xd8;
+    r = await call('POST', '/tribe/upload', { mime: 'image/jpeg', data: imgBuf.toString('base64') }, tok);
+    ok(r.s === 200 && r.j.url && String(r.j.url).includes('/api/tribe/media/'), 'upload ~210KB jpeg');
+    const imgUrl = r.j.url;
+    r = await call('POST', '/tribe/' + tribeId + '/posts', { body: '图文帖 ' + Date.now(), images: [imgUrl] }, tok);
+    ok(r.s === 201 && r.j.post && r.j.post.images && r.j.post.images.length === 1, 'create image post');
     r = await call('GET', '/tribe/posts/' + postId, undefined, tok);
     ok(r.s === 200 && r.j.post.body.includes('测试圈内发帖'), 'get post');
     r = await call('POST', '/tribe/posts/' + postId + '/replies', { body: '沙发' }, tok);
