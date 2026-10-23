@@ -27,9 +27,12 @@ const laid = store.updatePackLayout(userId, pack.pack.id, {
   nodes: { [item.item.id]: { x: 40, y: 50 } },
 });
 assert.ok(laid.pack && laid.pack.layoutPanX === 12);
-const listed = store.listItems(userId, pack.pack.id);
+const listed = store.listItems(userId, pack.pack.id, { includeBody: true });
 assert.strictEqual(listed.items.find(x => x.id === item.item.id).posX, 40);
 assert.strictEqual(listed.items.find(x => x.id === item.item.id).posY, 50);
+const metaList = store.listItems(userId, pack.pack.id);
+assert.strictEqual(metaList.items[0].body, undefined, 'default listItems is meta-only');
+assert.ok(metaList.items[0].bodyPreview, 'meta list includes preview');
 
 const match = {
   id: '999001',

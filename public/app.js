@@ -303,8 +303,12 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 
 // ======================= API =======================
 class ApiError extends Error { constructor(msg, status, extra) { super(msg); this.status = status; if (extra && typeof extra === 'object') Object.assign(this, extra); } }
-async function api(path, { method = 'GET', body, timeout = 12000, headers: extraHeaders } = {}) {
+async function api(path, { method = 'GET', body, timeout = 12000, headers: extraHeaders, signal: outerSignal } = {}) {
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), timeout);
+  if (outerSignal) {
+    if (outerSignal.aborted) { clearTimeout(t); throw new ApiError('网络超时，请稍后重试', 0); }
+    outerSignal.addEventListener('abort', () => { try { ctrl.abort(); } catch (_) {} }, { once: true });
+  }
   const headers = Object.assign({}, partnerHeaders(), extraHeaders || {}); if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (S.token) headers.Authorization = 'Bearer ' + S.token;
   if (S.playerDbKey && String(path || '').startsWith('/player-db')) headers['X-Player-Db-Key'] = S.playerDbKey;
@@ -451,6 +455,7 @@ const PRED_CACHE_KEY = 'jc_pred_cache_v1';
 const DATA_TAB_SNAP_KEY = 'jc_data_snap_v1';
 const HOME_ATT_CACHE_KEY = 'jc_home_att_v1';
 const KB_PACKS_CACHE_KEY = 'jc_kb_packs_v1';
+const KB_ITEM_BODY_CACHE_KEY = 'jc_kb_item_body_v1';
 /** Must match lib/home-snap-guard.js HOME_SNAP_VER (invalidates legacy offline-bar snaps). */
 const HOME_SNAP_VER = 2;
 const HOME_SNAP_MAX_AGE = 12 * 3600e3;
@@ -568,6 +573,35 @@ function persistKbPacksCache(packs) {
   const uid = kbCacheUserKey();
   if (!uid) return;
   try { LS.set(KB_PACKS_CACHE_KEY, { userId: uid, packs, at: Date.now() }); } catch (_) {}
+}
+function readKbItemBodyCache(itemId, updatedAt) {
+  const uid = kbCacheUserKey();
+  if (!uid || itemId == null) return null;
+  try {
+    const all = LS.get(KB_ITEM_BODY_CACHE_KEY, {}) || {};
+    const row = all[String(itemId)];
+    if (!row || String(row.userId) !== uid) return null;
+    if (updatedAt != null && row.updatedAt != null && row.updatedAt !== updatedAt) return null;
+    return row.body != null ? String(row.body) : null;
+  } catch (_) { return null; }
+}
+function persistKbItemBodyCache(itemId, body, updatedAt) {
+  const uid = kbCacheUserKey();
+  if (!uid || itemId == null || body == null) return;
+  try {
+    const all = LS.get(KB_ITEM_BODY_CACHE_KEY, {}) || {};
+    all[String(itemId)] = { userId: uid, body: String(body), updatedAt: updatedAt || Date.now(), at: Date.now() };
+    const keys = Object.keys(all);
+    if (keys.length > 120) keys.slice(0, keys.length - 120).forEach((k) => { delete all[k]; });
+    LS.set(KB_ITEM_BODY_CACHE_KEY, all);
+  } catch (_) {}
+}
+function kbInflightEnter() {
+  S._kbInflight = (S._kbInflight || 0) + 1;
+}
+function kbInflightLeave() {
+  S._kbInflight = Math.max(0, (S._kbInflight || 0) - 1);
+  pumpDataCenterRefreshQueue();
 }
 function clearHomeSnap() {
   try {
@@ -688,11 +722,40 @@ function ensureDataCacheSlice(key) {
   }
   return (mem && mem.ok !== false) ? mem : (ls || mem || null);
 }
-const DC_REFRESH_MAX = 2;
+const DC_REFRESH_MAX_URGENT = 5;
+const DC_REFRESH_MAX_SOFT = 2;
+const DC_REFRESH_MAX_TOTAL = 6;
+function dcVisibleSliceKey() {
+  if (route().name !== 'data') return '';
+  return dataLeagueOf() + ':' + dataKindOf();
+}
+function dcKbBlocksQueue() {
+  return route().name === 'kb' || (S._kbInflight || 0) > 0;
+}
+function dcQueueJobRank(job, visibleKey) {
+  const vis = visibleKey && job.key === visibleKey ? 1 : 0;
+  return (vis * 4) + (job.urgent ? 2 : 0);
+}
+function pruneStaleDcSoftRefresh(visibleKey) {
+  S._dcRefreshQ = (S._dcRefreshQ || []).filter((j) => j.urgent || !visibleKey || j.key === visibleKey);
+  const meta = S._dcLoadMeta || {};
+  for (const [key, m] of Object.entries(meta)) {
+    if (!m || !m.soft) continue;
+    if (visibleKey && key === visibleKey) continue;
+    try { if (m.abort) m.abort.abort(); } catch (_) {}
+  }
+}
+function syncDcRoutePriority(prevRouteName, nextRouteName) {
+  if (prevRouteName === nextRouteName) return;
+  if (nextRouteName === 'kb') pruneStaleDcSoftRefresh('');
+  if (prevRouteName === 'kb' && nextRouteName !== 'kb') pumpDataCenterRefreshQueue();
+  if (nextRouteName === 'data') pruneStaleDcSoftRefresh(dcVisibleSliceKey());
+}
 function scheduleDataCenterRefresh(lg, kind, { urgent } = {}) {
   const key = lg + ':' + kind;
   const cached = ensureDataCacheSlice(key);
   const needUrgent = urgent != null ? urgent : !dataCacheRenderable(cached, kind);
+  if (!needUrgent && dcKbBlocksQueue()) return;
   S._dcRefreshQ = S._dcRefreshQ || [];
   S._dataLoadInflight = S._dataLoadInflight || {};
   if (S._dataLoadInflight[key]) return;
@@ -701,23 +764,49 @@ function scheduleDataCenterRefresh(lg, kind, { urgent } = {}) {
   pumpDataCenterRefreshQueue();
 }
 function pumpDataCenterRefreshQueue() {
+  if (dcKbBlocksQueue()) return;
   S._dcRefreshActive = S._dcRefreshActive || 0;
   S._dcRefreshQ = S._dcRefreshQ || [];
-  while (S._dcRefreshActive < DC_REFRESH_MAX && S._dcRefreshQ.length) {
-    S._dcRefreshQ.sort((a, b) => (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0) || a.at - b.at);
-    const job = S._dcRefreshQ.shift();
-    if (!job || S._dataLoadInflight[job.key]) continue;
+  const visibleKey = dcVisibleSliceKey();
+  const countActive = (urgent) => {
+    let n = 0;
+    const meta = S._dcLoadMeta || {};
+    for (const m of Object.values(meta)) { if (m && !!m.urgent === !!urgent) n++; }
+    return n;
+  };
+  while (S._dcRefreshQ.length && S._dcRefreshActive < DC_REFRESH_MAX_TOTAL) {
+    S._dcRefreshQ.sort((a, b) => {
+      const ra = dcQueueJobRank(a, visibleKey);
+      const rb = dcQueueJobRank(b, visibleKey);
+      if (rb !== ra) return rb - ra;
+      return a.at - b.at;
+    });
+    const activeUrgent = countActive(true);
+    const activeSoft = countActive(false);
+    const jobIdx = S._dcRefreshQ.findIndex((j) => {
+      if (S._dataLoadInflight[j.key]) return false;
+      if (j.urgent) return activeUrgent < DC_REFRESH_MAX_URGENT;
+      return activeSoft < DC_REFRESH_MAX_SOFT;
+    });
+    if (jobIdx < 0) break;
+    const job = S._dcRefreshQ.splice(jobIdx, 1)[0];
+    if (!job) break;
+    const abort = new AbortController();
     S._dataLoadInflight[job.key] = true;
+    S._dcLoadMeta = S._dcLoadMeta || {};
+    S._dcLoadMeta[job.key] = { soft: !job.urgent, urgent: !!job.urgent, abort, key: job.key };
     S._dcRefreshActive++;
     const soft = !job.urgent;
-    loadDataCenter(job.lg, job.kind, { soft }).finally(() => {
+    loadDataCenter(job.lg, job.kind, { soft, signal: abort.signal }).finally(() => {
       delete S._dataLoadInflight[job.key];
+      if (S._dcLoadMeta) delete S._dcLoadMeta[job.key];
       S._dcRefreshActive--;
       pumpDataCenterRefreshQueue();
     });
   }
 }
 function warmDataCenterPrefetch(lg, kind) {
+  if (dcKbBlocksQueue()) return;
   scheduleDataCenterRefresh(lg, kind, { urgent: false });
   const fillSiblingKinds = () => {
     const kinds = dataKindsForSection(dataSectionOf()).map(([k]) => k).filter((k) => k !== kind);
@@ -2659,6 +2748,7 @@ function dataLeagueOf() {
 function setDataLeague(k) {
   S.dataLeague = k;
   try { localStorage.setItem('jc_data_lg', k); } catch { }
+  if (route().name === 'data') pruneStaleDcSoftRefresh(dcVisibleSliceKey());
 }
 function dataKindOf() {
   const sec = dataSectionOf();
@@ -2671,6 +2761,7 @@ function dataKindOf() {
 function setDataKind(k) {
   S.dataKind = k;
   try { localStorage.setItem('jc_data_kind', k); } catch { }
+  if (route().name === 'data') pruneStaleDcSoftRefresh(dcVisibleSliceKey());
 }
 
 function formDots(form) {
@@ -2860,10 +2951,11 @@ function pageData() {
   return h + foot();
 }
 
-async function loadDataCenter(lg, kind, { soft } = {}) {
+async function loadDataCenter(lg, kind, { soft, signal } = {}) {
   const key = lg + ':' + kind;
   S.dataCache = S.dataCache || {};
   const hadRenderable = dataCacheRenderable(S.dataCache[key], kind);
+  if (signal && signal.aborted) return;
   // api() already prefixes '/api' — do NOT pass '/api/standings' or it becomes /api/api/...
   const path = kind === 'standings' ? '/standings'
     : kind === 'topassists' ? '/topassists'
@@ -2881,7 +2973,8 @@ async function loadDataCenter(lg, kind, { soft } = {}) {
         }
       } catch { /* ignore */ }
     }
-    const j = await api(path + '?league=' + encodeURIComponent(lg), { timeout: 20000 });
+    const j = await api(path + '?league=' + encodeURIComponent(lg), { timeout: 20000, signal });
+    if (signal && signal.aborted) return;
     if (!j || j.ok === false) {
       if (!(soft && hadRenderable)) {
         S.dataCache[key] = { ok: false, error: (j && (j.error || j.detail || j.reason)) || '加载失败' };
@@ -2898,6 +2991,7 @@ async function loadDataCenter(lg, kind, { soft } = {}) {
       setTimeout(() => prefetchDetailWarm(lg, j, kind), 0);
     }
   } catch (e) {
+    if (signal && signal.aborted) return;
     const msg = (e && e.message) ? String(e.message) : '';
     const isNet = !msg || /网络|超时|Failed to fetch|NetworkError|abort/i.test(msg);
     const errText = isNet
@@ -7016,6 +7110,7 @@ async function loadKbPacks(force) {
   if (!loggedIn()) return [];
   if (!force && S.kb && S.kb.packs) return S.kb.packs;
   S.kb = S.kb || {};
+  kbInflightEnter();
   try {
     const j = await api('/kb/packs', { timeout: 10000 });
     S.kb.packs = (j && j.packs) || [];
@@ -7025,21 +7120,29 @@ async function loadKbPacks(force) {
   } catch (e) {
     S.kb.packsError = (e && e.message) || '知识包加载失败，请检查网络';
     throw e;
+  } finally {
+    kbInflightLeave();
   }
 }
 
 async function loadKbPicker(force) {
   if (!loggedIn()) return [];
   if (!force && S.kb && S.kb.picker) return S.kb.picker;
-  const j = await api('/kb/picker');
-  S.kb.picker = (j && j.packs) || [];
-  return S.kb.picker;
+  kbInflightEnter();
+  try {
+    const j = await api('/kb/picker');
+    S.kb.picker = (j && j.packs) || [];
+    return S.kb.picker;
+  } finally {
+    kbInflightLeave();
+  }
 }
 
 async function loadKbPackItems(packId, force) {
   if (!loggedIn()) return null;
   if (!force && S.kb && S.kb.packId === packId && S.kb.packItems) return S.kb.packItems;
   S.kb = S.kb || {};
+  kbInflightEnter();
   try {
     const j = await api('/kb/packs/' + encodeURIComponent(packId) + '/items', { timeout: 12000 });
     S.kb.packId = packId;
@@ -7049,6 +7152,29 @@ async function loadKbPackItems(packId, force) {
   } catch (e) {
     S.kb.packItemsError = (e && e.message) || '知识包内容加载失败';
     throw e;
+  } finally {
+    kbInflightLeave();
+  }
+}
+
+async function ensureKbItemBody(item) {
+  if (!item || item.id == null) return '';
+  if (item.body != null && String(item.body).length) return String(item.body);
+  const cached = readKbItemBodyCache(item.id, item.updatedAt);
+  if (cached != null) {
+    item.body = cached;
+    return cached;
+  }
+  kbInflightEnter();
+  try {
+    const j = await api('/kb/items/' + encodeURIComponent(item.id), { timeout: 15000 });
+    const body = (j && j.item && j.item.body) ? String(j.item.body) : '';
+    item.body = body;
+    if (j && j.item && j.item.updatedAt) item.updatedAt = j.item.updatedAt;
+    persistKbItemBodyCache(item.id, body, item.updatedAt);
+    return body;
+  } finally {
+    kbInflightLeave();
   }
 }
 
@@ -7090,13 +7216,69 @@ function scheduleKbLayoutSave(packId, payload) {
   }, 320);
 }
 
+let kbItemSaveDebounceTimer = null;
+function scheduleKbSaveItemSheet(el) {
+  clearTimeout(kbItemSaveDebounceTimer);
+  const btn = el;
+  if (btn) btn.disabled = true;
+  kbItemSaveDebounceTimer = setTimeout(() => {
+    flushKbSaveItemSheet(el).finally(() => { if (btn) btn.disabled = false; });
+  }, 400);
+}
+async function flushKbSaveItemSheet(el) {
+  const packId = el.dataset.pack;
+  const iid = el.dataset.id;
+  const sh = $('#sheet');
+  const title = (sh.querySelector('input[name="kbSheetTitle"]') || {}).value;
+  const body = (sh.querySelector('textarea[name="kbSheetBody"]') || {}).value;
+  const posX = el.dataset.posx;
+  const posY = el.dataset.posy;
+  if (S.kb && S.kb._itemSaveInflight) return;
+  S.kb = S.kb || {};
+  S.kb._itemSaveInflight = true;
+  try {
+    if (iid) {
+      const j = await api('/kb/items/' + iid, { method: 'PATCH', body: { title, body } });
+      if (j && j.item && S.kb.packItems) {
+        const items = S.kb.packItems.items || [];
+        const idx = items.findIndex(x => String(x.id) === String(iid));
+        if (idx >= 0) items[idx] = Object.assign({}, items[idx], j.item);
+        else items.unshift(j.item);
+        S.kb.packItems.items = items;
+        persistKbItemBodyCache(j.item.id, j.item.body, j.item.updatedAt);
+        if (S.kb.canvasInst) S.kb.canvasInst.upsertItem(j.item);
+        syncKbCanvasEmptyHint();
+      }
+    } else {
+      const payload = { title, body };
+      if (posX !== '' && posY !== '') {
+        payload.posX = Number(posX);
+        payload.posY = Number(posY);
+      }
+      const j = await api('/kb/packs/' + packId + '/items', { method: 'POST', body: payload });
+      if (j && j.item && S.kb) {
+        S.kb.packItems = S.kb.packItems || { pack: {}, items: [] };
+        S.kb.packItems.items = [j.item, ...(S.kb.packItems.items || []).filter(x => x.id !== j.item.id)];
+        persistKbItemBodyCache(j.item.id, j.item.body, j.item.updatedAt);
+        if (S.kb.canvasInst) S.kb.canvasInst.upsertItem(j.item);
+        else render({ force: true });
+        syncKbCanvasEmptyHint();
+      }
+    }
+    S.kb.picker = null;
+    closeSheet();
+    toast('已保存');
+  } catch (err) { toast(err.message || '保存失败'); }
+  finally { S.kb._itemSaveInflight = false; }
+}
+
 function kbShowItemSheet({ packId, itemId, title, body, posX, posY }) {
   const isNew = !itemId;
   const sh = $('#sheet');
   sh.classList.remove('hidden');
   sh.innerHTML = `<div class="sheet kb-item-sheet"><h3><span>${isNew ? '新建节点' : '编辑节点'}</span><button class="x" data-act="closeSheet">✕</button></h3>
     <label>标题<input type="text" name="kbSheetTitle" maxlength="80" value="${esc(title || '')}" placeholder="简短标题"></label>
-    <label>正文<textarea name="kbSheetBody" rows="6" maxlength="8000" placeholder="你的赛前依据、盘口观察等">${esc(body || '')}</textarea></label>
+    <label>正文<textarea name="kbSheetBody" rows="6" maxlength="120000" placeholder="你的赛前依据、盘口观察等">${esc(body || '')}</textarea></label>
     <button type="button" class="btn pri block" data-act="kbSaveItemSheet" data-pack="${esc(packId)}" data-id="${esc(itemId || '')}" data-posx="${posX != null && posX !== '' ? esc(String(posX)) : ''}" data-posy="${posY != null && posY !== '' ? esc(String(posY)) : ''}">保存</button></div>`;
   const inp = sh.querySelector('input[name="kbSheetTitle"]');
   if (inp) inp.focus();
@@ -7113,11 +7295,14 @@ function mountKbPackCanvas(packId) {
   S.kb.canvasInst = window.createKbCanvas(mount, {
     pan: { x: pack.layoutPanX || 0, y: pack.layoutPanY || 0 },
     zoom: pack.layoutZoom || 1,
-    items: items.map(it => ({ id: it.id, title: it.title, body: it.body, x: it.posX, y: it.posY })),
+    items: items.map(it => ({ id: it.id, title: it.title, body: it.body != null ? it.body : (it.bodyPreview || ''), x: it.posX, y: it.posY })),
     onChange: (payload) => scheduleKbLayoutSave(packId, payload),
     onNodeOpen: (id) => {
       const it = (S.kb.packItems.items || []).find(x => String(x.id) === String(id));
-      if (it) kbShowItemSheet({ packId, itemId: it.id, title: it.title, body: it.body });
+      if (!it) return;
+      ensureKbItemBody(it).then((body) => {
+        kbShowItemSheet({ packId, itemId: it.id, title: it.title, body });
+      }).catch(() => { if (route().name === 'kb') toast('正文加载失败'); });
     },
     onDelete: async (id) => {
       if (!window.confirm('删除该节点？')) return;
@@ -8669,6 +8854,9 @@ function render(opts) {
     try { document.documentElement.setAttribute('data-boot', '1'); } catch (_) {}
   }
   syncAndroidChrome(r.name);
+  const prevRouteName = render.lastRouteName || null;
+  syncDcRoutePriority(prevRouteName, r.name);
+  render.lastRouteName = r.name;
   render.last = location.hash;
   render.lastSig = curSig;
   render.lastTab = isTab ? r.name : prevTab;
@@ -9093,44 +9281,7 @@ document.addEventListener('click', async e => {
       return;
     }
     case 'kbSaveItemSheet': {
-      const packId = el.dataset.pack;
-      const iid = el.dataset.id;
-      const sh = $('#sheet');
-      const title = (sh.querySelector('input[name="kbSheetTitle"]') || {}).value;
-      const body = (sh.querySelector('textarea[name="kbSheetBody"]') || {}).value;
-      const posX = el.dataset.posx;
-      const posY = el.dataset.posy;
-      try {
-        if (iid) {
-          const j = await api('/kb/items/' + iid, { method: 'PATCH', body: { title, body } });
-          if (j && j.item && S.kb && S.kb.packItems) {
-            const items = S.kb.packItems.items || [];
-            const idx = items.findIndex(x => String(x.id) === String(iid));
-            if (idx >= 0) items[idx] = j.item;
-            else items.unshift(j.item);
-            S.kb.packItems.items = items;
-            if (S.kb.canvasInst) S.kb.canvasInst.upsertItem(j.item);
-            syncKbCanvasEmptyHint();
-          }
-        } else {
-          const payload = { title, body };
-          if (posX !== '' && posY !== '') {
-            payload.posX = Number(posX);
-            payload.posY = Number(posY);
-          }
-          const j = await api('/kb/packs/' + packId + '/items', { method: 'POST', body: payload });
-          if (j && j.item && S.kb) {
-            S.kb.packItems = S.kb.packItems || { pack: {}, items: [] };
-            S.kb.packItems.items = [j.item, ...(S.kb.packItems.items || []).filter(x => x.id !== j.item.id)];
-            if (S.kb.canvasInst) S.kb.canvasInst.upsertItem(j.item);
-            else render({ force: true });
-            syncKbCanvasEmptyHint();
-          }
-        }
-        S.kb.picker = null;
-        closeSheet();
-        toast('已保存');
-      } catch (err) { toast(err.message || '保存失败'); }
+      scheduleKbSaveItemSheet(el);
       return;
     }
     case 'kbExport': {
@@ -9640,7 +9791,7 @@ document.addEventListener('submit', async e => {
 loadLocalLists();
 hydrateFromCache(); // 1.9.124: JSON lists
 hydrateKbPacksCache(); // 1.9.158: KB list before first /kb paint
-if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.160: idle-deferred KB warm — do not fight data-tab API queue
+if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.161: idle KB warm; DC queue yields while #/kb or KB in-flight
 hydratePredictCache(); // 1.9.125: predict reports so home sig matches snap
 loadDataCenterBootPack(); // 1.9.156: bundled slices for first install / empty LS
 ensurePartnerWatermark();
