@@ -1143,7 +1143,7 @@ function noteFeedTop(rName) {
   try { localStorage.setItem('jc_feed_top', rName); } catch (_) {}
 }
 function activeTopTab(rName) {
-  if (rName === 'tribe-club') return 'tribe';
+  if (rName === 'tribe-club' || rName === 'tribe-post') return 'tribe';
   return TOP_TABS.includes(rName) ? rName : '';
 }
 
@@ -1986,6 +1986,14 @@ function pageTribeClub(id) {
   const logoCss = logoRaw.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const heroStyle = `--tribe-accent:${accent};` + (logoRaw ? `--tribe-logo:url("${logoCss}")` : '');
   const nav = matchEdgeNavBar(folBtn);
+  S.tribeFeedTeamMeta = S.tribeFeedTeamMeta || {};
+  const teamId = t.teamId || (String(t.tribeId || '').includes('-') ? String(t.tribeId).split('-').slice(1).join('-') : '');
+  S.tribeFeedTeamMeta[t.tribeId] = { teamId, nameZh: t.nameZh };
+  setTimeout(() => {
+    if (typeof JCTribeFeed !== 'undefined' && route().name === 'tribe-club' && String(route().arg) === String(t.tribeId)) {
+      JCTribeFeed.mountClubFeed(t.tribeId, S.tribeFeedTeamMeta[t.tribeId]);
+    }
+  }, 0);
   return `<div class="tribe-club-page">
     <section class="${heroCls}" style="${heroStyle}">
       ${nav}
@@ -1997,11 +2005,27 @@ function pageTribeClub(id) {
         </div>
       </div>
     </section>
-    <div class="pad-card tribe-feed-ph">
-      <h3 class="tribe-feed-t">动态</h3>
-      <p class="tribe-feed-empty">暂无动态，发帖功能即将开放。</p>
-    </div>
+    <section class="tribe-feed-sec" id="tribe-feed-root">
+      <div class="tribe-feed-hd">
+        <h3 class="tribe-feed-t">动态</h3>
+        ${typeof JCTribeFeed !== 'undefined' ? JCTribeFeed.composeBar(t.tribeId) : ''}
+      </div>
+      <div id="tribe-feed-list" class="tribe-feed-list"><div class="spinner" style="margin:24px auto"></div></div>
+    </section>
   </div>` + foot();
+}
+function pageTribePost(id) {
+  const pid = String(id || '').trim();
+  if (!pid) return hdr('帖子', { back: true }) + empty('帖子不存在') + foot();
+  const h = typeof JCTribeFeed !== 'undefined'
+    ? JCTribeFeed.pagePostDetail(pid)
+    : hdr('帖子', { back: true }) + empty('加载中…') + foot();
+  setTimeout(() => {
+    if (typeof JCTribeFeed !== 'undefined' && route().name === 'tribe-post' && String(route().arg) === pid) {
+      JCTribeFeed.loadPostDetail(pid);
+    }
+  }, 0);
+  return h;
 }
 
 function dateStrip(dates, cur, key, { light = true } = {}) {
@@ -8831,10 +8855,10 @@ function softPatchLiveScoreCards() {
 }
 
 // ======================= render (1.9.124 keep-alive + 1.9.125 home snap / boot-shell) =======================
-const PAGES = { home: pageHome, tribe: pageTribe, 'tribe-club': pageTribeClub, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs,
+const PAGES = { home: pageHome, tribe: pageTribe, 'tribe-club': pageTribeClub, 'tribe-post': pageTribePost, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs,
   news: pageNews, login: pageLogin, register: pageRegister, profile: pageProfile, password: pagePassword, delete: pageDelete, settings: pageSettings, about: pageAbout, terms: pageTerms, privacy: pagePrivacy,
   membership: pageMembership, pay: pagePay, orders: pageOrders, 'member-terms': pageMemberTerms, column: pageColumn, kb: pageKb };
-const TITLES = { home: '首页', tribe: '部落', 'tribe-club': '球队部落', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库' };
+const TITLES = { home: '首页', tribe: '部落', 'tribe-club': '球队部落', 'tribe-post': '看帖', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库' };
 
 /** In-memory keep-alive for bottom-tab pages — restore DOM HTML instead of wiping to skeleton. */
 const TAB_KEEP = Object.create(null);
@@ -9074,8 +9098,10 @@ function render(opts) {
     }
     if (r.name === 'tribe-club') {
       const tid = String(r.arg || '');
-      return 'tribe-club:' + tid + ':' + (isTribeFollow(tid) ? 1 : 0);
+      const fc = (S.tribeFeedCache && S.tribeFeedCache[tid] && S.tribeFeedCache[tid].length) || 0;
+      return 'tribe-club:' + tid + ':' + (isTribeFollow(tid) ? 1 : 0) + ':' + fc;
     }
+    if (r.name === 'tribe-post') return 'tribe-post:' + String(r.arg || '');
     return r.name + ':' + String(r.arg || '') + ':' + JSON.stringify(r.query || {});
   })();
 
@@ -9213,6 +9239,10 @@ document.addEventListener('click', async e => {
     const html = (doc.dataset.doc === 'terms' ? pageTerms : pagePrivacy)().replace(/^<header[\s\S]*?<\/header>/, '').replace(/<div class="foot">[\s\S]*$/, '');
     sh.innerHTML = `<div class="sheet"><h3><span>${doc.dataset.doc === 'terms' ? '用户协议' : '隐私政策'}</span><button class="x" data-act="closeSheet">✕</button></h3>${html.replace('class="doc"', 'class="doc" style="margin:0;box-shadow:none;padding:0"')}</div>`;
     return;
+  }
+  if (typeof JCTribeFeed !== 'undefined') {
+    if (JCTribeFeed.onClick(e)) return;
+    if (e.target.closest('#tribe-feed-list')) JCTribeFeed.onFeedClick(e);
   }
   const el = e.target.closest('[data-act],[data-go],[data-key],[data-type],[data-mult],[data-sdate],[data-slg],[data-rdate],[data-rlg],[data-pf],[data-av]');
   if (!el) {

@@ -1897,6 +1897,27 @@ app.use('/api', require('./lib/membership'));
 app.use('/api', require('./lib/chat'));
 const columnApi = require('./lib/column');
 app.use('/api', columnApi);
+const tribeFeedApi = require('./lib/tribe-feed');
+tribeFeedApi.configure({
+  listMatches() {
+    const out = [];
+    for (const kind of ['matches', 'schedule']) {
+      try {
+        const pack = cache[kind] && cache[kind].payload;
+        const list = (pack && pack.data) || [];
+        for (const m of list) out.push(m);
+      } catch (_) { /* */ }
+    }
+    const seen = new Set();
+    return out.filter((m) => {
+      const id = String(m.id);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  },
+});
+app.use('/api', tribeFeedApi);
 // 1.9.75: settle 专栏胜平负表态 from live results cache when available
 columnApi.configure({
   lookupMatchResult(matchId) {
