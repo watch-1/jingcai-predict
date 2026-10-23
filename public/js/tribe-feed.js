@@ -1,5 +1,5 @@
 /**
- * Tribe club feed UI (1.9.170). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isTribeFollow.
+ * Tribe club feed UI (1.9.171). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isTribeFollow.
  */
 (function (global) {
   'use strict';
@@ -294,12 +294,12 @@
         <div id="tribe-compose-previews" class="tf-compose-previews"></div>
       </div>
       <div class="tribe-compose-toolbar" aria-label="发帖工具">
+        <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple id="tribe-compose-files" class="tf-compose-file-input" tabindex="-1" aria-hidden="true">
         <button type="button" class="tribe-compose-tb" disabled aria-hidden="true" title="表情">😊</button>
         <button type="button" class="tribe-compose-tb" disabled aria-hidden="true" title="@">@</button>
-        <label class="tribe-compose-tb tf-pick-img" title="添加图片">
-          <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden id="tribe-compose-files">
+        <button type="button" class="tribe-compose-tb tf-pick-img" data-act="tribeComposePick" title="添加图片" aria-label="添加图片">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5.5-5.5a2 2 0 00-2.8 0L3 18"/></svg>
-        </label>
+        </button>
         <button type="button" class="tribe-compose-tb" disabled aria-hidden="true" title="视频">▶</button>
         <button type="button" class="tribe-compose-tb" disabled aria-hidden="true" title="球场">⚽</button>
       </div>
@@ -326,8 +326,23 @@
       bodyEl.addEventListener('input', () => scheduleDraftSave(composeTribeId));
       setTimeout(() => { try { bodyEl.focus(); } catch (_) {} }, 50);
     }
+    bindComposeFileInput();
+  }
+
+  function bindComposeFileInput() {
     const inp = document.getElementById('tribe-compose-files');
-    if (inp) inp.addEventListener('change', onPickImages);
+    if (!inp) return;
+    inp.onchange = onPickImages;
+  }
+
+  function pickComposeImages() {
+    if (pendingUploads.length >= MAX_IMAGES) {
+      toast('最多 ' + MAX_IMAGES + ' 张图');
+      return;
+    }
+    const inp = document.getElementById('tribe-compose-files');
+    if (!inp) return;
+    try { inp.click(); } catch (_) {}
   }
 
   function cancelCompose(tribeId) {
@@ -342,6 +357,8 @@
     const files = Array.from(ev.target.files || []);
     ev.target.value = '';
     const room = MAX_IMAGES - pendingUploads.length;
+    if (!room) { toast('最多 ' + MAX_IMAGES + ' 张图'); return; }
+    if (files.length > room) toast('最多 ' + MAX_IMAGES + ' 张图');
     files.slice(0, room).forEach((file) => {
       if (file.size > 2 * 1024 * 1024) { toast('图片过大'); return; }
       const reader = new FileReader();
@@ -485,6 +502,7 @@
     if (!el) return false;
     const act = el.dataset.act;
     if (act === 'tribeComposeOpen') { openCompose(el.dataset.tribe); return true; }
+    if (act === 'tribeComposePick') { pickComposeImages(); return true; }
     if (act === 'tribeComposeCancel') { cancelCompose(el.dataset.tribe); return true; }
     if (act === 'tribeComposeSubmit') { submitCompose(el.dataset.tribe); return true; }
     if (act === 'tribeComposeRm') {

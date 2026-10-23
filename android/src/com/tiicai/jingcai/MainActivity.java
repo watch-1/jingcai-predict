@@ -1,6 +1,7 @@
 package com.tiicai.jingcai;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -10,6 +11,8 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -31,7 +34,9 @@ public class MainActivity extends Activity {
     static final String START = "https://" + HOST + "/www/index.html";
     /** CSS --pri-d / theme-color. Used as WebView/window fill while page paints. */
     static final int CHROME = Color.parseColor("#1B2A4A");
+    private static final int FILE_CHOOSER_REQUEST = 9101;
     private WebView web;
+    private ValueCallback<Uri[]> filePathCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,7 +50,8 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
         s.setAllowFileAccess(false);
-        s.setAllowContentAccess(false);
+        // content:// URIs from the system image picker (tribe compose, etc.)
+        s.setAllowContentAccess(true);
         s.setAllowFileAccessFromFileURLs(false);
         s.setAllowUniversalAccessFromFileURLs(false);
         // page origin is https (bundled assets); allow calls to the http:// API server
@@ -84,6 +90,21 @@ public class MainActivity extends Activity {
                 Uri u = req.getUrl();
                 if (HOST.equals(u.getHost())) return false;
                 try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (Exception ignored) { }
+                return true;
+            }
+        });
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                if (filePathCallback != null) filePathCallback.onReceiveValue(null);
+                filePathCallback = callback;
+                Intent intent = params.createIntent();
+                try {
+                    startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+                } catch (ActivityNotFoundException e) {
+                    filePathCallback = null;
+                    return false;
+                }
                 return true;
             }
         });
@@ -180,6 +201,19 @@ public class MainActivity extends Activity {
         if (p.endsWith(".glb")) return "model/gltf-binary";
         if (p.endsWith(".gltf")) return "model/gltf+json";
         return "application/octet-stream";
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            if (filePathCallback != null) {
+                Uri[] results = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
+                filePathCallback.onReceiveValue(results);
+                filePathCallback = null;
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
