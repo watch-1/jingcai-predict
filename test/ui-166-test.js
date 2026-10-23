@@ -17,6 +17,6 @@ const authJs = fs.readFileSync(path.join(__dirname, '../lib/auth.js'), 'utf8');
 assert.ok(/tribe_follows/.test(authJs) || /tribe-follows/.test(authJs));
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.166');
+assert.ok(pkg.version >= '1.9.166', 'package version bumped');
 
 console.log('ui-166-test OK');

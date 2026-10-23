@@ -1856,23 +1856,48 @@ function tribeFollowSnap(t) {
     teamId: t.teamId, logo: t.logo || '', savedAt: Date.now(),
   };
 }
+function tribeJoinBtnHtml(t, folOn) {
+  return `<button type="button" class="tribe-join-btn${folOn ? ' on' : ''}" data-act="tribeFollow" data-id="${esc(t.tribeId)}">${folOn ? I.star + '已入驻' : I.starO + '入驻'}</button>`;
+}
+function tribeHeroAccent(leagueKey) {
+  const m = { epl: '#3D195B', laliga: '#A50044', seriea: '#008FD7', bundesliga: '#D20515', ligue1: '#091C3E', ucl: '#0E1E5B' };
+  return m[leagueKey] || '#1B2A4A';
+}
+function patchTribeJoinBtn(id) {
+  try {
+    const on = isTribeFollow(id);
+    const sid = String(id);
+    document.querySelectorAll('[data-act="tribeFollow"]').forEach((btn) => {
+      if (btn.dataset.id !== sid) return;
+      btn.classList.toggle('on', on);
+      btn.innerHTML = on ? I.star + '已入驻' : I.starO + '入驻';
+    });
+  } catch (_) {}
+}
 async function toggleTribeFollow(id) {
   const t = tribeById(id);
   if (!t) return toast('球队信息加载中，请稍后再试');
   const on = isTribeFollow(id);
   const snap = tribeFollowSnap(t);
-  if (loggedIn()) {
-    try {
-      if (on) await api('/tribe-follows/' + encodeURIComponent(t.tribeId), { method: 'DELETE' });
-      else await api('/tribe-follows/' + encodeURIComponent(t.tribeId), { method: 'PUT', body: snap });
-    } catch (e) { return toast(e.message); }
-  }
+  const prev = (S.tribeFollows || []).slice();
   S.tribeFollows = on
     ? S.tribeFollows.filter(f => f.tribeId !== String(id))
     : [snap, ...S.tribeFollows.filter(f => f.tribeId !== String(id))];
   persistLists();
+  patchTribeJoinBtn(id);
   toast(on ? '已取消入驻' : (loggedIn() ? '已入驻，已同步到账号' : '已入驻（本机保存，登录后可同步）'));
   render();
+  if (!loggedIn()) return;
+  try {
+    if (on) await api('/tribe-follows/' + encodeURIComponent(t.tribeId), { method: 'DELETE' });
+    else await api('/tribe-follows/' + encodeURIComponent(t.tribeId), { method: 'PUT', body: snap });
+  } catch (e) {
+    S.tribeFollows = prev;
+    persistLists();
+    patchTribeJoinBtn(id);
+    render();
+    toast(e.message);
+  }
 }
 function tribeTeamsForSide(sideKey) {
   const cat = S.tribeCat || { teams: [], byId: {} };
@@ -1951,18 +1976,32 @@ function pageTribeClub(id) {
   if (!t) {
     return hdr('球队部落', { back: true }) + empty('球队信息加载中或暂无数据。', '<button type="button" class="btn ghost sm" data-go="#/tribe">返回部落</button>', '未找到球队') + foot();
   }
-  const crest = badge(t.nameZh, 'lg', t.logo);
+  const crest = badge(t.nameZh, 'lg tribe-club-crest', t.logo);
   const folOn = isTribeFollow(t.tribeId);
-  const folBtn = `<button type="button" class="fav-btn tribe-fol-btn${folOn ? ' on' : ''}" data-act="tribeFollow" data-id="${esc(t.tribeId)}">${folOn ? I.star + '已入驻' : I.starO + '入驻'}</button>`;
+  const folBtn = tribeJoinBtnHtml(t, folOn);
   const sub = [t.leagueZh, t.points > 0 ? `积分榜 ${t.points} 分` : ''].filter(Boolean).join(' · ');
-  return hdr('球队部落', { back: true, right: folBtn })
-    + `<div class="tribe-club-hd pad-card">
-      <div class="tribe-club-id">${crest}<div><h2 class="tribe-club-name">${esc(t.nameZh)}</h2><p class="tribe-club-sub">${esc(sub)}</p></div></div>
-    </div>
+  const accent = tribeHeroAccent(t.leagueKey);
+  const logoRaw = t.logo ? String(t.logo) : '';
+  const heroCls = 'tribe-club-hero hero hero--edge' + (logoRaw ? ' has-logo' : '');
+  const logoCss = logoRaw.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const heroStyle = `--tribe-accent:${accent};` + (logoRaw ? `--tribe-logo:url("${logoCss}")` : '');
+  const nav = matchEdgeNavBar(folBtn);
+  return `<div class="tribe-club-page">
+    <section class="${heroCls}" style="${heroStyle}">
+      ${nav}
+      <div class="tribe-club-hero-body">
+        ${crest}
+        <div class="tribe-club-hero-text">
+          <h1 class="tribe-club-hero-name">${esc(t.nameZh)}</h1>
+          ${sub ? `<p class="tribe-club-hero-sub">${esc(sub)}</p>` : ''}
+        </div>
+      </div>
+    </section>
     <div class="pad-card tribe-feed-ph">
       <h3 class="tribe-feed-t">动态</h3>
       <p class="tribe-feed-empty">暂无动态，发帖功能即将开放。</p>
-    </div>` + foot();
+    </div>
+  </div>` + foot();
 }
 
 function dateStrip(dates, cur, key, { light = true } = {}) {
@@ -8955,6 +8994,8 @@ function viewWrapClass(r, viewEl) {
     const kp = String(r.arg || '').split('/').filter(Boolean);
     if (kp[0] === 'pack') wrap += ' kb-wrap';
   }
+  if (r.name === 'tribe') wrap += ' view--tribe-hub';
+  if (r.name === 'tribe-club') wrap += ' view--tribe-club';
   return 'view' + (isTab ? '' : ' sub') + wrap;
 }
 
@@ -9030,6 +9071,10 @@ function render(opts) {
       }
       const pn = kb.packs == null ? 'u' : String((kb.packs && kb.packs.length) || 0);
       return 'kb:' + sub + ':' + kid + ':' + pn + ':' + (kb.loading ? 1 : 0) + ':' + (kb.packsError || '') + ':' + (kb.packItemsError || '');
+    }
+    if (r.name === 'tribe-club') {
+      const tid = String(r.arg || '');
+      return 'tribe-club:' + tid + ':' + (isTribeFollow(tid) ? 1 : 0);
     }
     return r.name + ':' + String(r.arg || '') + ':' + JSON.stringify(r.query || {});
   })();
