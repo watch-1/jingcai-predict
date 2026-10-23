@@ -6,14 +6,15 @@
 #   JAVA_HOME      JDK 17（默认 /opt/android-tools/jdk17）
 #   ANDROID_HOME   Android SDK（默认 /opt/android-tools/sdk，需 platforms;android-34 与 build-tools;34.0.0）
 #   KEYSTORE / KS_PASS / KEY_ALIAS   签名密钥（默认 android/release.keystore，首次自动生成自签名密钥）
-#   VERSION_NAME / VERSION_CODE      版本号（默认 1.9.0 / 41）
+#   VERSION_NAME / VERSION_CODE      版本号（默认见脚本内；与 VERSION.txt 同步）
+# 生产同步勿覆盖服务器 .env：见 docs/deploy-aliyun.md、tools/sync-prod.sh
 #   OUT            输出路径（默认 dist/jingcai-predict.apk）
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; A="$ROOT/android"
 export JAVA_HOME="${JAVA_HOME:-/opt/android-tools/jdk17}"; export PATH="$JAVA_HOME/bin:$PATH"
 SDK="${ANDROID_HOME:-/opt/android-tools/sdk}"; BT="$SDK/build-tools/34.0.0"; JAR="$SDK/platforms/android-34/android.jar"
 KEYSTORE="${KEYSTORE:-$A/release.keystore}"; KS_PASS="${KS_PASS:-jingcai-predict}"; KEY_ALIAS="${KEY_ALIAS:-jingcai}"
-VERSION_NAME="${VERSION_NAME:-1.9.161}"; VERSION_CODE="${VERSION_CODE:-198}"
+VERSION_NAME="${VERSION_NAME:-1.9.162}"; VERSION_CODE="${VERSION_CODE:-199}"
 API_BASE="${API_BASE:-http://120.77.152.74:8088}"; API_BASE="${API_BASE%/}"
 case "$API_BASE" in http://*|https://*) ;; *) echo "API_BASE must start with http:// or https://" >&2; exit 1;; esac
 OUT="${OUT:-$ROOT/dist/jingcai-predict.apk}"; B="$A/build"

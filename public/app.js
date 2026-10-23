@@ -4128,7 +4128,7 @@ function processSideMissReason(side) {
   if (r === 'no_stats') return '暂无技术统计（近期场次无数据或队名映射异常）';
   if (r === 'quota') return '配额紧张';
   if (r === 'suspended') return '数据源暂停';
-  if (r === 'no_key') return '未配置密钥';
+  if (r === 'no_key') return '过程数据源暂未就绪';
   const n = String(side.noteZh || '');
   if (n) return n.length > 28 ? n.slice(0, 28) + '…' : n;
   return '暂无数据';
@@ -4160,7 +4160,7 @@ function processStatsCard(x, stats) {
   const anySos = !!(hSosOk || aSosOk);
   let small = available
     ? (`近${Math.max(hn, an) || (proc && proc.n) || 5}场场均` + (anySos ? ' · 含强度修正' : ''))
-    : (reason === 'suspended' ? '密钥暂停' : reason === 'no_key' ? '未配置密钥' : reason === 'quota' ? '配额紧张' : '暂无数据');
+    : (reason === 'suspended' ? '数据源暂停' : reason === 'no_key' ? '暂未就绪' : reason === 'quota' ? '配额紧张' : '暂无数据');
 
   const homeCap = hn ? `近${hn}场` : (proc && proc.home && !proc.home.ok ? '暂无' : '—');
   const awayCap = an ? `近${an}场` : (proc && proc.away && !proc.away.ok ? '暂无' : '—');
