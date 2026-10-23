@@ -734,22 +734,36 @@ body.me-drawer-on { overflow: hidden; }
   box-shadow: 0 2px 10px rgba(0, 0, 0, .22), 0 1px 2px rgba(0, 0, 0, .12);
 }
 /* Match detail: hero already navy; tab strip white; pane content on same navy */
+/* 1.9.163: opaque sticky tab strip — scrolling cards must paint underneath, not through labels */
 .view.sub.md-wrap .dtabs {
+  position: sticky;
+  top: 0;
+  z-index: 32;
   background: #fff;
   margin: 0;
   border-radius: 0;
   border-left: 0;
   border-right: 0;
   border-top: 0;
-  box-shadow: 0 1px 0 rgba(0,0,0,.06);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .06);
+  overflow-x: auto;
+  overflow-y: hidden;
+  isolation: isolate;
 }
 .view.sub.md-wrap .dtabs button {
   min-height: 38px;
   padding: 6px 8px 5px;
   font-size: 13px;
   line-height: 1.3;
+  background-color: #fff;
+}
+.view.sub.md-wrap .dtabs button.on {
+  background-color: #fff7f0;
 }
 .view.sub.md-wrap .detail-pane {
+  position: relative;
+  z-index: 0;
   padding: 4px 0 16px;
   min-height: 40vh;
   background: transparent;
@@ -773,15 +787,30 @@ body.me-drawer-on { overflow: hidden; }
   background: var(--bg, #eef1f6);
 }
 .view.sub.md-wrap--review .dtabs {
+  position: sticky;
+  top: 0;
+  z-index: 32;
   background: #fff;
   margin: 0;
   border-radius: 0;
   border-left: 0;
   border-right: 0;
   border-top: 0;
-  box-shadow: 0 1px 0 rgba(0,0,0,.06);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .06);
+  overflow-x: auto;
+  overflow-y: hidden;
+  isolation: isolate;
+}
+.view.sub.md-wrap--review .dtabs button {
+  background-color: #fff;
+}
+.view.sub.md-wrap--review .dtabs button.on {
+  background-color: #fff7f0;
 }
 .view.sub.md-wrap--review .detail-pane--review {
+  position: relative;
+  z-index: 0;
   padding: 4px 0 16px;
   min-height: 40vh;
   overflow-x: visible;
@@ -856,7 +885,11 @@ html[data-theme="pitch"] .pmr-report .pmr-wrap {
 }
 .hero-edge-nav .fav-btn svg { width: 12px; height: 12px; }
 .view.sub.md-wrap { padding-top: 0; }
-.view.sub.md-wrap .hero.hero--edge { margin-top: 0; }
+.view.sub.md-wrap .hero.hero--edge {
+  margin-top: 0;
+  position: relative;
+  z-index: 1;
+}
 .hero.hero--edge .meta { margin-top: 0; line-height: 1.25; }
 .hero.hero--edge .badge.lg,
 .hero.hero--edge .tm .badge.lg.crest { width: 56px; height: 56px; font-size: 20px; border-width: 2px; }
@@ -3645,6 +3678,15 @@ html[data-theme="pitch"] .dtabs button.on {
   background: rgba(43,182,115,.18) !important;
   color: #7DFFA8 !important;
   border-bottom-color: #2BB673 !important;
+}
+html[data-theme="pitch"] .view.sub.md-wrap .dtabs,
+html[data-theme="pitch"] .view.sub.md-wrap--review .dtabs {
+  background: #1A2336 !important;
+  border-bottom-color: rgba(255, 255, 255, .08) !important;
+}
+html[data-theme="pitch"] .view.sub.md-wrap .dtabs button,
+html[data-theme="pitch"] .view.sub.md-wrap--review .dtabs button {
+  background-color: #1A2336 !important;
 }
 
 /* Chat under pitch */
