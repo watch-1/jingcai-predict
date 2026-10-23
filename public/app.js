@@ -5266,6 +5266,21 @@ function eventPlayerLab(e) {
   const as = e.assistZh || e.assist || '';
   return { player: nm, assist: as, auto: !!(e.playerZhAuto) };
 }
+/** Consumer copy for /api/live-stats failures — never show raw English (`fetch failed`). */
+function liveStatsUserMsg(live) {
+  if (!live) return '加载中…';
+  const reason = String(live.reason || '');
+  if (reason === 'no_fixture') return '事件数据更新中';
+  if (reason === 'no_key') return '实时数据更新中';
+  const pick = [live.error, live.detail, live.eventsError].map(s => String(s || '').trim()).find(Boolean) || '';
+  if (pick && /[\u4e00-\u9fff]/.test(pick)) return pick;
+  if (pick && /^[\x00-\x7F]+$/.test(pick)) {
+    if (reason === 'upstream' || reason === 'error') return '实时数据暂时不可用，请稍后重试';
+    return '暂时不可用';
+  }
+  if (reason === 'upstream' || reason === 'error') return '实时数据暂时不可用，请稍后重试';
+  return pick || '暂时不可用';
+}
 function eventsTabHtml(x, live) {
   const wrapId = 'events-tree-' + esc(x.id);
   const chatBelow = () => `<div class="match-chat-anchor" id="match-chat-anchor-${esc(x.id)}"></div>${aiChatPanelHtml(x)}${chatPanelHtml(x)}`;
@@ -5273,9 +5288,7 @@ function eventsTabHtml(x, live) {
     return `<div class="events-chat-stack"><div class="ev-tree-wrap" id="${wrapId}"><div class="spinner"></div><p class="note" style="text-align:center">加载比赛事件…</p></div>${chatBelow()}</div>`;
   }
   if (!live.ok) {
-    const why = live.reason === 'no_fixture' ? '事件数据更新中'
-      : live.reason === 'no_key' ? '实时数据更新中'
-      : (live.error || live.detail || live.eventsError || '暂时不可用');
+    const why = liveStatsUserMsg(live);
     return `<div class="events-chat-stack"><div class="ev-tree-wrap" id="${wrapId}"><div class="ana-card"><p class="note">${esc(why)}</p></div></div>${chatBelow()}</div>`;
   }
   const raw = (live.events || []).slice();
@@ -5426,9 +5439,7 @@ function livePitchHtml(x, live, opts) {
     return `<div class="dsec pitch-wrap${compact ? ' compact' : ''}" id="${wrapId}"><div class="spinner"></div><p class="note" style="text-align:center">加载绿茵屏…</p></div>`;
   }
   if (!live.ok) {
-    const why = live.reason === 'no_fixture' ? '实时数据更新中'
-      : live.reason === 'no_key' ? '实时数据更新中'
-      : (live.error || live.detail || '暂时不可用');
+    const why = liveStatsUserMsg(live);
     return `<div class="dsec pitch-wrap${compact ? ' compact' : ''}" id="${wrapId}"><h3>绿茵屏</h3><p class="note">${esc(why)}</p></div>`;
   }
   const st = live.stats || {};
@@ -5537,7 +5548,7 @@ async function loadLiveStats(x, { force } = {}) {
     }
     return j;
   } catch (e) {
-    const fail = { ok: false, reason: 'error', error: e.message || '加载失败', _at: Date.now() };
+    const fail = { ok: false, reason: 'error', error: liveStatsUserMsg({ reason: 'error', error: e.message }), _at: Date.now() };
     S.liveStatsCache[key] = fail;
     return fail;
   }
