@@ -2785,7 +2785,7 @@ function renderStandingsTable(payload) {
     if (tb.group) h += `<div class="dc-group">${esc(tb.group)}</div>`;
     const rows = tb.rows || [];
     h += `<div class="dc-table-wrap"><table class="dc-table">
-      <thead><tr><th class="rk">#</th><th class="tm">球队</th><th>赛</th><th>胜</th><th>平</th><th>负</th><th>进/失</th><th class="pts">积分</th></tr></thead><tbody>`;
+      <thead><tr><th class="rk">#</th><th class="tm">球队</th><th class="dc-st">赛</th><th class="dc-st">胜</th><th class="dc-st">平</th><th class="dc-st">负</th><th class="dc-st gfga">进/失</th><th class="pts">积分</th></tr></thead><tbody>`;
     for (const r of rows) {
       const logoUrl = r.logo || (r.teamId ? ('https://a.espncdn.com/i/teamlogos/soccer/500/' + r.teamId + '.png') : '');
       const logo = logoUrl ? badge(r.teamZh || r.team, '', logoUrl) : badge(r.teamZh || r.team);
@@ -2801,11 +2801,11 @@ function renderStandingsTable(payload) {
       h += `<tr class="${rowCls}"${goAttr} title="${esc(tip)}">
         <td class="rk num"><span class="rk-pip"></span>${r.rank ?? ''}</td>
         <td class="tm"><div class="tm-in">${logo}<span class="tn">${esc(r.teamZh || r.team)}</span>${formDots(r.form)}</div></td>
-        <td class="num">${r.played ?? '-'}</td>
-        <td class="num">${r.win ?? '-'}</td>
-        <td class="num">${r.draw ?? '-'}</td>
-        <td class="num">${r.lose ?? '-'}</td>
-        <td class="num gfga">${r.gf ?? '-'}/${r.ga ?? '-'}</td>
+        <td class="num dc-st">${r.played ?? '-'}</td>
+        <td class="num dc-st">${r.win ?? '-'}</td>
+        <td class="num dc-st">${r.draw ?? '-'}</td>
+        <td class="num dc-st">${r.lose ?? '-'}</td>
+        <td class="num dc-st gfga">${r.gf ?? '-'}/${r.ga ?? '-'}</td>
         <td class="pts num"><b>${r.points ?? '-'}</b>${gapHtml}</td>
       </tr>`;
     }

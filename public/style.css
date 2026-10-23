@@ -1937,6 +1937,94 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .dc-table .dc-gap {
   display: block; font-size: 9.5px; font-weight: 600; color: var(--t3); line-height: 1.1; margin-top: 1px;
 }
+/* 1.9.164: standings table — fit #/球队/赛胜平负/进失/积分 on ~360px without clipping */
+.dc-table:not(.dc-mv) {
+  table-layout: fixed;
+  width: 100%;
+}
+.dc-table:not(.dc-mv) th,
+.dc-table:not(.dc-mv) td {
+  padding-left: 2px;
+  padding-right: 2px;
+}
+.dc-table:not(.dc-mv) th {
+  font-size: 10px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  line-height: 1.15;
+}
+.dc-table:not(.dc-mv) td {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+.dc-table:not(.dc-mv) th.rk,
+.dc-table:not(.dc-mv) td.rk {
+  width: 6%;
+  padding-left: 6px;
+}
+.dc-table:not(.dc-mv) tr[class*="zone-"] td.rk {
+  padding-left: 9px;
+}
+.dc-table:not(.dc-mv) th.tm,
+.dc-table:not(.dc-mv) td.tm {
+  width: 34%;
+  max-width: 0;
+  padding-left: 5px;
+  padding-right: 3px;
+}
+.dc-table:not(.dc-mv) .tm-in {
+  gap: 4px;
+}
+.dc-table:not(.dc-mv) .tm-in .badge {
+  width: 26px;
+  height: 26px;
+  font-size: 9px;
+}
+.dc-table:not(.dc-mv) .tm-in .tn {
+  max-width: 100%;
+  font-size: 11.5px;
+}
+.dc-table:not(.dc-mv) th.dc-st,
+.dc-table:not(.dc-mv) td.dc-st {
+  width: 5%;
+  font-size: 11px;
+  padding-left: 0;
+  padding-right: 0;
+}
+.dc-table:not(.dc-mv) th.gfga,
+.dc-table:not(.dc-mv) td.gfga {
+  width: 13%;
+  font-size: 10px;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+.dc-table:not(.dc-mv) th.pts,
+.dc-table:not(.dc-mv) td.pts {
+  width: 12%;
+  padding-right: 6px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.dc-table:not(.dc-mv) .dc-gap {
+  font-size: 8px;
+  letter-spacing: -0.02em;
+}
+.dc-table.dc-mv {
+  table-layout: fixed;
+  width: 100%;
+}
+.dc-table.dc-mv th.tm,
+.dc-table.dc-mv td.tm {
+  max-width: 0;
+}
+.dc-table.dc-mv .tm-in .badge {
+  width: 28px;
+  height: 28px;
+  font-size: 10px;
+}
+.dc-table.dc-mv .tm-in .tn {
+  max-width: 100%;
+}
 .dc-legend {
   margin: 8px 12px 12px; padding: 10px 12px; background: #fff; border-radius: var(--r);
   box-shadow: var(--sh); border: 1px solid rgba(230,235,243,.9);
