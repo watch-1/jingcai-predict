@@ -47,6 +47,7 @@ const esc = s => String(scrubVendorLabelsClient(s) ?? '').replace(/[&<>"']/g, c 
 const WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 const CFG = window.APP_CONFIG || { apiBase: '', platform: 'web', version: '' };
 const API = String(CFG.apiBase || '').replace(/\/+$/, ''); // fixed at build time; '' = same origin
+try { window.API = API; } catch (_) {}
 const IS_PARTNER = String(CFG.channel || '') === 'partner-test';
 const PARTNER_KEY = String(CFG.partnerKey || '');
 function partnerHeaders() {
