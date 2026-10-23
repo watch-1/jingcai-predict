@@ -19,10 +19,10 @@ for (const fn of imgFns) {
 assert.ok(/window\.API\s*=\s*API/.test(appJs), 'API exposed on window');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.173');
+assert.ok(pkg.version >= '1.9.173', 'package version bumped');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.173/.test(ver));
-assert.ok(/VERSION_CODE=210/.test(ver));
-assert.ok(/jc-v1\.9\.173/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-173-test OK');

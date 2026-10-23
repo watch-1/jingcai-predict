@@ -196,6 +196,12 @@ const AV = {
   a8: ['#94a3b8', '#334155', '<path d="M14 20h36v26H14z" fill="none" stroke="#fff" stroke-width="3"/><path d="M20 20v26M26 20v26M32 20v26M38 20v26M44 20v26M14 27h36M14 33h36M14 39h36" stroke="#fff" stroke-width="1.2" opacity=".7"/><circle cx="40" cy="42" r="6" fill="#fff"/>'],
 };
 const avatarSvg = id => { const [a, b, g] = AV[id] || AV.a1; return `<svg viewBox="0 0 64 64"><defs><linearGradient id="g${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="64" height="64" fill="url(#g${id})"/>${g}</svg>`; };
+function avatarHtml(id, size = 'sm') {
+  const k = AV[id] ? id : 'a1';
+  const cls = size === 'lg' ? 'col-av lg' : size === 'md' ? 'col-av' : 'col-av sm';
+  return `<span class="${cls}" aria-hidden="true">${avatarSvg(k)}</span>`;
+}
+try { window.avatarHtml = avatarHtml; } catch (_) {}
 
 // ======================= prediction model (odds baseline + multi-factor briefing) =======================
 const LBL = { had: { h: '胜', d: '平', a: '负' }, hhad: { h: '让胜', d: '让平', a: '让负' } };
@@ -343,7 +349,7 @@ function initDataSectionEarly() {
 const S = {
   token: LS.get('jc_token', null), user: LS.get('jc_user', null), guest: LS.get('jc_guest', false),
   matches: null, schedule: null, results: null, msrc: null, ssrc: null, rsrc: null,
-  plans: [], favs: [], tribeFollows: [],
+  plans: [], favs: [], tribeFollows: [], userFollows: [],
   tribeCat: null, tribeCatBusy: false, tribeSide: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_tribe_side')) || '__hot__',
   tribeSub: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_tribe_sub')) || 'enter',
   sel: {}, types: [], mult: 1, navDepth: 0,
@@ -384,9 +390,59 @@ function setSession(token, user) {
   S.token = token; S.user = user; LS.set('jc_token', token); LS.set('jc_user', user); LS.set('jc_guest', false); S.guest = false;
 }
 function clearSession() {
-  S.token = null; S.user = null; S.membership = null; S.orders = null; S.kb = { packs: null, picker: null, packItems: null, packId: null, selected: {}, intervention: 'medium', lastResult: null, loading: false, packsError: '', packItemsError: '' };
+  S.token = null; S.user = null; S.membership = null; S.orders = null;
+  S.userFollows = []; S.userFollowIds = null; S.friendsListCache = null;
+  S.kb = { packs: null, picker: null, packItems: null, packId: null, selected: {}, intervention: 'medium', lastResult: null, loading: false, packsError: '', packItemsError: '' };
   LS.del('jc_token'); LS.del('jc_user'); LS.del('jc_acct_cache'); LS.del(KB_PACKS_CACHE_KEY); loadLocalLists();
 }
+function applyUserFollowList(users) {
+  S.userFollows = Array.isArray(users) ? users : [];
+  S.userFollowIds = new Set(S.userFollows.map(u => String(u.userId)));
+}
+const isUserFollow = uid => !!(uid && S.userFollowIds && S.userFollowIds.has(String(uid)));
+function patchUserFollowButtons(uid) {
+  const on = isUserFollow(uid);
+  document.querySelectorAll('[data-act="userFollow"]').forEach((btn) => {
+    if (String(btn.dataset.uid) !== String(uid)) return;
+    if (btn.classList.contains('tf-post-follow')) {
+      btn.classList.toggle('on', on);
+      btn.textContent = on ? '已关注' : '+ 关注';
+    }
+  });
+}
+async function toggleUserFollow(userId, opts = {}) {
+  if (!loggedIn()) { toast('登录后可关注'); return go('#/login'); }
+  const uid = String(userId || '');
+  if (!uid || (S.user && String(S.user.id) === uid)) return;
+  const on = isUserFollow(uid);
+  if (!S.userFollowIds) S.userFollowIds = new Set();
+  const prev = new Set(S.userFollowIds);
+  if (on) S.userFollowIds.delete(uid);
+  else S.userFollowIds.add(uid);
+  patchUserFollowButtons(uid);
+  try {
+    if (on) await api('/user-follows/' + encodeURIComponent(uid), { method: 'DELETE' });
+    else await api('/user-follows/' + encodeURIComponent(uid), { method: 'PUT' });
+    if (!on) {
+      const u = (S.friendsListCache && S.friendsListCache.following || []).find(x => String(x.userId) === uid);
+      if (!u) {
+        S.userFollows = [{ userId: +uid, nickname: '球迷', avatar: 'a1' }, ...S.userFollows];
+      }
+    } else {
+      S.userFollows = S.userFollows.filter(x => String(x.userId) !== uid);
+    }
+    S.friendsListCache = null;
+    toast(on ? '已取消关注' : '已关注');
+    if (opts.refreshDetail && typeof JCTribeFeed !== 'undefined') JCTribeFeed.loadPostDetail(opts.refreshDetail);
+    if (route().name === 'friends') loadFriendsList();
+    if (meDrawerOpen()) syncMeDrawer();
+  } catch (e) {
+    S.userFollowIds = prev;
+    patchUserFollowButtons(uid);
+    toast(e.message || '操作失败');
+  }
+}
+try { window.isUserFollow = isUserFollow; window.toggleUserFollow = toggleUserFollow; } catch (_) {}
 function sessionExpired() { if (!S.token) return; clearSession(); toast('登录已过期，请重新登录'); go('#/login'); }
 
 // ---------- match data ----------
@@ -975,8 +1031,9 @@ function prefetchKbPacksOnBoot() {
 async function refreshAccount() {
   if (!loggedIn()) return;
   try {
-    const [me, pl, fv, tf, ms] = await Promise.all([api('/me'), api('/plans'), api('/favorites'), api('/tribe-follows'), api('/membership/status')]);
-    S.user = me.user; LS.set('jc_user', me.user); S.plans = pl.plans; S.favs = fv.favorites; S.tribeFollows = tf.tribeFollows || []; S.membership = ms; persistLists();
+    const [me, pl, fv, tf, uf, ms] = await Promise.all([api('/me'), api('/plans'), api('/favorites'), api('/tribe-follows'), api('/user-follows/following'), api('/membership/status')]);
+    S.user = me.user; LS.set('jc_user', me.user); S.plans = pl.plans; S.favs = fv.favorites; S.tribeFollows = tf.tribeFollows || [];
+    applyUserFollowList(uf.users); S.membership = ms; persistLists();
     hydrateKbPacksCache();
     prefetchKbPacksOnBoot();
     if (route().name === 'kb') ensureKbRouteData();
@@ -1196,6 +1253,7 @@ function meDrawerHtml() {
     : '游客浏览中 · 登录后同步方案与关注';
   const plansN = (S.plans && S.plans.length) || 0;
   const favsN = (S.favs && S.favs.length) || 0;
+  const friendsN = (S.userFollows && S.userFollows.length) || 0;
   let h = `<div class="md-hd">
     <button type="button" class="md-profile" data-go="${li ? '#/profile' : '#/login'}">
       <span class="md-av">${avatarSvg(li ? u?.avatar : 'a8')}</span>
@@ -1209,7 +1267,7 @@ function meDrawerHtml() {
     </div>
   </div>`;
   h += `<div class="md-body">
-    <div class="md-card">${meDrawerRow('#/plans', I.doc, '我的方案', plansN ? `${plansN} 个` : '')}${meDrawerRow('#/favs', I.star, '我的关注', favsN ? `${favsN} 场` : '')}</div>
+    <div class="md-card">${meDrawerRow('#/plans', I.doc, '我的方案', plansN ? `${plansN} 个` : '')}${meDrawerRow('#/favs', I.star, '我的关注', favsN ? `${favsN} 场` : '')}${meDrawerRow('#/friends', I.mail, '好友', friendsN ? `${friendsN} 人` : '')}</div>
     <div class="md-card">${meDrawerRow('#/membership', I.vip, '会员中心', mem ? '已开通' : '未开通')}${meDrawerRow('#/orders', I.doc, '会员订单')}${meDrawerRow('#/kb', I.doc, '我的知识库', '个人预测')}</div>
     <div class="md-card">${meDrawerRow('#/column', I.column, '球迷专栏')}${meDrawerRow('#/column/wallet', I.vip, '云朵钱包')}${meDrawerRow('#/settings', I.gear, '设置 / 外观', THEME_LABEL[homeTheme()])}${meDrawerRow('#/about', I.info, '关于我们', 'v' + esc(CFG.version || ''))}</div>
   </div>`;
@@ -7950,6 +8008,54 @@ function pagePlans() {
     <div class="foot2"><span>${esc(new Date(p.createdAt).toLocaleString('zh-CN', { hour12: false }))}</span><span>${esc(p.bets)}注 · 理论奖金 <b>${Number(p.min).toFixed(2)}~${Number(p.max).toFixed(2)}</b></span></div></div>`).join('') + '</div>';
   return h + foot();
 }
+function friendListRow(u, { showUnfollow } = {}) {
+  const uid = u.userId;
+  const av = avatarHtml(u.avatar, 'sm');
+  const act = showUnfollow
+    ? `<button type="button" class="btn ghost sm" data-act="userFollow" data-uid="${esc(String(uid))}">取消关注</button>`
+    : (isUserFollow(uid)
+      ? `<span class="uf-muted">已关注</span>`
+      : `<button type="button" class="btn pri sm" data-act="userFollow" data-uid="${esc(String(uid))}">回关</button>`);
+  return `<div class="uf-row">${av}<div class="uf-row-txt"><b>${esc(u.nickname || '球迷')}</b></div>${act}</div>`;
+}
+function pageFriends() {
+  const tab = S.friendsTab === 'followers' ? 'followers' : 'following';
+  let h = hdr('好友', { back: true });
+  if (!loggedIn()) {
+    return h + empty('登录后可查看你关注的用户与粉丝', '<button class="btn pri sm" data-go="#/login">登录</button>', '未登录') + foot();
+  }
+  h += `<div class="uf-tabs" role="tablist">
+    <button type="button" class="uf-tab${tab === 'following' ? ' on' : ''}" data-act="friendsTab" data-tab="following" role="tab">我关注的</button>
+    <button type="button" class="uf-tab${tab === 'followers' ? ' on' : ''}" data-act="friendsTab" data-tab="followers" role="tab">粉丝</button>
+  </div>`;
+  const cache = S.friendsListCache && S.friendsListCache[tab];
+  if (cache === undefined) {
+    h += '<div class="pad-card"><div class="spinner" style="margin:24px auto"></div></div>';
+  } else if (!cache.length) {
+    const msg = tab === 'following' ? '还没有关注任何人，在看帖时点击「+ 关注」添加好友。' : '暂无粉丝';
+    h += empty(msg, tab === 'following' ? '<button class="btn pri sm" data-go="#/tribe">去部落看看</button>' : '', tab === 'following' ? '列表为空' : '暂无粉丝');
+  } else {
+    h += `<div class="uf-list">${cache.map(u => friendListRow(u, { showUnfollow: tab === 'following' })).join('')}</div>`;
+  }
+  return h + foot();
+}
+async function loadFriendsList() {
+  if (!loggedIn()) return;
+  const tab = S.friendsTab === 'followers' ? 'followers' : 'following';
+  S.friendsListCache = S.friendsListCache || {};
+  try {
+    const path = tab === 'followers' ? '/user-follows/followers' : '/user-follows/following';
+    const j = await api(path, { timeout: 12000 });
+    S.friendsListCache[tab] = j.users || [];
+    if (tab === 'following') applyUserFollowList(j.users);
+    if (route().name === 'friends') render({ force: true });
+    if (meDrawerOpen()) syncMeDrawer();
+  } catch (e) {
+    S.friendsListCache[tab] = [];
+    toast(e.message || '加载失败');
+    if (route().name === 'friends') render({ force: true });
+  }
+}
 function pageFavs() {
   let h = hdr('我的关注');
   if (!S.favs.length) return h + empty('在赛事详情页点击「关注」，即可把场次收藏到这里，方便跟踪。', '<button class="btn pri sm" data-go="#/schedule">去看赛程</button>', '还没有关注') + foot();
@@ -8884,10 +8990,10 @@ function softPatchLiveScoreCards() {
 }
 
 // ======================= render (1.9.124 keep-alive + 1.9.125 home snap / boot-shell) =======================
-const PAGES = { home: pageHome, tribe: pageTribe, 'tribe-club': pageTribeClub, 'tribe-compose': pageTribeCompose, 'tribe-post': pageTribePost, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs,
+const PAGES = { home: pageHome, tribe: pageTribe, 'tribe-club': pageTribeClub, 'tribe-compose': pageTribeCompose, 'tribe-post': pageTribePost, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs, friends: pageFriends,
   news: pageNews, login: pageLogin, register: pageRegister, profile: pageProfile, password: pagePassword, delete: pageDelete, settings: pageSettings, about: pageAbout, terms: pageTerms, privacy: pagePrivacy,
   membership: pageMembership, pay: pagePay, orders: pageOrders, 'member-terms': pageMemberTerms, column: pageColumn, kb: pageKb };
-const TITLES = { home: '首页', tribe: '部落', 'tribe-club': '球队部落', 'tribe-compose': '发布帖子', 'tribe-post': '看帖', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库' };
+const TITLES = { home: '首页', tribe: '部落', 'tribe-club': '球队部落', 'tribe-compose': '发布帖子', 'tribe-post': '看帖', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库', friends: '好友' };
 
 /** In-memory keep-alive for bottom-tab pages — restore DOM HTML instead of wiping to skeleton. */
 const TAB_KEEP = Object.create(null);
@@ -9233,6 +9339,12 @@ function render(opts) {
   if (r.name === 'orders' && S.orders == null) {
     loadOrders().then(() => { if (route().name === 'orders') render({ force: true }); });
   }
+  if (r.name === 'friends' && loggedIn()) {
+    const tab = S.friendsTab === 'followers' ? 'followers' : 'following';
+    if (!S.friendsListCache || S.friendsListCache[tab] === undefined) {
+      setTimeout(() => { if (route().name === 'friends') loadFriendsList(); }, 0);
+    }
+  }
   if (r.name === 'player-db') {
     syncPlayerDbKeyFromRoute();
     const parts = String(r.arg || '').split('/').filter(Boolean);
@@ -9344,6 +9456,17 @@ document.addEventListener('click', async e => {
       return render({ force: true });
     }
     case 'tribeFollow': return toggleTribeFollow(el.dataset.id);
+    case 'userFollow': {
+      const postEl = document.getElementById('tribe-post-detail');
+      const refreshDetail = postEl && postEl.dataset.postId;
+      return toggleUserFollow(el.dataset.uid, { refreshDetail });
+    }
+    case 'friendsTab': {
+      S.friendsTab = el.dataset.tab === 'followers' ? 'followers' : 'following';
+      S.friendsListCache = null;
+      render({ force: true });
+      return;
+    }
     case 'tribeReload': {
       S.tribeCat = null; S.tribeCatBusy = false;
       invalidateTabKeep('tribe');

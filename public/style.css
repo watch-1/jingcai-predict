@@ -6162,12 +6162,15 @@ html[data-edge="1"] .auth-hd {
   flex-shrink: 0; border: 1px solid var(--tab-green, #2BB673); border-radius: 999px;
   padding: 5px 12px; font-size: 13px; font-weight: 600; color: var(--tab-green, #2BB673); background: #fff;
 }
+.tf-post-follow.on {
+  border-color: #c5e8d6; color: #5a9e7a; background: #f3faf6;
+}
 .tf-post-text { font-size: 16px; line-height: 1.55; color: #1a1f2b; margin: 0 0 10px; word-break: break-word; }
 .tf-post-imgs { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; }
 .tf-post-img { margin: 0; border-radius: 6px; overflow: hidden; background: #f2f4f8; }
 .tf-post-img img { display: block; width: 100%; height: auto; vertical-align: top; }
 .tf-post-attitude { padding: 8px 14px 16px; text-align: center; }
-.tf-post-attitude-t { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--tab-green, #2BB673); }
+.tf-post-attitude-t { margin: 0 0 8px; font-size: 12px; font-weight: 500; color: #7bc9a0; letter-spacing: .02em; }
 .tf-post-attitude-ph { display: flex; justify-content: center; gap: 10px; opacity: .35; }
 .tf-post-attitude-ph span {
   width: 36px; height: 36px; border-radius: 8px; background: linear-gradient(135deg, #e8edf4, #f5f7fa);
@@ -6203,18 +6206,20 @@ html[data-edge="1"] .auth-hd {
   padding: 10px 14px; font-size: 14px; color: #1a1f2b;
 }
 .tf-post-reply-inp::placeholder { color: #9aa3b2; }
-.tf-post-foot-acts { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
-.tf-post-act {
-  position: relative; display: inline-flex; align-items: center; color: #5c6573;
+.tf-post-reply-btn { flex-shrink: 0; border-radius: 999px; padding: 8px 14px; font-size: 13px; }
+.uf-tabs { display: flex; gap: 8px; padding: 10px 14px 4px; }
+.uf-tab {
+  flex: 1; border: 0; border-radius: 999px; padding: 8px 12px; font-size: 14px; font-weight: 600;
+  background: #f2f4f7; color: #5c6573;
 }
-.tf-post-act svg { width: 22px; height: 22px; }
-.tf-post-act em {
-  position: absolute; top: -4px; right: -10px; font-style: normal; font-size: 10px; font-weight: 700;
-  color: var(--tab-green, #2BB673);
+.uf-tab.on { background: #e8f7ef; color: var(--tab-green, #2BB673); }
+.uf-list { padding: 8px 14px 24px; }
+.uf-row {
+  display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid #eceef2;
 }
-.tf-post-reply-send {
-  position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0;
-}
+.uf-row:last-child { border-bottom: 0; }
+.uf-row-txt { flex: 1; min-width: 0; font-size: 15px; }
+.uf-muted { font-size: 13px; color: #9aa3b2; }
 .tribe-compose-sheet .tf-compose-input {
   width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 12px;
   padding: 12px; font-size: 15px; min-height: 96px; resize: vertical;

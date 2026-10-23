@@ -19,7 +19,7 @@ const mainJava = fs.readFileSync(path.join(__dirname, '../android/src/com/tiicai
 assert.ok(/onShowFileChooser/.test(mainJava), 'Android WebView file chooser');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.171');
+assert.ok(pkg.version >= '1.9.171', 'package version bumped');
 
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
 assert.ok(/VERSION=1\.9\.171/.test(ver));

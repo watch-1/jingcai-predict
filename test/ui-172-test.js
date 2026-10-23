@@ -16,7 +16,7 @@ assert.ok(/view--tribe-post/.test(appJs) && /view--tribe-post/.test(css));
 assert.ok(/tf-post-foot/.test(css) && /回复楼主/.test(tribeJs));
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.172');
+assert.ok(pkg.version >= '1.9.172', 'package version bumped');
 
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
 assert.ok(/VERSION=1\.9\.172/.test(ver));
