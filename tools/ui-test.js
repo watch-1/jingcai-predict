@@ -171,12 +171,24 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await tap('.tc-tab[data-go="#/results"]'); await p.waitForSelector('.dstrip button, .empty'); await shot('results');
     // data center
     await tap('.tabbar [data-go="#/data"]'); await p.waitForSelector('#dcLeagues');
+    await p.waitForFunction(() => document.querySelector('#dcBody .dc-table') && !document.querySelector('#dcBody .sk-card'), { timeout: 25000 });
+    const dcCacheKeys = await p.evaluate(() => {
+      try {
+        const dc = JSON.parse(localStorage.getItem('jc_data_cache_v1') || '{}');
+        return Object.keys(dc).length;
+      } catch { return 0; }
+    });
+    ok(dcCacheKeys >= 1, 'data: jc_data_cache_v1 populated after first visit (' + dcCacheKeys + ' slices)');
+    await p.reload({ waitUntil: 'domcontentloaded' });
+    await p.waitForSelector('#top-chrome:not(.hidden)', { timeout: 15000 });
+    await tap('.tabbar [data-go="#/data"]'); await p.waitForSelector('#dcBody');
+    await p.waitForFunction(() => document.querySelector('#dcBody .dc-table') && !document.querySelector('#dcBody .sk-card'), { timeout: 8000 });
+    ok(true, 'data: cold reload → data tab paints table without skeleton (cache hydrate)');
     ok(!(await p.$('[data-act="dataRefresh"]')), 'data: no refresh button');
     ok(!(await p.$('.dc-sub')), 'data: no lottery / tip sub row');
     ok(await p.$$eval('#top-chrome [data-act="dataSection"]', l => l.map(b => b.textContent).join(',')) === '球队,球星', 'data: top chrome 球队/球星');
     ok(!!(await p.$('#top-chrome [data-act="dataSection"].on[data-sec="team"]')), 'data: 球队 highlighted by default');
     ok(await p.$$eval('.dc-kinds [data-act="dataKind"]', l => l.map(b => b.textContent).join(',')) === '积分榜,身价榜', 'data team sub-tabs');
-    await p.waitForFunction(() => document.querySelector('#dcBody .dc-table') && !document.querySelector('#dcBody .sk-card'), { timeout: 25000 });
     ok(true, 'data: first paint table without skeleton');
     await tap('#dcLeagues [data-act="dataLeague"][data-lg="laliga"]'); await sleep(120);
     await p.waitForFunction(() => document.querySelector('#dcBody .dc-table') && !document.querySelector('#dcBody .sk-card'), { timeout: 25000 });
