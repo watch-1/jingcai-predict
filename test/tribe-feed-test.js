@@ -40,9 +40,13 @@ async function call(method, path, body, token) {
     ok(r.s === 200 && r.j.replies.length >= 1, 'list replies');
     const replyId = r.j.replies[0].id;
     r = await call('POST', '/tribe/posts/' + postId + '/reactions', { kind: 'like' }, tok);
-    ok(r.s === 200 && r.j.reactions && r.j.reactions.like === 1 && r.j.myReaction === 'like', 'post reaction toggle on');
+    ok(r.s === 200 && r.j.reactions && r.j.reactions.like === 1 && Array.isArray(r.j.myReactions) && r.j.myReactions.includes('like'), 'post reaction toggle on');
+    r = await call('POST', '/tribe/posts/' + postId + '/reactions', { kind: 'fire' }, tok);
+    ok(r.s === 200 && r.j.reactions.like === 1 && r.j.reactions.fire === 1 && r.j.myReactions.includes('like') && r.j.myReactions.includes('fire'), 'multi reactions coexist');
     r = await call('POST', '/tribe/posts/' + postId + '/reactions', { kind: 'like' }, tok);
-    ok(r.s === 200 && r.j.reactions.like === 0 && !r.j.myReaction, 'post reaction toggle off');
+    ok(r.s === 200 && r.j.reactions.like === 0 && r.j.reactions.fire === 1 && !r.j.myReactions.includes('like') && r.j.myReactions.includes('fire'), 'toggle one kind off');
+    r = await call('POST', '/tribe/posts/' + postId + '/reactions', { kind: 'fire' }, tok);
+    ok(r.s === 200 && r.j.reactions.fire === 0 && r.j.myReactions.length === 0, 'post reaction toggle off');
     r = await call('POST', '/tribe/replies/' + replyId + '/like', {}, tok);
     ok(r.s === 200 && r.j.likeCount === 1 && r.j.myLiked, 'reply like on');
     r = await call('POST', '/tribe/replies/' + replyId + '/like', {}, tok);

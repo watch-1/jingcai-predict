@@ -1,5 +1,5 @@
 /**
- * Tribe club feed UI (1.9.178). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isUserFollow, tribeById, API.
+ * Tribe club feed UI (1.9.179). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isUserFollow, tribeById, API, confirmDlg.
  */
 (function (global) {
   'use strict';
@@ -154,11 +154,29 @@
     return { laugh: 0, like: 0, fire: 0, total: 0 };
   }
 
+  function myReactionSet(post) {
+    if (Array.isArray(post.myReactions)) return new Set(post.myReactions);
+    if (post.myReaction) return new Set([post.myReaction]);
+    return new Set();
+  }
+
+  function myReactionsList(post) {
+    if (Array.isArray(post.myReactions)) return post.myReactions.slice();
+    if (post.myReaction) return [post.myReaction];
+    return [];
+  }
+
+  async function appConfirm(message, { title = '提示', confirmText = '确定', danger = false } = {}) {
+    const fn = global.confirmDlg;
+    if (typeof fn === 'function') return await fn(title, message, confirmText, danger);
+    return false;
+  }
+
   function reactionsHtml(post) {
     const rx = post.reactions || defaultReactions();
-    const mine = post.myReaction || '';
+    const mineSet = myReactionSet(post);
     const btns = REACT_DEFS.map(([kind, emo]) => {
-      const on = mine === kind;
+      const on = mineSet.has(kind);
       const n = rx[kind] || 0;
       const cnt = n > 0 ? `<span class="tf-react-n">${n}</span>` : '';
       return `<button type="button" class="tf-react-b${on ? ' on' : ''}" data-act="tribeReact" data-post="${post.id}" data-kind="${kind}" aria-label="${kind}">${emo}${cnt}</button>`;
@@ -725,11 +743,12 @@
     wrap.innerHTML = reactionsHtml(post);
   }
 
-  function paintReactionButtons(wrap, rx, mine) {
+  function paintReactionButtons(wrap, rx, myReactions) {
     if (!wrap) return;
+    const mineSet = new Set(Array.isArray(myReactions) ? myReactions : (myReactions ? [myReactions] : []));
     wrap.querySelectorAll('.tf-react-b').forEach((btn) => {
       const k = btn.dataset.kind;
-      btn.classList.toggle('on', mine === k);
+      btn.classList.toggle('on', mineSet.has(k));
       const n = (rx && rx[k]) || 0;
       const nEl = btn.querySelector('.tf-react-n');
       if (n > 0) {
@@ -757,28 +776,25 @@
       post = S.tribeDetailPost;
     }
     const prevRx = post ? Object.assign({}, post.reactions || defaultReactions()) : defaultReactions();
-    const prevMine = post ? post.myReaction || null : null;
+    const prevMine = post ? myReactionsList(post) : [];
     const nextRx = Object.assign({}, prevRx);
-    let nextMine = prevMine;
-    if (prevMine === kind) {
-      nextMine = null;
+    const hadKind = prevMine.includes(kind);
+    let nextMine;
+    if (hadKind) {
+      nextMine = prevMine.filter((k) => k !== kind);
       if (nextRx[kind] > 0) { nextRx[kind] -= 1; nextRx.total = Math.max(0, (nextRx.total || 0) - 1); }
     } else {
-      if (prevMine && nextRx[prevMine] > 0) {
-        nextRx[prevMine] -= 1;
-        nextRx.total = Math.max(0, (nextRx.total || 0) - 1);
-      }
-      nextMine = kind;
+      nextMine = prevMine.concat(kind);
       nextRx[kind] = (nextRx[kind] || 0) + 1;
       nextRx.total = (nextRx.total || 0) + 1;
     }
-    if (post && tid) patchPostInCache(tid, postId, { reactions: nextRx, myReaction: nextMine });
+    if (post && tid) patchPostInCache(tid, postId, { reactions: nextRx, myReactions: nextMine });
     if (post && S.tribeDetailPost && String(S.tribeDetailPost.id) === String(postId)) {
-      S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, { reactions: nextRx, myReaction: nextMine });
+      S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, { reactions: nextRx, myReactions: nextMine });
     }
     const animDone = bumpReactAnim(btnEl, kind);
     const card = document.querySelector('.tf-card[data-post="' + postId + '"]');
-    const updated = post && tid ? patchPostInCache(tid, post.id, { reactions: nextRx, myReaction: nextMine }) : post;
+    const updated = post && tid ? patchPostInCache(tid, post.id, { reactions: nextRx, myReactions: nextMine }) : post;
     const repaintFeedCard = () => {
       const cardNow = document.querySelector('.tf-card[data-post="' + postId + '"]');
       const fresh = tid ? (S.tribeFeedCache[tid] || []).find((p) => String(p.id) === String(postId)) : updated;
@@ -797,17 +813,17 @@
       const j = await api('/tribe/posts/' + encodeURIComponent(postId) + '/reactions', { method: 'POST', body: { kind }, timeout: 10000 });
       await animDone;
       if (post && j.reactions) {
-        if (tid) patchPostInCache(tid, postId, { reactions: j.reactions, myReaction: j.myReaction || null });
+        if (tid) patchPostInCache(tid, postId, { reactions: j.reactions, myReactions: j.myReactions || [] });
         if (S.tribeDetailPost && String(S.tribeDetailPost.id) === String(postId)) {
-          S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, { reactions: j.reactions, myReaction: j.myReaction || null });
+          S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, { reactions: j.reactions, myReactions: j.myReactions || [] });
           refreshDetailReactions(S.tribeDetailPost);
         }
       }
     } catch (e) {
       await animDone;
-      if (post && tid) patchPostInCache(tid, postId, { reactions: prevRx, myReaction: prevMine });
+      if (post && tid) patchPostInCache(tid, postId, { reactions: prevRx, myReactions: prevMine });
       if (S.tribeDetailPost && String(S.tribeDetailPost.id) === String(postId)) {
-        S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, { reactions: prevRx, myReaction: prevMine });
+        S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, { reactions: prevRx, myReactions: prevMine });
         refreshDetailReactions(S.tribeDetailPost);
       }
       repaintFeedCard();
@@ -817,7 +833,7 @@
 
   async function deletePost(postId, tribeId) {
     if (!loggedIn()) { toast('请先登录'); return go('#/login'); }
-    if (!window.confirm('确定删除这条帖子？删除后不可恢复。')) return;
+    if (!(await appConfirm('确定删除这条帖子？删除后不可恢复。', { title: '删除帖子', confirmText: '删除', danger: true }))) return;
     try {
       await api('/tribe/posts/' + encodeURIComponent(postId), { method: 'DELETE', timeout: 12000 });
       toast('已删除');
@@ -840,7 +856,7 @@
 
   async function deleteReply(replyId, postId) {
     if (!loggedIn()) { toast('请先登录'); return go('#/login'); }
-    if (!window.confirm('确定删除这条回贴？')) return;
+    if (!(await appConfirm('确定删除这条回贴？', { title: '删除回贴', confirmText: '删除', danger: true }))) return;
     try {
       await api('/tribe/replies/' + encodeURIComponent(replyId), { method: 'DELETE', timeout: 12000 });
       toast('已删除');
