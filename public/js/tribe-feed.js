@@ -1,5 +1,5 @@
 /**
- * Tribe club feed UI (1.9.177). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isUserFollow, tribeById, API.
+ * Tribe club feed UI (1.9.178). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isUserFollow, tribeById, API.
  */
 (function (global) {
   'use strict';
@@ -74,9 +74,74 @@
       && String(global.S.user.id) === String(author.userId);
   }
 
-  function ownPostDeleteBtn(post) {
+  const MORE_DOTS_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="12" cy="19" r="1.75"/></svg>';
+
+  function moreMenuBtn(attrs) {
+    return `<button type="button" class="tf-more-btn" data-act="tribeMoreOpen" ${attrs} aria-label="更多" aria-haspopup="true">${MORE_DOTS_SVG}</button>`;
+  }
+
+  function ownPostMoreBtn(post) {
     if (!isOwnAuthor(post.author) || post.kind === 'match_vote') return '';
-    return `<button type="button" class="tf-post-del" data-act="tribePostDelete" data-post="${post.id}" data-tribe="${esc(post.tribeId || '')}" aria-label="删除帖子">删除</button>`;
+    const tid = esc(post.tribeId || '');
+    return moreMenuBtn(`data-scope="post" data-post="${post.id}" data-tribe="${tid}"`);
+  }
+
+  function ownReplyMoreBtn(r) {
+    if (!isOwnAuthor(r.author)) return '';
+    return moreMenuBtn(`data-scope="reply" data-reply="${r.id}" data-post="${r.postId}"`);
+  }
+
+  let moreMenuOutsideBound = false;
+
+  function closeMoreMenu() {
+    const pop = document.getElementById('tf-more-pop');
+    if (pop) pop.remove();
+    const mask = document.getElementById('tf-more-mask');
+    if (mask) mask.remove();
+    if (moreMenuOutsideBound) {
+      document.removeEventListener('click', onMoreMenuOutside, true);
+      moreMenuOutsideBound = false;
+    }
+  }
+
+  function onMoreMenuOutside(ev) {
+    if (ev.target.closest('#tf-more-pop') || ev.target.closest('.tf-more-btn')) return;
+    closeMoreMenu();
+  }
+
+  function openMoreMenu(anchorBtn) {
+    closeMoreMenu();
+    const scope = anchorBtn.dataset.scope;
+    const rect = anchorBtn.getBoundingClientRect();
+    const mask = document.createElement('div');
+    mask.id = 'tf-more-mask';
+    mask.className = 'tf-more-mask';
+    mask.setAttribute('data-act', 'tribeMoreClose');
+    document.body.appendChild(mask);
+
+    const pop = document.createElement('div');
+    pop.id = 'tf-more-pop';
+    pop.className = 'tf-more-pop';
+    pop.setAttribute('role', 'menu');
+    if (scope === 'post') {
+      const tid = esc(anchorBtn.dataset.tribe || '');
+      pop.innerHTML = `<button type="button" class="tf-more-item danger" role="menuitem" data-act="tribePostDelete" data-post="${esc(anchorBtn.dataset.post)}" data-tribe="${tid}">删除</button>`;
+    } else if (scope === 'reply') {
+      pop.innerHTML = `<button type="button" class="tf-more-item danger" role="menuitem" data-act="tribeReplyDelete" data-reply="${esc(anchorBtn.dataset.reply)}" data-post="${esc(anchorBtn.dataset.post)}">删除</button>`;
+    }
+    document.body.appendChild(pop);
+
+    const popRect = pop.getBoundingClientRect();
+    let top = rect.bottom + 6;
+    let left = rect.right - popRect.width;
+    const pad = 8;
+    left = Math.max(pad, Math.min(left, window.innerWidth - popRect.width - pad));
+    if (top + popRect.height > window.innerHeight - pad) top = Math.max(pad, rect.top - popRect.height - 6);
+    pop.style.top = top + 'px';
+    pop.style.left = left + 'px';
+
+    moreMenuOutsideBound = true;
+    setTimeout(() => document.addEventListener('click', onMoreMenuOutside, true), 0);
   }
 
   const REACT_DEFS = [
@@ -175,7 +240,7 @@
       </div>
     </div>`;
     const follow = detail ? '' : followPill(post.author);
-    const delBtn = detail ? '' : ownPostDeleteBtn(post);
+    const delBtn = detail ? '' : ownPostMoreBtn(post);
     const time = fmtTime(post.createdAt);
     return `<article class="tf-card ${kind}" data-post="${post.id}">
       <div class="tf-card-hd">
@@ -515,7 +580,7 @@
           <div class="tf-post-author-name">${esc(post.author.nickname || '球迷')}</div>
           <time class="tf-post-author-time">${fmtTime(post.createdAt)}</time>
         </div>
-        ${detailUserFollowBtn(post.author)}
+        <div class="tf-post-author-r">${ownPostMoreBtn(post)}${detailUserFollowBtn(post.author)}</div>
       </div>
       ${vote}
       ${body}
@@ -534,9 +599,7 @@
 
   function detailReplyItem(r) {
     const av = typeof global.avatarHtml === 'function' ? global.avatarHtml(r.author.avatar, 'sm') : '';
-    const del = isOwnAuthor(r.author)
-      ? `<button type="button" class="tf-huitie-del" data-act="tribeReplyDelete" data-reply="${r.id}" data-post="${r.postId}" aria-label="删除回贴">删除</button>`
-      : '';
+    const more = ownReplyMoreBtn(r);
     return `<div class="tf-huitie-item" data-reply-id="${r.id}">
       <div class="tf-huitie-hd">
         ${av}
@@ -544,18 +607,15 @@
           <span class="tf-huitie-name">${esc(r.author.nickname || '球迷')}</span>
           <time class="tf-huitie-time">${fmtTime(r.createdAt)}</time>
         </div>
-        <div class="tf-huitie-actions">${del}<button type="button" class="tf-huitie-like${r.myLiked ? ' on' : ''}" data-act="tribeReplyLike" data-reply="${r.id}" aria-label="点赞">👍${(r.likeCount || 0) > 0 ? `<span class="tf-huitie-like-n">${r.likeCount}</span>` : ''}</button></div>
+        <div class="tf-huitie-actions">${more}<button type="button" class="tf-huitie-like${r.myLiked ? ' on' : ''}" data-act="tribeReplyLike" data-reply="${r.id}" aria-label="点赞">👍${(r.likeCount || 0) > 0 ? `<span class="tf-huitie-like-n">${r.likeCount}</span>` : ''}</button></div>
       </div>
       <p class="tf-huitie-body">${esc(r.body)}</p>
     </div>`;
   }
 
-  function detailHeaderHtml(tribe, post) {
+  function detailHeaderHtml(tribe) {
     const circle = tribeCircleLabel(tribe.nameZh);
     const crest = badge(tribe.nameZh, 'sm', tribe.logo);
-    const del = post && isOwnAuthor(post.author) && post.kind !== 'match_vote'
-      ? `<button type="button" class="tf-post-del tf-post-hdr-del" data-act="tribePostDelete" data-post="${post.id}" data-tribe="${esc(post.tribeId || '')}" aria-label="删除帖子">删除</button>`
-      : '';
     return `<header class="tf-post-hdr">
       <button type="button" class="tf-post-back" data-act="back" aria-label="返回">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg>
@@ -566,7 +626,6 @@
         </div>
         ${crest}
       </div>
-      ${del}
     </header>`;
   }
 
@@ -604,7 +663,7 @@
       el.className = 'tf-post-page';
       el.dataset.postId = String(post.id);
       S.tribeDetailPost = post;
-      el.innerHTML = detailHeaderHtml(tribe, post)
+      el.innerHTML = detailHeaderHtml(tribe)
         + `<div class="tf-post-scroll">${detailPostMain(post, tribe)}${detailReactionsBar(post)}${detailAttitudeStub(replies.length)}${huitie}</div>`
         + detailBottomBar(post);
       const inp = document.getElementById('tribe-reply-input');
@@ -892,8 +951,20 @@
     }
     if (act === 'tribeReact') { ev.stopPropagation(); togglePostReaction(el.dataset.post, el.dataset.kind, el); return true; }
     if (act === 'tribeReplyLike') { ev.stopPropagation(); toggleReplyLike(el.dataset.reply, el); return true; }
-    if (act === 'tribePostDelete') { ev.stopPropagation(); deletePost(el.dataset.post, el.dataset.tribe); return true; }
-    if (act === 'tribeReplyDelete') { ev.stopPropagation(); deleteReply(el.dataset.reply, el.dataset.post); return true; }
+    if (act === 'tribeMoreOpen') { ev.stopPropagation(); openMoreMenu(el); return true; }
+    if (act === 'tribeMoreClose') { ev.stopPropagation(); closeMoreMenu(); return true; }
+    if (act === 'tribePostDelete') {
+      ev.stopPropagation();
+      closeMoreMenu();
+      deletePost(el.dataset.post, el.dataset.tribe);
+      return true;
+    }
+    if (act === 'tribeReplyDelete') {
+      ev.stopPropagation();
+      closeMoreMenu();
+      deleteReply(el.dataset.reply, el.dataset.post);
+      return true;
+    }
     return false;
   }
 
