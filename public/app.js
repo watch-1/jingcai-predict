@@ -1312,21 +1312,86 @@ function schDateCenterLabel(d) {
   if (dn === '今天' || dn === '明天' || dn === '昨天') return `${dn} ${tail}`;
   return `${dn} ${tail}`;
 }
-/** 1.9.182: 顶栏简约日期调节器（灰底胶囊 + 中央白 pill + 左右日切）。 */
+/** 1.9.183: 顶栏五日日期轮播（灰底胶囊 + 中间宽两侧窄 + 横拖换日）。 */
+function commitSchDate(next) {
+  if (!next || next === S.schDate) return false;
+  S.schDate = next;
+  invalidateTabKeep('schedule');
+  if (softPatchSchedule()) { syncTopChrome('schedule'); return true; }
+  render({ force: true });
+  return true;
+}
+function schDateCarouselSlotHtml(d, tier) {
+  const mmdd = d.slice(5);
+  if (tier === 'center') {
+    return `<span class="tc-sch-date-slot tc-sch-date-slot--center tc-sch-date-pill" aria-current="date">${esc(schDateCenterLabel(d))}</span>`;
+  }
+  if (tier === 'far') {
+    return `<button type="button" class="tc-sch-date-slot tc-sch-date-slot--far" data-sdate="${d}" aria-label="${esc(schDateCenterLabel(d))}">${esc(mmdd)}</button>`;
+  }
+  const isL = tier === 'near-l';
+  const chev = `<span class="tc-sch-date-chev" aria-hidden="true">${isL ? '‹' : '›'}</span>`;
+  const lab = `<span class="tc-sch-date-side-lab">${esc(mmdd)}</span>`;
+  const inner = isL ? chev + lab : lab + chev;
+  const delta = isL ? -1 : 1;
+  return `<button type="button" class="tc-sch-date-slot tc-sch-date-slot--near" data-act="schDateStep" data-delta="${delta}" aria-label="${isL ? '前一天' : '后一天'}">${inner}</button>`;
+}
 function schDateAdjusterHtml() {
   const cur = S.schDate || bjDate(0);
-  const prev = shiftIssueDate(cur, -1);
-  const next = shiftIssueDate(cur, 1);
-  const center = schDateCenterLabel(cur);
-  return `<div class="tc-sch-date" role="group" aria-label="赛程日期">
-    <button type="button" class="tc-sch-date-nav" data-act="schDateStep" data-delta="-1" aria-label="前一天">
-      <span class="tc-sch-date-side-lab">${esc(prev.slice(5))}</span><span class="tc-sch-date-chev" aria-hidden="true">‹</span>
-    </button>
-    <span class="tc-sch-date-pill" aria-current="date">${esc(center)}</span>
-    <button type="button" class="tc-sch-date-nav" data-act="schDateStep" data-delta="1" aria-label="后一天">
-      <span class="tc-sch-date-chev" aria-hidden="true">›</span><span class="tc-sch-date-side-lab">${esc(next.slice(5))}</span>
-    </button>
+  const slots = [-2, -1, 0, 1, 2].map(off => {
+    const d = shiftIssueDate(cur, off);
+    let tier = 'far';
+    if (off === 0) tier = 'center';
+    else if (off === -1) tier = 'near-l';
+    else if (off === 1) tier = 'near-r';
+    return schDateCarouselSlotHtml(d, tier);
+  });
+  return `<div class="tc-sch-date" role="group" aria-label="赛程日期" data-sch-date="${esc(cur)}">
+    <div class="tc-sch-date-track">${slots.join('')}</div>
   </div>`;
+}
+function initSchDateCarousel() {
+  const root = document.querySelector('#top-chrome .tc-sch-date');
+  if (!root || root.dataset.dragBound === '1') return;
+  root.dataset.dragBound = '1';
+  const track = root.querySelector('.tc-sch-date-track');
+  let px0 = 0, dragging = false, didDrag = false;
+  const TH = 28;
+  const onDown = e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target.closest('button') && e.pointerType !== 'mouse') return;
+    dragging = true;
+    didDrag = false;
+    px0 = e.clientX;
+    root.classList.add('is-dragging');
+    try { root.setPointerCapture(e.pointerId); } catch (_) {}
+  };
+  const onMove = e => {
+    if (!dragging) return;
+    const dx = e.clientX - px0;
+    if (Math.abs(dx) > 5) didDrag = true;
+    if (track) track.style.transform = `translate3d(${dx * 0.42}px, 0, 0)`;
+  };
+  const onUp = e => {
+    if (!dragging) return;
+    dragging = false;
+    root.classList.remove('is-dragging');
+    const dx = e.clientX - px0;
+    if (track) track.style.transform = '';
+    try { root.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (Math.abs(dx) >= TH) {
+      window.__schDateSuppressClick = true;
+      commitSchDate(shiftIssueDate(S.schDate || bjDate(0), dx > 0 ? -1 : 1));
+      setTimeout(() => { window.__schDateSuppressClick = false; }, 80);
+    } else if (didDrag) {
+      window.__schDateSuppressClick = true;
+      setTimeout(() => { window.__schDateSuppressClick = false; }, 80);
+    }
+  };
+  root.addEventListener('pointerdown', onDown);
+  root.addEventListener('pointermove', onMove);
+  root.addEventListener('pointerup', onUp);
+  root.addEventListener('pointercancel', onUp);
 }
 function topChromeCenterHtml(rName) {
   if (rName === 'schedule') return schDateAdjusterHtml();
@@ -1374,6 +1439,7 @@ function syncTopChrome(rName) {
       <button type="button" class="tc-ic" data-go="#/plans" aria-label="我的消息">${I.mail}${msgDot}</button>
     </div></div>`;
   if (el.innerHTML !== want) el.innerHTML = want;
+  if (show && rName === 'schedule') initSchDateCarousel();
 }
 const empty = (text, btn = '', title = '') => `<div class="empty">${EMPTY_SVG}${title ? `<div class="empty-t">${title}</div>` : ''}<div class="empty-d">${text}</div>${btn}</div>`;
 const skeleton = (n = 4) => '<div class="grid">' + Array.from({ length: n }, () => `<div class="card sk-card"><div style="display:flex;gap:8px"><div class="sk sk-line" style="width:48px;margin:0"></div><div class="sk sk-line" style="width:90px;margin:0"></div></div>
@@ -9473,10 +9539,9 @@ document.addEventListener('click', async e => {
   if (d.type) { const n = +d.type; S.types = S.types.includes(n) ? S.types.filter(x => x !== n) : [...S.types, n]; if (!S.types.length) S.types = [n]; return openPlanSheet(); }
   if (d.mult) { S.mult = Math.max(1, Math.min(99, S.mult + +d.mult)); return openPlanSheet(); }
   if (d.sdate) {
-    S.schDate = d.sdate;
-    invalidateTabKeep('schedule');
-    if (softPatchSchedule()) { syncTopChrome('schedule'); return; }
-    return render({ force: true });
+    if (window.__schDateSuppressClick) return;
+    commitSchDate(d.sdate);
+    return;
   }
   if (d.slg) {
     if (!applySchLeagueFromChip(el)) return;
@@ -9505,12 +9570,11 @@ document.addEventListener('click', async e => {
       return render({ force: true });
     }
     case 'schDateStep': {
+      if (window.__schDateSuppressClick) return;
       const delta = Number(el.dataset.delta);
       if (!delta || !S.schDate) return;
-      S.schDate = shiftIssueDate(S.schDate, delta);
-      invalidateTabKeep('schedule');
-      if (softPatchSchedule()) { syncTopChrome('schedule'); return; }
-      return render({ force: true });
+      commitSchDate(shiftIssueDate(S.schDate, delta));
+      return;
     }
     case 'tribeSub': {
       setTribeSub(el.dataset.sub || 'enter');
