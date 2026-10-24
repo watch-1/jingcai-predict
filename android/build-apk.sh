@@ -14,7 +14,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"; A="$ROOT/android"
 export JAVA_HOME="${JAVA_HOME:-/opt/android-tools/jdk17}"; export PATH="$JAVA_HOME/bin:$PATH"
 SDK="${ANDROID_HOME:-/opt/android-tools/sdk}"; BT="$SDK/build-tools/34.0.0"; JAR="$SDK/platforms/android-34/android.jar"
 KEYSTORE="${KEYSTORE:-$A/release.keystore}"; KS_PASS="${KS_PASS:-jingcai-predict}"; KEY_ALIAS="${KEY_ALIAS:-jingcai}"
-VERSION_NAME="${VERSION_NAME:-1.9.180}"; VERSION_CODE="${VERSION_CODE:-217}"
+VERSION_NAME="${VERSION_NAME:-1.9.181}"; VERSION_CODE="${VERSION_CODE:-218}"
 API_BASE="${API_BASE:-http://120.77.152.74:8088}"; API_BASE="${API_BASE%/}"
 case "$API_BASE" in http://*|https://*) ;; *) echo "API_BASE must start with http:// or https://" >&2; exit 1;; esac
 OUT="${OUT:-$ROOT/dist/jingcai-predict.apk}"; B="$A/build"

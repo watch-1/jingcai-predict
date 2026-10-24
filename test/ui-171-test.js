@@ -22,7 +22,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 
 assert.ok(pkg.version >= '1.9.171', 'package version bumped');
 
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.171/.test(ver));
-assert.ok(/VERSION_CODE=208/.test(ver));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
 
 console.log('ui-171-test OK');
