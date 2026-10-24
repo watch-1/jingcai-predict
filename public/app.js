@@ -1315,6 +1315,25 @@ function schDateCenterLabel(d) {
 /** 1.9.184: 顶栏连续日期滚筒（横拖吸附 + 透视缩放，无灰框/蓝框）。 */
 const SCH_SPINDLE_SLOT = 70;
 const SCH_SPINDLE_RANGE = 40;
+/** Max pointer travel (px) still treated as tap-to-open calendar on center. */
+const SCH_SPINDLE_TAP_MOVE_PX = 8;
+function schSpindlePointerXY(e, fallbackX, fallbackY) {
+  if (e && e.clientX != null && e.clientY != null) return { x: e.clientX, y: e.clientY };
+  return { x: fallbackX, y: fallbackY };
+}
+/** Center tap hit: overlay bounds when available, else spindle mid ± one slot width (WebView-safe). */
+function schSpindleCenterTapHit(spindle, clientX, clientY) {
+  if (clientX == null || clientY == null || !spindle) return false;
+  const hi = spindle.querySelector('.tc-sch-date-spindle-center-hi');
+  if (hi) {
+    const hr = hi.getBoundingClientRect();
+    if (clientX >= hr.left && clientX <= hr.right && clientY >= hr.top && clientY <= hr.bottom) return true;
+  }
+  const r = spindle.getBoundingClientRect();
+  const midX = r.left + r.width / 2;
+  const halfW = SCH_SPINDLE_SLOT / 2;
+  return clientX >= midX - halfW && clientX <= midX + halfW && clientY >= r.top && clientY <= r.bottom;
+}
 function commitSchDate(next) {
   if (!next || next === S.schDate) return false;
   S.schDate = next;
@@ -1459,7 +1478,7 @@ function initSchDateSpindle() {
   if (!spindle || !track) return;
   let state = wrap._schSpindleState;
   if (!state) {
-    state = { offsetPx: 0, pointerDown: false, dragging: false, moved: false, startX: 0, startY: 0, startOffset: 0, pressTimer: null };
+    state = { offsetPx: 0, pointerDown: false, dragging: false, moved: false, startX: 0, startY: 0, lastClientX: 0, lastClientY: 0, startOffset: 0, pressTimer: null };
     wrap._schSpindleState = state;
     if (wrap._schSpindleAbort) wrap._schSpindleAbort.abort();
     const ac = new AbortController();
@@ -1483,20 +1502,18 @@ function initSchDateSpindle() {
       applyTransform(true);
       paintSchDateSpindlePerspective(spindle, track);
     };
-    const hitCenterHi = (x, y) => {
-      const hi = spindle.querySelector('.tc-sch-date-spindle-center-hi');
-      if (!hi) return false;
-      const r = hi.getBoundingClientRect();
-      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
-    };
-    spindle.addEventListener('pointerdown', e => {
+    wrap.addEventListener('pointerdown', e => {
+      if (!e.target.closest('.tc-sch-date-spindle')) return;
       if (e.target.closest('.tc-sch-date-step')) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const pt = schSpindlePointerXY(e, 0, 0);
       state.pointerDown = true;
       state.moved = false;
       state.dragging = false;
-      state.startX = e.clientX;
-      state.startY = e.clientY;
+      state.startX = pt.x;
+      state.startY = pt.y;
+      state.lastClientX = pt.x;
+      state.lastClientY = pt.y;
       state.startOffset = state.offsetPx;
       track.style.transition = 'none';
       clearTimeout(state.pressTimer);
@@ -1504,12 +1521,16 @@ function initSchDateSpindle() {
         if (!state.pointerDown || state.moved) return;
         spindle.classList.add('is-pressing');
       }, 180);
-      try { spindle.setPointerCapture(e.pointerId); } catch (_) {}
+      try { wrap.setPointerCapture(e.pointerId); } catch (_) {}
     }, { signal: sig });
-    spindle.addEventListener('pointermove', e => {
+    wrap.addEventListener('pointermove', e => {
       if (!state.pointerDown) return;
-      const dx = e.clientX - state.startX;
-      if (!state.moved && Math.abs(dx) > 4) {
+      const pt = schSpindlePointerXY(e, state.lastClientX, state.lastClientY);
+      state.lastClientX = pt.x;
+      state.lastClientY = pt.y;
+      const dx = pt.x - state.startX;
+      const dy = pt.y - state.startY;
+      if (!state.moved && Math.hypot(dx, dy) > SCH_SPINDLE_TAP_MOVE_PX) {
         state.moved = true;
         state.dragging = true;
         spindle.classList.add('is-dragging');
@@ -1525,18 +1546,19 @@ function initSchDateSpindle() {
       if (!state.pointerDown) return;
       const wasDragging = state.dragging;
       const wasMoved = state.moved;
-      const cx = e && e.clientX != null ? e.clientX : state.startX;
-      const cy = e && e.clientY != null ? e.clientY : state.startY;
+      const pt = schSpindlePointerXY(e, state.lastClientX, state.lastClientY);
+      state.lastClientX = pt.x;
+      state.lastClientY = pt.y;
       state.pointerDown = false;
       clearTimeout(state.pressTimer);
       state.dragging = false;
       spindle.classList.remove('is-dragging', 'is-pressing');
-      try { spindle.releasePointerCapture(e.pointerId); } catch (_) {}
+      try { wrap.releasePointerCapture(e.pointerId); } catch (_) {}
       if (wasDragging) { snap(); return; }
-      if (!wasMoved && hitCenterHi(cx, cy)) openSchDateCalendar();
+      if (!wasMoved && schSpindleCenterTapHit(spindle, pt.x, pt.y)) openSchDateCalendar();
     };
-    spindle.addEventListener('pointerup', up, { signal: sig });
-    spindle.addEventListener('pointercancel', up, { signal: sig });
+    wrap.addEventListener('pointerup', up, { signal: sig });
+    wrap.addEventListener('pointercancel', up, { signal: sig });
     if (!window.__schSpindleResizeBound) {
       window.__schSpindleResizeBound = true;
       window.addEventListener('resize', () => {
