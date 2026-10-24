@@ -1347,12 +1347,10 @@ function schDateSpindleHtml() {
   const cur = S.schDate || bjDate(0);
   const hi = schDateCenterLabel(cur);
   return `<div class="tc-sch-date-spindle-wrap" role="group" aria-label="赛程日期" data-sch-date="${esc(cur)}">
-    <button type="button" class="tc-sch-date-step" data-act="schDateStep" data-delta="-1" aria-label="前一天"><span aria-hidden="true">‹</span></button>
     <div class="tc-sch-date-spindle" aria-live="polite">
       <div class="tc-sch-date-spindle-track"></div>
-      <div class="tc-sch-date-spindle-center-hi" role="button" aria-label="打开日历">${esc(hi)}</div>
+      <div class="tc-sch-date-spindle-center-hi" role="button" data-act="schDateOpenCal" aria-label="打开日历">${esc(hi)}</div>
     </div>
-    <button type="button" class="tc-sch-date-step" data-act="schDateStep" data-delta="1" aria-label="后一天"><span aria-hidden="true">›</span></button>
   </div>`;
 }
 function updateSchDateSpindleCenterHi(spindle) {
@@ -1387,6 +1385,8 @@ function paintSchDateSpindlePerspective(spindle, track) {
   updateSchDateSpindleCenterHi(spindle);
 }
 let schCalViewMonth = null;
+/** Ignore one mask click right after opening calendar (same-gesture safety). */
+let schSheetDismissGuardUntil = 0;
 function renderSchDateCalendarSheet() {
   const sh = $('#sheet');
   if (!sh || sh.classList.contains('hidden') || !schCalViewMonth) return;
@@ -1442,6 +1442,7 @@ function openSchDateCalendar() {
   const p = sel.split('-').map(Number);
   schCalViewMonth = new Date(Date.UTC(p[0], p[1] - 1, 1));
   const sh = $('#sheet');
+  schSheetDismissGuardUntil = Date.now() + 400;
   sh.classList.remove('hidden');
   renderSchDateCalendarSheet();
 }
@@ -1504,7 +1505,6 @@ function initSchDateSpindle() {
     };
     wrap.addEventListener('pointerdown', e => {
       if (!e.target.closest('.tc-sch-date-spindle')) return;
-      if (e.target.closest('.tc-sch-date-step')) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       const pt = schSpindlePointerXY(e, 0, 0);
       state.pointerDown = true;
@@ -1554,8 +1554,16 @@ function initSchDateSpindle() {
       state.dragging = false;
       spindle.classList.remove('is-dragging', 'is-pressing');
       try { wrap.releasePointerCapture(e.pointerId); } catch (_) {}
-      if (wasDragging) { snap(); return; }
-      if (!wasMoved && schSpindleCenterTapHit(spindle, pt.x, pt.y)) openSchDateCalendar();
+      if (wasDragging) {
+        window.__schDateSuppressClick = true;
+        setTimeout(() => { window.__schDateSuppressClick = false; }, 120);
+        snap();
+        return;
+      }
+      if (wasMoved) {
+        window.__schDateSuppressClick = true;
+        setTimeout(() => { window.__schDateSuppressClick = false; }, 120);
+      }
     };
     wrap.addEventListener('pointerup', up, { signal: sig });
     wrap.addEventListener('pointercancel', up, { signal: sig });
@@ -9714,7 +9722,7 @@ document.addEventListener('click', async e => {
   }
   const el = e.target.closest('[data-act],[data-go],[data-key],[data-type],[data-mult],[data-sdate],[data-slg],[data-rdate],[data-rlg],[data-pf],[data-av]');
   if (!el) {
-    if (e.target.id === 'sheet') closeSheet();
+    if (e.target.id === 'sheet' && Date.now() >= schSheetDismissGuardUntil) closeSheet();
     if (e.target.id === 'me-drawer-mask') closeMeDrawer();
     return;
   }
@@ -9759,6 +9767,10 @@ document.addEventListener('click', async e => {
       if (!delta || !S.schDate) return;
       commitSchDate(shiftIssueDate(S.schDate, delta));
       return;
+    }
+    case 'schDateOpenCal': {
+      if (window.__schDateSuppressClick) return;
+      return openSchDateCalendar();
     }
     case 'schCalCancel': schCalViewMonth = null; return closeSheet();
     case 'schCalToday': {
