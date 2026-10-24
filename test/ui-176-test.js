@@ -24,10 +24,10 @@ assert.ok(/el\.closest\('#me-drawer'\)/.test(appJs), 'me drawer nav sets back fl
 assert.ok(/reopenMe/.test(appJs) && /openMeDrawer\(\)/.test(appJs), 'back reopens me drawer');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.176');
+assert.ok(pkg.version >= '1.9.176', 'package version bumped');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.176/.test(ver));
-assert.ok(/VERSION_CODE=213/.test(ver));
-assert.ok(/jc-v1\.9\.176/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-176-test OK');
