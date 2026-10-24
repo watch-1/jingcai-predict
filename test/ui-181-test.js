@@ -22,10 +22,10 @@ assert.ok(/\.tf-huitie-title[\s\S]*font-size:\s*14px/.test(css), 'smaller huitie
 assert.ok(/\.tf-post-reply-btn[\s\S]*background:\s*#fff/.test(css), 'white send button');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.181');
+assert.ok(pkg.version >= '1.9.181', 'package version at least 1.9.181');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.181/.test(ver));
-assert.ok(/VERSION_CODE=218/.test(ver));
-assert.ok(/jc-v1\.9\.181/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-181-test OK');

@@ -1301,14 +1301,35 @@ function syncMeDrawer() {
   if (dr.innerHTML !== html) dr.innerHTML = html;
 }
 /** 顶栏中部 Tab 集：按底栏上下文切换（赛程=三钮筛选，其余=部落/头条/开奖）。 */
+function shiftIssueDate(d, delta) {
+  const t = new Date(String(d) + 'T12:00:00Z');
+  t.setUTCDate(t.getUTCDate() + (delta | 0));
+  return t.toISOString().slice(0, 10);
+}
+function schDateCenterLabel(d) {
+  const tail = String(d).slice(5);
+  const dn = dayName(d);
+  if (dn === '今天' || dn === '明天' || dn === '昨天') return `${dn} ${tail}`;
+  return `${dn} ${tail}`;
+}
+/** 1.9.182: 顶栏简约日期调节器（灰底胶囊 + 中央白 pill + 左右日切）。 */
+function schDateAdjusterHtml() {
+  const cur = S.schDate || bjDate(0);
+  const prev = shiftIssueDate(cur, -1);
+  const next = shiftIssueDate(cur, 1);
+  const center = schDateCenterLabel(cur);
+  return `<div class="tc-sch-date" role="group" aria-label="赛程日期">
+    <button type="button" class="tc-sch-date-nav" data-act="schDateStep" data-delta="-1" aria-label="前一天">
+      <span class="tc-sch-date-side-lab">${esc(prev.slice(5))}</span><span class="tc-sch-date-chev" aria-hidden="true">‹</span>
+    </button>
+    <span class="tc-sch-date-pill" aria-current="date">${esc(center)}</span>
+    <button type="button" class="tc-sch-date-nav" data-act="schDateStep" data-delta="1" aria-label="后一天">
+      <span class="tc-sch-date-chev" aria-hidden="true">›</span><span class="tc-sch-date-side-lab">${esc(next.slice(5))}</span>
+    </button>
+  </div>`;
+}
 function topChromeCenterHtml(rName) {
-  if (rName === 'schedule') {
-    const mode = schModeOf();
-    const tabs = SCH_MODES.map(k =>
-      `<button type="button" class="tc-tab tc-tab--sch${mode === k ? ' on' : ''}" data-act="schMode" data-mode="${k}"${mode === k ? ' aria-current="true"' : ''}>${k}</button>`
-    ).join('');
-    return `<nav class="tc-tabs tc-tabs--sch" aria-label="赛程筛选">${tabs}</nav>`;
-  }
+  if (rName === 'schedule') return schDateAdjusterHtml();
   if (rName === 'data') {
     const sec = dataSectionOf();
     const tabs = [['team', '球队'], ['star', '球星']].map(([k, lab]) =>
@@ -2444,14 +2465,14 @@ function scheduleDayModel() {
   if (!ms) return null;
   const dates = [...new Set([...(rs || []).map(issueDate), ...ms.map(issueDate)])].sort();
   const today = bjDate(0);
-  if (!S.schDate || !dates.includes(S.schDate)) {
+  if (!S.schDate) {
     S.schDate = dates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || dates.find(d => d >= today) || dates[dates.length - 1];
   }
-  const mode = schModeOf();
   const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
   const dayAll = [...ms.filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)).map(m => ({ ...m, _t: 'm' })), ...dayRes.map(r => ({ ...r, _t: 'r' }))];
   const classifiedDay = dayAll.map(classifyScoreRow);
-  let modeRows = schModeFilterRows(classifiedDay, mode);
+  const mode = '当日';
+  let modeRows = classifiedDay;
   if (S.schLeague !== '全部' && !modeRows.some(x => x.league === S.schLeague)) S.schLeague = '全部';
   const gapInfo = S.ssrc && S.ssrc.meta && S.ssrc.meta.gaps && S.ssrc.meta.gaps[S.schDate];
   const counts = {
@@ -2486,28 +2507,22 @@ function scheduleBodyHtml(model) {
     </div>`;
   }
   const modeN = modeRows.length;
-  const hint = mode === SCH_MODE_ALL
-    ? `当日 ${modeN} 场`
-    : mode === '关注'
-      ? (S.favs.length ? `已关注 ${modeN} 场` : '点进详情可关注比赛')
-      : mode === '未开始'
-        ? `未开赛 ${modeN} 场`
-        : `已完场 ${modeN} 场`;
+  const hint = counts.live
+    ? `<span class="ls-live-hint"><i class="ls-dot"></i>当日 ${counts.live} 场进行中 · 约 50 秒自动刷新</span>`
+    : `当日 ${modeN} 场`;
+  const dayPhase = !counts.all ? '无赛'
+    : counts.live ? '进行中'
+      : counts.ns === counts.all ? '未开始'
+        : counts.ft === counts.all ? '已完赛' : '当日赛程';
   h += `<div class="sch-toolbar">
-    <span class="sch-ch-hint">${counts.live && (mode === '未开始' || mode === SCH_MODE_ALL) ? `<span class="ls-live-hint"><i class="ls-dot"></i>当日 ${counts.live} 场进行中 · 约 50 秒自动刷新</span>` : hint}</span>
+    <span class="sch-ch-hint">${hint}</span>
     <button type="button" class="btn ghost sm" data-act="schRefresh">${S.liveScoresLoading ? '刷新中…' : '刷新'}</button>
   </div>`;
   h += warnBar();
   const rows = scheduleListRows(modeRows);
-  h += `<div class="list-meta"><span>${esc(S.schDate)} ${rows[0] ? issueWeek(rows[0]) : wd(S.schDate)} · ${esc(mode)}</span><span>${rows.length ? `${rows.length} 场` : '0 场'}</span></div>`;
+  h += `<div class="list-meta"><span>${esc(S.schDate)} ${rows[0] ? issueWeek(rows[0]) : wd(S.schDate)} · ${esc(dayPhase)}</span><span>${rows.length ? `${rows.length} 场` : '0 场'}</span></div>`;
   if (!rows.length) {
-    h += mode === SCH_MODE_ALL
-      ? empty('该日期暂无场次，可切换日期查看。', '', '暂无场次')
-      : mode === '关注'
-        ? empty('在赛事详情点击「关注」后，已关注场次会出现在这里。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="未开始">查看未开始</button>', '暂无关注')
-        : mode === '已结束'
-          ? empty('该日期暂无已结束场次，可切换到「未开始」查看待赛。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="未开始">查看未开始</button>', '暂无场次')
-          : empty('该日期暂无未开始场次，可切换日期或查看「已结束」。', '<button type="button" class="btn ghost sm" data-act="schMode" data-mode="已结束">查看已结束</button>', '暂无场次');
+    h += empty('该日期暂无场次，可切换日期查看。', '', '暂无场次');
   } else if (S.schLeague === '全部') {
     const groups = [];
     const map = new Map();
@@ -2525,7 +2540,7 @@ function scheduleBodyHtml(model) {
     h += `<div class="ls-list">${rows.map(scoreCard).join('')}</div>`;
   }
   if (typeof console !== 'undefined' && console.debug) {
-    console.debug('[schedule]', S.schDate, 'mode=', mode, 'shown=', modeRows.length, 'league=', S.schLeague, 'gaps=', gapInfo || null);
+    console.debug('[schedule]', S.schDate, 'shown=', modeRows.length, 'league=', S.schLeague, 'gaps=', gapInfo || null);
   }
   ensureLiveScorePoll(classifiedDay.map(x => String(x.id)), counts.live > 0);
   return h;
@@ -2576,9 +2591,8 @@ function softPatchSchedule() {
 function pageSchedule() {
   let h = '';
   const model = scheduleDayModel();
-  if (!model) return h + `<div class="dstrip" style="height:50px"></div>` + skeleton(4);
-  const { dates, modeRows, classifiedDay } = model;
-  h += dateStrip(dates, S.schDate, 'sdate');
+  if (!model) return h + skeleton(4);
+  const { modeRows, classifiedDay } = model;
   h += leagueChips(modeRows, S.schLeague, 'slg', { strong: true });
   h += `<div id="schBody" class="sch-body">${scheduleBodyHtml(model)}</div>`;
   const allDayIds = classifiedDay.map(x => String(x.id));
@@ -9066,7 +9080,7 @@ function tabContentSig(name) {
     }
     if (name === 'schedule') {
       const n = (S.schedule && S.schedule.length) || (S.matches && S.matches.length) || 0;
-      return 's:' + n + ':' + (S.schDate || '') + ':' + schModeOf() + ':' + (S.schLeague || '') + ':' + (S.schHideFinished ? 1 : 0);
+      return 's:' + n + ':' + (S.schDate || '') + ':' + (S.schLeague || '') + ':' + (S.schHideFinished ? 1 : 0);
     }
     if (name === 'predict') {
       const ms = S.matches || [];
@@ -9490,9 +9504,10 @@ document.addEventListener('click', async e => {
       invalidateTabKeep('data');
       return render({ force: true });
     }
-    case 'schMode': {
-      const pick = el.dataset.mode || '未开始';
-      setSchMode(pick === schModeOf() ? SCH_MODE_ALL : pick);
+    case 'schDateStep': {
+      const delta = Number(el.dataset.delta);
+      if (!delta || !S.schDate) return;
+      S.schDate = shiftIssueDate(S.schDate, delta);
       invalidateTabKeep('schedule');
       if (softPatchSchedule()) { syncTopChrome('schedule'); return; }
       return render({ force: true });
