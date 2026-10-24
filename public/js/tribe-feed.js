@@ -298,6 +298,7 @@
     const q = new URLSearchParams({ ensure: '1', limit: '40' });
     if (teamMeta && teamMeta.teamId) q.set('teamId', teamMeta.teamId);
     if (teamMeta && teamMeta.nameZh) q.set('teamName', teamMeta.nameZh);
+    if (teamMeta && teamMeta.leagueKey) q.set('leagueKey', teamMeta.leagueKey);
     const j = await api('/tribe/' + encodeURIComponent(tribeId) + '/feed?' + q.toString(), { timeout: 15000 });
     return (j && j.posts) || [];
   }
