@@ -6081,13 +6081,33 @@ html[data-edge="1"] .auth-hd {
   transform: translateZ(0); will-change: transform;
   -webkit-tap-highlight-color: transparent;
 }
-.tf-card-hd-r { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.tf-post-del, .tf-huitie-del {
-  border: 0; background: transparent; color: #9aa3b2; font-size: 12px; padding: 4px 6px; cursor: pointer;
+.tf-card-hd-r { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.tf-more-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: #9aa3b2; cursor: pointer; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
-.tf-post-del:active, .tf-huitie-del:active { color: #e55353; }
-.tf-post-hdr-del { margin-left: auto; flex-shrink: 0; align-self: center; }
-.tf-huitie-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.tf-more-btn svg { width: 18px; height: 18px; }
+.tf-more-btn:active { background: #f0f2f6; color: #6b7280; }
+.tf-more-mask {
+  position: fixed; inset: 0; z-index: 88; background: transparent;
+}
+.tf-more-pop {
+  position: fixed; z-index: 89; min-width: 120px;
+  padding: 6px 0; background: #fff; border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, .16), 0 0 0 1px rgba(230, 235, 243, .9);
+  animation: fade .12s ease-out;
+}
+.tf-more-item {
+  display: block; width: 100%; border: 0; background: transparent;
+  padding: 11px 18px; font-size: 15px; font-weight: 500; text-align: center;
+  color: #1a1f2b; cursor: pointer;
+}
+.tf-more-item.danger { color: #e55353; }
+.tf-more-item:active { background: #f6f8fb; }
+.tf-huitie-actions { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+.tf-huitie-actions .tf-more-btn { width: 28px; height: 28px; }
 .tf-react-b.on { background: #e8f8f0; box-shadow: inset 0 0 0 1px rgba(43, 182, 115, .35); }
 .tf-react-b.on[data-kind="fire"] {
   background: linear-gradient(135deg, #fff4e6 0%, #ffe8cc 100%);
@@ -6249,6 +6269,7 @@ html[data-edge="1"] .auth-hd {
 }
 .tf-post-main { padding: 14px 14px 8px; }
 .tf-post-author { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.tf-post-author-r { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: auto; }
 .tf-post-author-txt { flex: 1; min-width: 0; }
 .tf-post-author-name { font-size: 16px; font-weight: 700; color: #1a1f2b; }
 .tf-post-author-time { display: block; margin-top: 2px; font-size: 12px; color: #9aa3b2; }
