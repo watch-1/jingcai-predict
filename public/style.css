@@ -1231,7 +1231,7 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .vote-track .a { background: linear-gradient(90deg,#4c8dff,#1a62f0); }
 .vote-pct { text-align: right; font-size: 13px; font-weight: 600; }
 .vote-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.vote-btn { height: 40px; border-radius: 10px; background: #f2f4f8; color: var(--t2); font-size: 15px; font-weight: 600; border: 1px solid transparent; }
+.vote-btn { height: 40px; border-radius: 10px; background: #f2f4f8; color: var(--t2); font-size: 15px; font-weight: 600; border: 1px solid #d5dbe6; }
 .vote-btn.on { background: var(--pri-l); color: var(--pri-d); border-color: var(--pri); }
 .vote-btn:active { filter: brightness(.96); }
 
@@ -6027,19 +6027,20 @@ html[data-edge="1"] .auth-hd {
 }
 .tribe-club-fabs .tribe-fab { pointer-events: auto; }
 .tribe-fab {
-  border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  color: #fff; background: var(--tab-green, #2BB673);
-  box-shadow: 0 4px 16px rgba(43, 182, 115, .45);
+  border: 1px solid rgba(16, 24, 40, .1); display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #1a1f2b; background: #fff;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, .1), 0 1px 2px rgba(16, 24, 40, .06);
 }
+.tribe-fab:active { filter: brightness(.97); }
 .tribe-fab--post {
-  width: 56px; height: 56px; border-radius: 50%; gap: 1px; padding-top: 2px;
+  width: 48px; height: 48px; border-radius: 50%; gap: 1px; padding-top: 2px;
 }
-.tribe-fab--post .tribe-fab-ic svg { width: 18px; height: 18px; }
-.tribe-fab-lab { font-size: 10px; font-weight: 700; line-height: 1.1; letter-spacing: .02em; }
+.tribe-fab--post .tribe-fab-ic svg { width: 16px; height: 16px; }
+.tribe-fab-lab { font-size: 9px; font-weight: 700; line-height: 1.1; letter-spacing: .02em; color: #3d4654; }
 .tribe-fab--refresh {
-  width: 44px; height: 44px; border-radius: 50%; opacity: .96;
+  width: 40px; height: 40px; border-radius: 50%;
 }
-.tribe-fab--refresh svg { width: 20px; height: 20px; }
+.tribe-fab--refresh svg { width: 18px; height: 18px; }
 .tf-card {
   background: #fff; padding: 12px 14px 10px;
   border-bottom: 1px solid #e8ebf0;

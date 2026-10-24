@@ -1,5 +1,5 @@
 /**
- * Tribe club feed UI (1.9.179). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isUserFollow, tribeById, API, confirmDlg.
+ * Tribe club feed UI (1.9.180). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isUserFollow, tribeById, API, confirmDlg.
  */
 (function (global) {
   'use strict';
@@ -743,6 +743,26 @@
     wrap.innerHTML = reactionsHtml(post);
   }
 
+  function refreshVoteUi(post, tribeId) {
+    if (!post || !post.vote) return;
+    const pid = String(post.id);
+    const tid = tribeId ? String(tribeId) : '';
+    const card = document.querySelector('.tf-card[data-post="' + pid + '"]');
+    if (card && tid) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = postCard(post, { tribeId: tid });
+      card.replaceWith(tmp.firstElementChild);
+    }
+    const main = document.querySelector('.tf-post-main[data-post="' + pid + '"]');
+    if (!main || post.kind !== 'match_vote') return;
+    const voteHtml = voteBlock(post);
+    const old = main.querySelector('.tf-match-card');
+    if (!old || !voteHtml) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = voteHtml;
+    old.replaceWith(wrap.firstElementChild);
+  }
+
   function paintReactionButtons(wrap, rx, myReactions) {
     if (!wrap) return;
     const mineSet = new Set(Array.isArray(myReactions) ? myReactions : (myReactions ? [myReactions] : []));
@@ -911,23 +931,28 @@
 
   async function castVote(postId, choice, matchId) {
     if (!loggedIn()) { toast('请先登录后再投票'); return go('#/login'); }
+    const pid = String(postId);
+    const r = route();
+    let tribeId = r.name === 'tribe-club' ? String(r.arg || '') : '';
     try {
-      const j = await api('/tribe/posts/' + encodeURIComponent(postId) + '/vote', { method: 'POST', body: { choice }, timeout: 10000 });
-      const card = document.querySelector('.tf-card[data-post="' + postId + '"]');
-      if (card && j.vote) {
-        S.tribeFeedCache = S.tribeFeedCache || {};
-        const tid = route().arg;
-        const posts = (S.tribeFeedCache[tid] || []).map((p) => {
-          if (p.id === postId) return Object.assign({}, p, { vote: j.vote });
-          return p;
-        });
-        S.tribeFeedCache[tid] = posts;
-        const post = posts.find((p) => p.id === postId);
-        if (post) {
-          const tmp = document.createElement('div');
-          tmp.innerHTML = postCard(post, { tribeId: tid });
-          card.replaceWith(tmp.firstElementChild);
+      const j = await api('/tribe/posts/' + encodeURIComponent(pid) + '/vote', { method: 'POST', body: { choice }, timeout: 10000 });
+      if (j.vote) {
+        let post = tribeId ? patchPostInCache(tribeId, pid, { vote: j.vote }) : null;
+        if (!post && S.tribeFeedCache) {
+          for (const key of Object.keys(S.tribeFeedCache)) {
+            const hit = (S.tribeFeedCache[key] || []).some((p) => String(p.id) === pid);
+            if (hit) {
+              tribeId = String(key);
+              post = patchPostInCache(tribeId, pid, { vote: j.vote });
+              break;
+            }
+          }
         }
+        if (S.tribeDetailPost && String(S.tribeDetailPost.id) === pid) {
+          S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, { vote: j.vote });
+          post = post || S.tribeDetailPost;
+        }
+        if (post) refreshVoteUi(post, tribeId);
       }
       if (matchId) {
         S.voteCache = S.voteCache || {};
@@ -955,7 +980,7 @@
       return true;
     }
     if (act === 'tribeReply') { submitReply(el.dataset.post); return true; }
-    if (act === 'tribeVote') { castVote(el.dataset.post, el.dataset.choice, el.dataset.mid); return true; }
+    if (act === 'tribeVote') { ev.stopPropagation(); castVote(el.dataset.post, el.dataset.choice, el.dataset.mid); return true; }
     if (act === 'tribeFeedRefresh') { refreshFeed(el.dataset.tribe); return true; }
     if (act === 'tribeFeedTab') { setFeedTab(el.dataset.tab); return true; }
     if (act === 'tribeFeedSort') { setFeedSort(el.dataset.sort); return true; }

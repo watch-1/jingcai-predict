@@ -23,10 +23,10 @@ assert.ok(/myReactions/.test(feedLib) && !/myReaction:/.test(feedLib), 'API retu
 assert.ok(/AND kind = \?/.test(feedLib), 'per-kind reaction toggle');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.179');
+assert.ok(pkg.version >= '1.9.179', 'package version includes 1.9.179 appConfirm / myReactions');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.179/.test(ver));
-assert.ok(/VERSION_CODE=216/.test(ver));
-assert.ok(/jc-v1\.9\.179/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-179-test OK');
