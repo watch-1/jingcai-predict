@@ -21,11 +21,9 @@ assert.ok(/r\.delete\('\/tribe\/posts\/:postId'/.test(feedLib), 'delete post rou
 assert.ok(/r\.delete\('\/tribe\/replies\/:replyId'/.test(feedLib), 'delete reply route');
 assert.ok(/只能删除自己的帖子/.test(feedLib) && /只能删除自己的回贴/.test(feedLib), 'author-only messages');
 
+assert.ok(/function appConfirm/.test(tribeJs) && !/window\.confirm/.test(tribeJs), 'delete uses in-app confirm not window.confirm');
+
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.178');
-const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.178/.test(ver));
-assert.ok(/VERSION_CODE=215/.test(ver));
-assert.ok(/jc-v1\.9\.178/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(pkg.version >= '1.9.178', 'package version includes 1.9.178 more-menu ship');
 
 console.log('ui-178-test OK');

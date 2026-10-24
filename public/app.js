@@ -306,6 +306,7 @@ function confirmDlg(title, body, okText = '确定', danger = false) {
     d.onclick = e => { const b = e.target.closest('[data-r]'); if (!b && e.target !== d) return; e.stopPropagation(); d.classList.add('hidden'); d.onclick = null; res(b ? b.dataset.r === '1' : false); };
   });
 }
+try { window.confirmDlg = confirmDlg; } catch (_) {}
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 // ======================= API =======================
