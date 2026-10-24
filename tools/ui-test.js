@@ -59,17 +59,23 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     ok(await p.$$eval('.banner img.bn-bg', l => l.length) === 3, 'home banner carousel with 3 background images');
     await shot('home');
     // schedule
-    await tap('.tabbar [data-go="#/schedule"]'); await p.waitForSelector('.dstrip button');
-    ok(await p.$$eval('#top-chrome [data-act="schMode"]', l => l.map(b => b.dataset.mode).join(',')) === '关注,未开始,已结束', 'schedule: top chrome 关注/未开始/已结束');
-    ok(!!(await p.$('#top-chrome .tc-tab--sch.on[data-mode="未开始"]')), 'schedule: 未开始 highlighted in top chrome');
-    await tap('#top-chrome [data-act="schMode"][data-mode="未开始"]'); await sleep(250);
-    ok(!(await p.$('#top-chrome .tc-tab--sch.on')), 'schedule: re-tap 未开始 → 全部, no top highlight');
-    await tap('#top-chrome [data-act="schMode"][data-mode="未开始"]'); await sleep(200);
-    ok(!!(await p.$('#top-chrome .tc-tab--sch.on[data-mode="未开始"]')), 'schedule: tap 未开始 from 全部 restores filter');
-    ok(!(await p.$('.sch-mode')), 'schedule: no duplicate mode row under date');
+    await tap('.tabbar [data-go="#/schedule"]'); await p.waitForSelector('.tc-sch-date');
+    ok(!(await p.$('#top-chrome [data-act="schMode"]')), 'schedule: no 关注/未开始/已结束 filters');
+    ok(!!(await p.$('#top-chrome .tc-sch-date-pill')), 'schedule: top chrome date pill');
+    ok(!(await p.$('#view .dstrip')), 'schedule: no date timeline under top bar');
+    ok(!(await p.$('.sch-mode')), 'schedule: no duplicate mode row');
     ok(!(await p.$('.sch-channels')), 'schedule: no 热门/关注/全部 channel row');
     ok(!(await p.$('.ls-status')), 'schedule: no legacy status pill row');
-    ok(await p.$$eval('.dstrip button', l => l.length) > 0 && await p.$$eval('.chips button', l => l.length) > 0, 'schedule: date strip + league chips');
+    ok(await p.$$eval('.chips button', l => l.length) > 0, 'schedule: league chips');
+    const flushTop = await p.evaluate(() => {
+      const chips = document.querySelector('.league-chips');
+      const view = document.getElementById('view');
+      if (!chips || !view) return false;
+      const vr = view.getBoundingClientRect();
+      const cr = chips.getBoundingClientRect();
+      return cr.top - vr.top < 24;
+    });
+    ok(flushTop, 'schedule: league chips flush under top chrome');
     async function assertSchLeagueToggle(modeLabel) {
       const leagueSel = await p.evaluate(() => {
         const leagueBtn = [...document.querySelectorAll('.league-chips button[data-slg]')].find(b => b.dataset.slg !== '全部');
@@ -88,23 +94,22 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       ok(await p.$eval('.league-chips button[data-slg="全部"]', e => e.classList.contains('on')), `schedule ${modeLabel}: tap ${lgName} again returns to 全部`);
       ok(!(await p.$eval(leagueSel, e => e.classList.contains('on'))), `schedule ${modeLabel}: ${lgName} off after second tap`);
     }
-    await assertSchLeagueToggle('未开始');
-    await tap('#top-chrome [data-act="schMode"][data-mode="关注"]'); await sleep(250);
-    await tap('#top-chrome [data-act="schMode"][data-mode="关注"]'); await sleep(250);
-    ok(!(await p.$('#top-chrome .tc-tab--sch.on')), 'schedule: re-tap 关注 → 全部');
-    await tap('#top-chrome [data-act="schMode"][data-mode="关注"]'); await sleep(200);
-    await assertSchLeagueToggle('关注');
-    await tap('#top-chrome [data-act="schMode"][data-mode="已结束"]'); await sleep(250);
-    await assertSchLeagueToggle('已结束');
-    ok(!!(await p.$('#top-chrome .tc-tab--sch.on[data-mode="已结束"]')), 'schedule: 已结束 highlighted in top chrome');
-    await tap('#top-chrome [data-act="schMode"][data-mode="已结束"]'); await sleep(250);
-    ok(!(await p.$('#top-chrome .tc-tab--sch.on')), 'schedule: re-tap 已结束 → 全部');
-    await tap('#top-chrome [data-act="schMode"][data-mode="已结束"]'); await sleep(200);
-    ok(!!(await p.$('#top-chrome .tc-tab--sch.on[data-mode="已结束"]')), 'schedule: tap 已结束 from 全部 restores filter');
-    await tap('#top-chrome [data-act="schMode"][data-mode="未开始"]'); await sleep(200);
+    await assertSchLeagueToggle('当日');
+    const beforeDate = await p.$eval('.tc-sch-date-pill', e => e.textContent.trim());
+    await tap('#top-chrome [data-act="schDateStep"][data-delta="1"]'); await sleep(250);
+    const afterDate = await p.$eval('.tc-sch-date-pill', e => e.textContent.trim());
+    ok(beforeDate !== afterDate, 'schedule: date step +1 updates pill');
+    await tap('#top-chrome [data-act="schDateStep"][data-delta="-1"]'); await sleep(200);
     const hasMatch = await p.$('.ls-row[data-go^="#/match/"]');
     await shot('schedule');
-    if (!hasMatch) { const d = await p.$$('.dstrip button'); for (const x of d) { await x.click(); await sleep(200); if (await p.$('.ls-row[data-go^="#/match/"]')) break; } }
+    if (!hasMatch) {
+      for (let i = 0; i < 5; i++) {
+        await tap('#top-chrome [data-act="schDateStep"][data-delta="-1"]'); await sleep(200);
+        if (await p.$('.ls-row[data-go^="#/match/"]')) break;
+        await tap('#top-chrome [data-act="schDateStep"][data-delta="1"]'); await sleep(200);
+        if (await p.$('.ls-row[data-go^="#/match/"]')) break;
+      }
+    }
     // detail
     await tap('.tabbar [data-go="#/home"]'); await sleep(300);
     ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '部落,头条,开奖', 'home: top chrome restores 部落/头条/开奖');
