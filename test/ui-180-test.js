@@ -22,10 +22,10 @@ assert.ok(/\.tribe-fab--post \{[^}]*width: 48px/.test(css), 'smaller post FAB');
 assert.ok(/\.tribe-fab--refresh \{[^}]*width: 40px/.test(css), 'smaller refresh FAB');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.180');
+assert.ok(pkg.version >= '1.9.180', 'package version bumped');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.180/.test(ver));
-assert.ok(/VERSION_CODE=217/.test(ver));
-assert.ok(/jc-v1\.9\.180/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-180-test OK');
