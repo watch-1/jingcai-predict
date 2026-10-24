@@ -5893,13 +5893,30 @@ html[data-edge="1"] .auth-hd {
 .btn.danger { color: #c62828; }
 
 /* 1.9.166+: 部落圈子 — 双栏独立滚动 + 球队主页沉浸头 */
-.top-chrome--tribe .tc-tabs--tribe { gap: 10px; }
-.top-chrome--tribe .tc-tab--tribe.on::after { width: 20px; background: var(--tab-green); }
+.top-chrome--tribe { grid-template-columns: auto minmax(0, 1fr) auto; }
+.top-chrome--tribe .tc-tribe-search {
+  display: flex; align-items: center; gap: 6px; width: 100%; max-width: 100%;
+  min-width: 0; padding: 7px 12px; border-radius: 999px; background: #f2f4f7;
+  border: 1px solid transparent; box-sizing: border-box;
+}
+.top-chrome--tribe .tc-tribe-search-ic { flex: none; display: grid; place-items: center; color: #9aa3b2; }
+.top-chrome--tribe .tc-tribe-search-ic svg { width: 17px; height: 17px; }
+.top-chrome--tribe .tc-tribe-search-inp {
+  flex: 1; min-width: 0; border: 0; background: transparent; padding: 0;
+  font-size: 14px; color: var(--t1); outline: none;
+}
+.top-chrome--tribe .tc-tribe-search-inp::placeholder { color: #9aa3b2; }
+.top-chrome--tribe .tc-tribe-search-inp::-webkit-search-cancel-button { -webkit-appearance: none; }
+.app.has-top-chrome .view.view--tribe-hub {
+  display: flex; flex-direction: column;
+  min-height: 0;
+  height: calc(100vh - var(--tab-h) - var(--safe-b));
+  max-height: calc(100vh - var(--tab-h) - var(--safe-b));
+  overflow: hidden; padding-bottom: 0;
+}
 .view.view--tribe-hub {
   display: flex; flex-direction: column;
-  height: calc(100vh - var(--sat) - var(--top-chrome-h) - var(--tab-h) - var(--safe-b));
-  min-height: 0; max-height: calc(100vh - var(--sat) - var(--top-chrome-h) - var(--tab-h) - var(--safe-b));
-  overflow: hidden; padding-bottom: 0;
+  min-height: 0; overflow: hidden; padding-bottom: 0;
 }
 .tribe-hub {
   flex: 1; min-height: 0; display: flex;
@@ -6298,7 +6315,7 @@ html[data-edge="1"] .auth-hd {
 .tf-huitie-bar {
   width: 4px; height: 18px; border-radius: 2px; background: var(--tab-green, #2BB673); flex-shrink: 0;
 }
-.tf-huitie-title { flex: 1; margin: 0; font-size: 17px; font-weight: 700; color: #1a1f2b; }
+.tf-huitie-title { flex: 1; margin: 0; font-size: 14px; font-weight: 700; color: #1a1f2b; }
 .tf-huitie-n { font-weight: 700; }
 .tf-huitie-sort { font-size: 13px; color: #9aa3b2; }
 .tf-huitie-list { display: flex; flex-direction: column; gap: 16px; }
@@ -6327,7 +6344,12 @@ html[data-edge="1"] .auth-hd {
   padding: 10px 14px; font-size: 14px; color: #1a1f2b;
 }
 .tf-post-reply-inp::placeholder { color: #9aa3b2; }
-.tf-post-reply-btn { flex-shrink: 0; border-radius: 999px; padding: 8px 14px; font-size: 13px; }
+.tf-post-reply-btn {
+  flex-shrink: 0; border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 600;
+  color: #1a1f2b; background: #fff; border: 1px solid #d8dde6;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+}
+.tf-post-reply-btn:active { background: #f7f8fa; }
 .uf-tabs { display: flex; gap: 8px; padding: 10px 14px 4px; }
 .uf-tab {
   flex: 1; border: 0; border-radius: 999px; padding: 8px 12px; font-size: 14px; font-weight: 600;

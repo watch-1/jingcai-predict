@@ -651,7 +651,7 @@
     const ph = loggedIn() ? '回复楼主' : '登录后回复';
     return `<footer class="tf-post-foot">
       <input type="text" id="tribe-reply-input" class="tf-post-reply-inp" maxlength="500" placeholder="${ph}" aria-label="回复楼主" ${loggedIn() ? '' : 'readonly data-go="#/login"'}>
-      <button type="button" class="btn pri sm tf-post-reply-btn" data-act="tribeReply" data-post="${post.id}">发送</button>
+      <button type="button" class="tf-post-reply-btn" data-act="tribeReply" data-post="${post.id}">发送</button>
     </footer>`;
   }
 

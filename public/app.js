@@ -353,6 +353,7 @@ const S = {
   plans: [], favs: [], tribeFollows: [], userFollows: [],
   tribeCat: null, tribeCatBusy: false, tribeSide: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_tribe_side')) || '__hot__',
   tribeSub: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_tribe_sub')) || 'enter',
+  tribeSearchQ: '',
   sel: {}, types: [], mult: 1, navDepth: 0,
   schDate: null, schLeague: '全部', schMode: initSchMode(),
   schHideFinished: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_hide_fin') === '1'),
@@ -1316,11 +1317,11 @@ function topChromeCenterHtml(rName) {
     return `<nav class="tc-tabs tc-tabs--data" aria-label="数据分类">${tabs}</nav>`;
   }
   if (rName === 'tribe') {
-    const sub = tribeSubOf();
-    const tabs = [['enter', '进圈'], ['featured', '精选'], ['following', '关注']].map(([k, lab]) =>
-      `<button type="button" class="tc-tab tc-tab--tribe${sub === k ? ' on' : ''}" data-act="tribeSub" data-sub="${k}"${sub === k ? ' aria-current="true"' : ''}>${esc(lab)}</button>`
-    ).join('');
-    return `<nav class="tc-tabs tc-tabs--tribe" aria-label="部落">${tabs}</nav>`;
+    const q = esc(S.tribeSearchQ || '');
+    return `<div class="tc-tribe-search" role="search" aria-label="搜索部落">
+      <span class="tc-tribe-search-ic" aria-hidden="true">${I.search}</span>
+      <input type="search" id="tribe-hub-search" class="tc-tribe-search-inp" placeholder="搜索球队/圈子" value="${q}" autocomplete="off" enterkeyhint="search" maxlength="40">
+    </div>`;
   }
   const activeTop = activeTopTab(rName);
   const tabs = TOP_TAB_DEF.map(([k, lab]) =>
@@ -1984,6 +1985,16 @@ async function toggleTribeFollow(id) {
     toast(e.message);
   }
 }
+function tribeFilterTeams(teams, q) {
+  const s = String(q || '').trim().toLowerCase();
+  if (!s) return teams;
+  return teams.filter((t) => {
+    const name = String(t.nameZh || '').toLowerCase();
+    const circle = (name + '圈').toLowerCase();
+    const league = String(t.leagueZh || '').toLowerCase();
+    return name.includes(s) || circle.includes(s) || league.includes(s);
+  });
+}
 function tribeTeamsForSide(sideKey) {
   const cat = S.tribeCat || { teams: [], byId: {} };
   const all = cat.teams || [];
@@ -2006,8 +2017,12 @@ function tribeTeamsForSide(sideKey) {
   }
   return all.filter(t => t.leagueKey === sideKey);
 }
-function tribeGridHtml(teams, title) {
+function tribeGridHtml(teams, title, opts) {
+  opts = opts || {};
   if (!teams.length) {
+    if (opts.searching) {
+      return empty('没有匹配的球队或圈子，换个关键词试试。', '', '无搜索结果');
+    }
     const side = tribeSideOf();
     if (side === '__followed__') {
       return empty('登录后入驻喜欢的球队，或先在下方联赛里点选球队并入驻。', '', '还没有关注的球队');
@@ -2025,10 +2040,33 @@ function tribeGridHtml(teams, title) {
   }).join('');
   return head + `<div class="tribe-grid">${cells}</div>`;
 }
+function tribeHubTitleForSide(side, teams) {
+  const meta = TRIBE_SIDE_META.find(s => s.key === side);
+  let title = meta ? meta.nameZh : '';
+  if (side === '__followed__' && teams.length) title = '❤️ ' + title;
+  if (side === '__hot__') title = '🔥 ' + (title || '当前热门');
+  return title;
+}
+function tribeMainInnerHtml() {
+  const side = tribeSideOf();
+  const busy = S.tribeCatBusy && !(S.tribeCat && S.tribeCat.teams && S.tribeCat.teams.length);
+  if (busy) return '<div class="spinner" style="margin:48px auto"></div>';
+  const raw = tribeTeamsForSide(side);
+  const q = String(S.tribeSearchQ || '').trim();
+  const teams = tribeFilterTeams(raw, q);
+  const title = tribeHubTitleForSide(side, raw);
+  return tribeGridHtml(teams, title, { searching: !!q });
+}
+function softPatchTribeHub() {
+  if (route().name !== 'tribe') return false;
+  const main = document.querySelector('.tribe-hub .tribe-main');
+  if (!main) return false;
+  main.innerHTML = tribeMainInnerHtml();
+  return true;
+}
 function pageTribe() {
   ensureTribeCatalog();
   const side = tribeSideOf();
-  const sub = tribeSubOf();
   const busy = S.tribeCatBusy && !(S.tribeCat && S.tribeCat.teams && S.tribeCat.teams.length);
   const sideBtns = TRIBE_SIDE_META.map(s =>
     `<button type="button" class="tribe-side-btn${side === s.key ? ' on' : ''}" data-act="tribeSide" data-side="${esc(s.key)}">${esc(s.nameZh)}</button>`
@@ -2037,13 +2075,7 @@ function pageTribe() {
   if (busy) {
     body = '<div class="tribe-main"><div class="spinner" style="margin:48px auto"></div></div>';
   } else {
-    const teams = tribeTeamsForSide(side);
-    const meta = TRIBE_SIDE_META.find(s => s.key === side);
-    let title = meta ? meta.nameZh : '';
-    if (side === '__followed__' && teams.length) title = '❤️ ' + title;
-    if (side === '__hot__') title = '🔥 ' + (title || '当前热门');
-    if (sub === 'featured' && side === '__hot__') title = '精选 · ' + title;
-    body = `<div class="tribe-main">${tribeGridHtml(teams, title)}</div>`;
+    body = `<div class="tribe-main">${tribeMainInnerHtml()}</div>`;
   }
   return `<div class="tribe-hub">
     <aside class="tribe-side" aria-label="联赛分类">${sideBtns}</aside>
@@ -9068,7 +9100,7 @@ function tabContentSig(name) {
     }
     if (name === 'tribe') {
       const n = (S.tribeCat && S.tribeCat.teams && S.tribeCat.teams.length) || 0;
-      return 'tr:' + tribeSubOf() + ':' + tribeSideOf() + ':' + n + ':' + ((S.tribeFollows && S.tribeFollows.length) || 0);
+      return 'tr:' + tribeSideOf() + ':' + String(S.tribeSearchQ || '').trim() + ':' + n + ':' + ((S.tribeFollows && S.tribeFollows.length) || 0);
     }
   } catch (_) {}
   return String(name || '') + ':x';
@@ -9473,8 +9505,6 @@ document.addEventListener('click', async e => {
     }
     case 'tribeSide': {
       setTribeSide(el.dataset.side || '__hot__');
-      if (tribeSubOf() === 'following' && el.dataset.side !== '__followed__') setTribeSub('enter');
-      else if (tribeSubOf() === 'featured' && el.dataset.side !== '__hot__') setTribeSub('enter');
       invalidateTabKeep('tribe');
       return render({ force: true });
     }
@@ -10160,6 +10190,15 @@ document.addEventListener('input', e => {
     S.columnSearch = String(e.target.value || '').trim();
     if (S._colSearchTimer) clearTimeout(S._colSearchTimer);
     S._colSearchTimer = setTimeout(() => loadColumnFeedUi(), 220);
+  }
+  if (e.target && e.target.id === 'tribe-hub-search') {
+    S.tribeSearchQ = String(e.target.value || '');
+    if (S._tribeSearchTimer) clearTimeout(S._tribeSearchTimer);
+    S._tribeSearchTimer = setTimeout(() => {
+      if (route().name !== 'tribe') return;
+      if (!softPatchTribeHub()) render({ force: true });
+      else invalidateTabKeep('tribe');
+    }, 160);
   }
 });
 document.addEventListener('change', e => {
