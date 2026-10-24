@@ -99,29 +99,31 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await assertSchLeagueToggle('当日');
     const centerLabel = () => p.$eval('#top-chrome .tc-sch-date-spindle-center-hi', e => e.textContent.trim());
     const beforeDate = await centerLabel();
-    await tap('#top-chrome [data-act="schDateStep"][data-delta="1"]'); await sleep(280);
-    const afterDate = await centerLabel();
-    ok(beforeDate !== afterDate, 'schedule: date step +1 updates center label');
     const dragBox = await p.$('.tc-sch-date-spindle');
-    const db = await dragBox.boundingBox();
-    if (db) {
+    const dragSpindle = async (dx) => {
+      const db = await dragBox.boundingBox();
+      if (!db) return false;
       await p.mouse.move(db.x + db.width * 0.5, db.y + db.height * 0.5);
       await p.mouse.down();
-      await p.mouse.move(db.x + db.width * 0.5 - 72, db.y + db.height * 0.5, { steps: 10 });
+      await p.mouse.move(db.x + db.width * 0.5 + dx, db.y + db.height * 0.5, { steps: 10 });
       await p.mouse.up();
       await sleep(320);
-      const afterDrag = await centerLabel();
-      ok(afterDrag !== afterDate, 'schedule: horizontal drag snaps to new date');
-    } else ok(false, 'schedule: horizontal drag snaps to new date');
-    await tap('#top-chrome [data-act="schDateStep"][data-delta="-1"]'); await sleep(200);
+      return true;
+    };
+    ok(await dragSpindle(-72), 'schedule: drag gesture');
+    const afterDate = await centerLabel();
+    ok(beforeDate !== afterDate, 'schedule: horizontal drag updates center label');
+    ok(await dragSpindle(72), 'schedule: drag back gesture');
+    await tap('#top-chrome .tc-sch-date-spindle-center-hi'); await sleep(280);
+    ok(!(await p.$('#sheet.hidden')), 'schedule: tap center blue opens calendar sheet');
+    await tap('#sheet'); await sleep(120);
+    ok(!!(await p.$('#sheet.hidden')), 'schedule: tap mask closes calendar');
     const hasMatch = await p.$('.ls-row[data-go^="#/match/"]');
     await shot('schedule');
     if (!hasMatch) {
       for (let i = 0; i < 5; i++) {
-        await tap('#top-chrome [data-act="schDateStep"][data-delta="-1"]'); await sleep(200);
-        if (await p.$('.ls-row[data-go^="#/match/"]')) break;
-        await tap('#top-chrome [data-act="schDateStep"][data-delta="1"]'); await sleep(200);
-        if (await p.$('.ls-row[data-go^="#/match/"]')) break;
+        if (await dragSpindle(-72) && await p.$('.ls-row[data-go^="#/match/"]')) break;
+        if (await dragSpindle(72) && await p.$('.ls-row[data-go^="#/match/"]')) break;
       }
     }
     // detail
