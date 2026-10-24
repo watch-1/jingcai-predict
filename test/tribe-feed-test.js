@@ -59,6 +59,23 @@ async function call(method, path, body, token) {
       const vr = await call('POST', '/tribe/posts/' + mv[0].id + '/vote', { choice: 'win' }, tok);
       ok(vr.s === 200 && vr.j.vote && vr.j.vote.myVote === 'win', 'tribe perspective vote');
     }
+    const phone2 = '199' + String(Math.floor(Math.random() * 1e8)).padStart(8, '0');
+    const r2 = await call('POST', '/auth/register', { phone: phone2, password: pw, nickname: '路人', agree: true });
+    const tok2 = r2.j && r2.j.token;
+    if (tok2) {
+      const deny = await call('DELETE', '/tribe/posts/' + postId, undefined, tok2);
+      ok(deny.s === 403, 'non-author cannot delete post');
+      const denyR = await call('DELETE', '/tribe/replies/' + replyId, undefined, tok2);
+      ok(denyR.s === 403, 'non-author cannot delete reply');
+    }
+    r = await call('DELETE', '/tribe/replies/' + replyId, undefined, tok);
+    ok(r.s === 200 && r.j.ok, 'author delete reply');
+    r = await call('GET', '/tribe/posts/' + postId + '/replies', undefined, tok);
+    ok(r.s === 200 && !(r.j.replies || []).some((x) => x.id === replyId), 'reply gone after delete');
+    r = await call('DELETE', '/tribe/posts/' + postId, undefined, tok);
+    ok(r.s === 200 && r.j.ok, 'author delete post');
+    r = await call('GET', '/tribe/posts/' + postId, undefined, tok);
+    ok(r.s === 404, 'post 404 after delete');
   } finally {
     if (tok) await call('DELETE', '/me', { password: pw }, tok);
   }
