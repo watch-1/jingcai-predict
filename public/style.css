@@ -185,7 +185,7 @@ html[data-ready="1"] .app {
   content: ""; position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
   width: 22px; height: 3px; border-radius: 2px; background: var(--tab-green, #2BB673);
 }
-/* 1.9.184: 赛程顶栏中部 = 连续日期滚筒（无灰胶囊/无蓝框，仅字号颜色区分选中） */
+/* 1.9.185: 赛程顶栏日期滚筒 — 停稳蓝字浮层 + 拖动仅灰字 + 点中开日历 */
 .top-chrome--schedule { grid-template-columns: auto minmax(0, 1fr) auto; }
 .tc-sch-date-spindle-wrap {
   display: flex; align-items: center; gap: 0; min-width: 0; width: 100%; max-width: min(100%, 360px);
@@ -217,7 +217,7 @@ html[data-ready="1"] .app {
   background: linear-gradient(270deg, rgba(255, 255, 255, .98) 0%, rgba(255, 255, 255, 0) 100%);
 }
 .tc-sch-date-spindle-track {
-  position: absolute; left: 0; top: 0; height: 100%;
+  position: absolute; left: 0; top: 0; height: 100%; z-index: 1;
   display: flex; align-items: center; will-change: transform;
 }
 .tc-sch-date-spindle-slot {
@@ -228,7 +228,60 @@ html[data-ready="1"] .app {
 .tc-sch-date-spindle-label {
   white-space: nowrap; transform-origin: center center;
   font-variant-numeric: tabular-nums; font-weight: 500; letter-spacing: -0.2px;
-  position: relative; z-index: 1;
+  color: #8e8e93; position: relative; z-index: 1;
+}
+.tc-sch-date-spindle-center-hi {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: 5; pointer-events: none; white-space: nowrap;
+  font-weight: 700; font-size: 17px; color: #007aff; letter-spacing: -0.2px;
+  padding: 4px 8px; border-radius: 8px;
+  background: rgba(255, 255, 255, .92);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+.tc-sch-date-spindle.is-dragging .tc-sch-date-spindle-center-hi,
+.tc-sch-date-spindle.is-pressing .tc-sch-date-spindle-center-hi {
+  opacity: 0; transform: translate(-50%, -50%) scale(.96);
+}
+.sch-date-cal-sheet {
+  width: min(360px, 100%); margin: 0 auto 24px; background: #fff; border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .18); overflow: hidden;
+  animation: up .22s;
+}
+.sch-date-cal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 8px; border-bottom: 0.5px solid rgba(60, 60, 67, .18);
+}
+.sch-date-cal-title { font-size: 17px; font-weight: 600; color: var(--t1); }
+.sch-date-cal-nav { display: flex; gap: 4px; }
+.sch-date-cal-nav button {
+  width: 32px; height: 32px; border-radius: 8px; border: none; background: transparent;
+  color: #007aff; font-size: 18px; font-weight: 500; padding: 0; line-height: 1;
+}
+.sch-date-cal-week {
+  display: grid; grid-template-columns: repeat(7, 1fr); padding: 6px 10px 0;
+}
+.sch-date-cal-week span {
+  text-align: center; font-size: 11px; color: #8e8e93; font-weight: 500; padding: 4px 0;
+}
+.sch-date-cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); padding: 4px 10px 12px; gap: 2px 0;
+}
+.sch-date-cal-day {
+  aspect-ratio: 1; border: none; background: transparent; border-radius: 50%;
+  font-size: 15px; font-weight: 400; color: var(--t1); padding: 0;
+  display: grid; place-items: center; margin: 1px auto; width: 36px; height: 36px;
+}
+.sch-date-cal-day.other { color: #c7c7cc; }
+.sch-date-cal-day.today { color: #007aff; font-weight: 600; }
+.sch-date-cal-day.selected { background: #007aff; color: #fff; font-weight: 600; }
+.sch-date-cal-day.selected.today { background: #007aff; color: #fff; }
+.sch-date-cal-foot {
+  display: flex; justify-content: space-between; padding: 8px 16px 14px;
+  border-top: 0.5px solid rgba(60, 60, 67, .18);
+}
+.sch-date-cal-foot button {
+  border: none; background: transparent; color: #007aff;
+  font-size: 15px; font-weight: 500; padding: 6px 4px;
 }
 .top-chrome--data .tc-tabs--data { gap: 8px; }
 .top-chrome--data .tc-tab--data { min-width: 3.2em; }

@@ -1326,14 +1326,25 @@ function commitSchDate(next) {
 function schDateSpindleShort(d) { return String(d).slice(5); }
 function schDateSpindleHtml() {
   const cur = S.schDate || bjDate(0);
+  const hi = schDateCenterLabel(cur);
   return `<div class="tc-sch-date-spindle-wrap" role="group" aria-label="赛程日期" data-sch-date="${esc(cur)}">
     <button type="button" class="tc-sch-date-step" data-act="schDateStep" data-delta="-1" aria-label="前一天"><span aria-hidden="true">‹</span></button>
     <div class="tc-sch-date-spindle" aria-live="polite">
       <div class="tc-sch-date-spindle-track"></div>
+      <div class="tc-sch-date-spindle-center-hi" role="button" aria-label="打开日历">${esc(hi)}</div>
     </div>
     <button type="button" class="tc-sch-date-step" data-act="schDateStep" data-delta="1" aria-label="后一天"><span aria-hidden="true">›</span></button>
   </div>`;
 }
+function updateSchDateSpindleCenterHi(spindle) {
+  const hi = spindle && spindle.querySelector('.tc-sch-date-spindle-center-hi');
+  if (!hi) return;
+  const sel = S.schDate || bjDate(0);
+  const lab = schDateCenterLabel(sel);
+  hi.textContent = lab;
+  hi.setAttribute('aria-label', '打开日历');
+}
+/** Gray-only track labels (blue center lives in overlay when settled). */
 function paintSchDateSpindlePerspective(spindle, track) {
   if (!spindle || !track) return;
   const cx = spindle.clientWidth / 2;
@@ -1341,24 +1352,79 @@ function paintSchDateSpindlePerspective(spindle, track) {
   track.querySelectorAll('.tc-sch-date-spindle-slot').forEach(el => {
     const r = el.getBoundingClientRect();
     const mid = (r.left + r.right) / 2 - rect.left;
-    const dist = (mid - cx) / (spindle.clientWidth * 0.5);
-    const t = Math.max(-1.15, Math.min(1.15, dist));
-    const cos = Math.cos(t * Math.PI / 2.5);
-    const scale = 0.72 + 0.28 * Math.max(0.2, cos);
-    const opacity = 0.35 + 0.65 * Math.max(0, cos);
+    const abs = Math.abs((mid - cx) / SCH_SPINDLE_SLOT);
+    const scale = Math.max(0.68, 1.35 - 0.32 * abs);
+    const opacity = Math.max(0.28, 1 - 0.28 * abs);
     const lab = el.querySelector('.tc-sch-date-spindle-label');
     if (!lab) return;
-    const isCenter = Math.abs(t) < 0.2;
     lab.style.transform = 'scale(' + scale.toFixed(3) + ')';
     lab.style.opacity = opacity.toFixed(3);
-    lab.style.fontWeight = isCenter ? '600' : '500';
-    lab.style.fontSize = isCenter ? '13px' : '12px';
-    lab.style.color = isCenter ? '#007AFF' : '#8E8E93';
-    const ds = el.dataset.date;
-    lab.textContent = isCenter ? schDateCenterLabel(ds) : schDateSpindleShort(ds);
-    if (isCenter) el.setAttribute('aria-current', 'date');
-    else el.removeAttribute('aria-current');
+    lab.style.fontWeight = abs < 0.35 ? '600' : '500';
+    lab.style.fontSize = abs < 0.35 ? '14px' : '12px';
+    lab.style.color = '#8E8E93';
+    lab.textContent = schDateSpindleShort(el.dataset.date);
+    el.removeAttribute('aria-current');
   });
+  updateSchDateSpindleCenterHi(spindle);
+}
+let schCalViewMonth = null;
+function renderSchDateCalendarSheet() {
+  const sh = $('#sheet');
+  if (!sh || sh.classList.contains('hidden') || !schCalViewMonth) return;
+  const sel = S.schDate || bjDate(0);
+  const todayStr = bjDate(0);
+  const y = schCalViewMonth.getUTCFullYear();
+  const m = schCalViewMonth.getUTCMonth();
+  const first = new Date(Date.UTC(y, m, 1));
+  const startPad = first.getUTCDay();
+  const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const prevDays = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  let cells = '';
+  for (let i = 0; i < 42; i++) {
+    let dayNum, cellDate, other = false;
+    if (i < startPad) {
+      dayNum = prevDays - startPad + i + 1;
+      const pd = new Date(Date.UTC(y, m - 1, dayNum));
+      cellDate = pd.toISOString().slice(0, 10);
+      other = true;
+    } else if (i >= startPad + daysInMonth) {
+      dayNum = i - (startPad + daysInMonth) + 1;
+      const nd = new Date(Date.UTC(y, m + 1, dayNum));
+      cellDate = nd.toISOString().slice(0, 10);
+      other = true;
+    } else {
+      dayNum = i - startPad + 1;
+      cellDate = new Date(Date.UTC(y, m, dayNum)).toISOString().slice(0, 10);
+    }
+    const cls = ['sch-date-cal-day'];
+    if (other) cls.push('other');
+    if (cellDate === todayStr) cls.push('today');
+    if (cellDate === sel) cls.push('selected');
+    cells += `<button type="button" class="${cls.join(' ')}" data-act="schCalPick" data-date="${esc(cellDate)}">${dayNum}</button>`;
+  }
+  sh.innerHTML = `<div class="sch-date-cal-sheet" role="dialog" aria-label="选择日期">
+    <div class="sch-date-cal-head">
+      <div class="sch-date-cal-title">${y}年${m + 1}月</div>
+      <div class="sch-date-cal-nav">
+        <button type="button" data-act="schCalPrev" aria-label="上个月">‹</button>
+        <button type="button" data-act="schCalNext" aria-label="下个月">›</button>
+      </div>
+    </div>
+    <div class="sch-date-cal-week"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>
+    <div class="sch-date-cal-grid">${cells}</div>
+    <div class="sch-date-cal-foot">
+      <button type="button" data-act="schCalCancel">取消</button>
+      <button type="button" data-act="schCalToday">今天</button>
+    </div>
+  </div>`;
+}
+function openSchDateCalendar() {
+  const sel = S.schDate || bjDate(0);
+  const p = sel.split('-').map(Number);
+  schCalViewMonth = new Date(Date.UTC(p[0], p[1] - 1, 1));
+  const sh = $('#sheet');
+  sh.classList.remove('hidden');
+  renderSchDateCalendarSheet();
 }
 function rebuildSchDateSpindle(wrap, state) {
   const spindle = wrap.querySelector('.tc-sch-date-spindle');
@@ -1393,7 +1459,7 @@ function initSchDateSpindle() {
   if (!spindle || !track) return;
   let state = wrap._schSpindleState;
   if (!state) {
-    state = { offsetPx: 0, dragging: false, startX: 0, startOffset: 0 };
+    state = { offsetPx: 0, pointerDown: false, dragging: false, moved: false, startX: 0, startY: 0, startOffset: 0, pressTimer: null };
     wrap._schSpindleState = state;
     if (wrap._schSpindleAbort) wrap._schSpindleAbort.abort();
     const ac = new AbortController();
@@ -1417,27 +1483,57 @@ function initSchDateSpindle() {
       applyTransform(true);
       paintSchDateSpindlePerspective(spindle, track);
     };
+    const hitCenterHi = (x, y) => {
+      const hi = spindle.querySelector('.tc-sch-date-spindle-center-hi');
+      if (!hi) return false;
+      const r = hi.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    };
     spindle.addEventListener('pointerdown', e => {
+      if (e.target.closest('.tc-sch-date-step')) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
-      state.dragging = true;
+      state.pointerDown = true;
+      state.moved = false;
+      state.dragging = false;
       state.startX = e.clientX;
+      state.startY = e.clientY;
       state.startOffset = state.offsetPx;
-      spindle.classList.add('is-dragging');
       track.style.transition = 'none';
+      clearTimeout(state.pressTimer);
+      state.pressTimer = setTimeout(() => {
+        if (!state.pointerDown || state.moved) return;
+        spindle.classList.add('is-pressing');
+      }, 180);
       try { spindle.setPointerCapture(e.pointerId); } catch (_) {}
     }, { signal: sig });
     spindle.addEventListener('pointermove', e => {
+      if (!state.pointerDown) return;
+      const dx = e.clientX - state.startX;
+      if (!state.moved && Math.abs(dx) > 4) {
+        state.moved = true;
+        state.dragging = true;
+        spindle.classList.add('is-dragging');
+        spindle.classList.remove('is-pressing');
+        clearTimeout(state.pressTimer);
+      }
       if (!state.dragging) return;
-      state.offsetPx = state.startOffset + (e.clientX - state.startX);
+      state.offsetPx = state.startOffset + dx;
       applyTransform(false);
       paintSchDateSpindlePerspective(spindle, track);
     }, { signal: sig });
     const up = e => {
-      if (!state.dragging) return;
+      if (!state.pointerDown) return;
+      const wasDragging = state.dragging;
+      const wasMoved = state.moved;
+      const cx = e && e.clientX != null ? e.clientX : state.startX;
+      const cy = e && e.clientY != null ? e.clientY : state.startY;
+      state.pointerDown = false;
+      clearTimeout(state.pressTimer);
       state.dragging = false;
-      spindle.classList.remove('is-dragging');
+      spindle.classList.remove('is-dragging', 'is-pressing');
       try { spindle.releasePointerCapture(e.pointerId); } catch (_) {}
-      snap();
+      if (wasDragging) { snap(); return; }
+      if (!wasMoved && hitCenterHi(cx, cy)) openSchDateCalendar();
     };
     spindle.addEventListener('pointerup', up, { signal: sig });
     spindle.addEventListener('pointercancel', up, { signal: sig });
@@ -9641,6 +9737,33 @@ document.addEventListener('click', async e => {
       if (!delta || !S.schDate) return;
       commitSchDate(shiftIssueDate(S.schDate, delta));
       return;
+    }
+    case 'schCalCancel': schCalViewMonth = null; return closeSheet();
+    case 'schCalToday': {
+      commitSchDate(bjDate(0));
+      schCalViewMonth = null;
+      return closeSheet();
+    }
+    case 'schCalPrev': {
+      if (!schCalViewMonth) return;
+      const y = schCalViewMonth.getUTCFullYear();
+      const m = schCalViewMonth.getUTCMonth();
+      schCalViewMonth = new Date(Date.UTC(y, m - 1, 1));
+      return renderSchDateCalendarSheet();
+    }
+    case 'schCalNext': {
+      if (!schCalViewMonth) return;
+      const y = schCalViewMonth.getUTCFullYear();
+      const m = schCalViewMonth.getUTCMonth();
+      schCalViewMonth = new Date(Date.UTC(y, m + 1, 1));
+      return renderSchDateCalendarSheet();
+    }
+    case 'schCalPick': {
+      const pick = el.dataset.date;
+      if (!pick) return;
+      commitSchDate(pick);
+      schCalViewMonth = null;
+      return closeSheet();
     }
     case 'tribeSub': {
       setTribeSub(el.dataset.sub || 'enter');

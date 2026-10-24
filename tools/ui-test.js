@@ -97,7 +97,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       ok(!(await p.$eval(leagueSel, e => e.classList.contains('on'))), `schedule ${modeLabel}: ${lgName} off after second tap`);
     }
     await assertSchLeagueToggle('当日');
-    const centerLabel = () => p.$eval('#top-chrome .tc-sch-date-spindle-slot[aria-current="date"] .tc-sch-date-spindle-label', e => e.textContent.trim());
+    const centerLabel = () => p.$eval('#top-chrome .tc-sch-date-spindle-center-hi', e => e.textContent.trim());
     const beforeDate = await centerLabel();
     await tap('#top-chrome [data-act="schDateStep"][data-delta="1"]'); await sleep(280);
     const afterDate = await centerLabel();
