@@ -1300,7 +1300,7 @@ function syncMeDrawer() {
   const html = meDrawerHtml();
   if (dr.innerHTML !== html) dr.innerHTML = html;
 }
-/** 顶栏中部 Tab 集：按底栏上下文切换（赛程=三钮筛选，其余=部落/头条/开奖）。 */
+/** 顶栏中部 Tab 集：按底栏上下文切换（赛程=日期滚筒，其余=部落/头条/开奖）。 */
 function shiftIssueDate(d, delta) {
   const t = new Date(String(d) + 'T12:00:00Z');
   t.setUTCDate(t.getUTCDate() + (delta | 0));
@@ -1312,7 +1312,9 @@ function schDateCenterLabel(d) {
   if (dn === '今天' || dn === '明天' || dn === '昨天') return `${dn} ${tail}`;
   return `${dn} ${tail}`;
 }
-/** 1.9.183: 顶栏五日日期轮播（灰底胶囊 + 中间宽两侧窄 + 横拖换日）。 */
+/** 1.9.184: 顶栏连续日期滚筒（横拖吸附 + 透视缩放，无灰框/蓝框）。 */
+const SCH_SPINDLE_SLOT = 70;
+const SCH_SPINDLE_RANGE = 40;
 function commitSchDate(next) {
   if (!next || next === S.schDate) return false;
   S.schDate = next;
@@ -1321,80 +1323,144 @@ function commitSchDate(next) {
   render({ force: true });
   return true;
 }
-function schDateCarouselSlotHtml(d, tier) {
-  const mmdd = d.slice(5);
-  if (tier === 'center') {
-    return `<span class="tc-sch-date-slot tc-sch-date-slot--center tc-sch-date-pill" aria-current="date">${esc(schDateCenterLabel(d))}</span>`;
-  }
-  if (tier === 'far') {
-    return `<button type="button" class="tc-sch-date-slot tc-sch-date-slot--far" data-sdate="${d}" aria-label="${esc(schDateCenterLabel(d))}">${esc(mmdd)}</button>`;
-  }
-  const isL = tier === 'near-l';
-  const chev = `<span class="tc-sch-date-chev" aria-hidden="true">${isL ? '‹' : '›'}</span>`;
-  const lab = `<span class="tc-sch-date-side-lab">${esc(mmdd)}</span>`;
-  const inner = isL ? chev + lab : lab + chev;
-  const delta = isL ? -1 : 1;
-  return `<button type="button" class="tc-sch-date-slot tc-sch-date-slot--near" data-act="schDateStep" data-delta="${delta}" aria-label="${isL ? '前一天' : '后一天'}">${inner}</button>`;
-}
-function schDateAdjusterHtml() {
+function schDateSpindleShort(d) { return String(d).slice(5); }
+function schDateSpindleHtml() {
   const cur = S.schDate || bjDate(0);
-  const slots = [-2, -1, 0, 1, 2].map(off => {
-    const d = shiftIssueDate(cur, off);
-    let tier = 'far';
-    if (off === 0) tier = 'center';
-    else if (off === -1) tier = 'near-l';
-    else if (off === 1) tier = 'near-r';
-    return schDateCarouselSlotHtml(d, tier);
-  });
-  return `<div class="tc-sch-date" role="group" aria-label="赛程日期" data-sch-date="${esc(cur)}">
-    <div class="tc-sch-date-track">${slots.join('')}</div>
+  return `<div class="tc-sch-date-spindle-wrap" role="group" aria-label="赛程日期" data-sch-date="${esc(cur)}">
+    <button type="button" class="tc-sch-date-step" data-act="schDateStep" data-delta="-1" aria-label="前一天"><span aria-hidden="true">‹</span></button>
+    <div class="tc-sch-date-spindle" aria-live="polite">
+      <div class="tc-sch-date-spindle-track"></div>
+    </div>
+    <button type="button" class="tc-sch-date-step" data-act="schDateStep" data-delta="1" aria-label="后一天"><span aria-hidden="true">›</span></button>
   </div>`;
 }
-function initSchDateCarousel() {
-  const root = document.querySelector('#top-chrome .tc-sch-date');
-  if (!root || root.dataset.dragBound === '1') return;
-  root.dataset.dragBound = '1';
-  const track = root.querySelector('.tc-sch-date-track');
-  let px0 = 0, dragging = false, didDrag = false;
-  const TH = 28;
-  const onDown = e => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    if (e.target.closest('button') && e.pointerType !== 'mouse') return;
-    dragging = true;
-    didDrag = false;
-    px0 = e.clientX;
-    root.classList.add('is-dragging');
-    try { root.setPointerCapture(e.pointerId); } catch (_) {}
-  };
-  const onMove = e => {
-    if (!dragging) return;
-    const dx = e.clientX - px0;
-    if (Math.abs(dx) > 5) didDrag = true;
-    if (track) track.style.transform = `translate3d(${dx * 0.42}px, 0, 0)`;
-  };
-  const onUp = e => {
-    if (!dragging) return;
-    dragging = false;
-    root.classList.remove('is-dragging');
-    const dx = e.clientX - px0;
-    if (track) track.style.transform = '';
-    try { root.releasePointerCapture(e.pointerId); } catch (_) {}
-    if (Math.abs(dx) >= TH) {
-      window.__schDateSuppressClick = true;
-      commitSchDate(shiftIssueDate(S.schDate || bjDate(0), dx > 0 ? -1 : 1));
-      setTimeout(() => { window.__schDateSuppressClick = false; }, 80);
-    } else if (didDrag) {
-      window.__schDateSuppressClick = true;
-      setTimeout(() => { window.__schDateSuppressClick = false; }, 80);
+function paintSchDateSpindlePerspective(spindle, track) {
+  if (!spindle || !track) return;
+  const cx = spindle.clientWidth / 2;
+  const rect = spindle.getBoundingClientRect();
+  track.querySelectorAll('.tc-sch-date-spindle-slot').forEach(el => {
+    const r = el.getBoundingClientRect();
+    const mid = (r.left + r.right) / 2 - rect.left;
+    const dist = (mid - cx) / (spindle.clientWidth * 0.5);
+    const t = Math.max(-1.15, Math.min(1.15, dist));
+    const cos = Math.cos(t * Math.PI / 2.5);
+    const scale = 0.72 + 0.28 * Math.max(0.2, cos);
+    const opacity = 0.35 + 0.65 * Math.max(0, cos);
+    const lab = el.querySelector('.tc-sch-date-spindle-label');
+    if (!lab) return;
+    const isCenter = Math.abs(t) < 0.2;
+    lab.style.transform = 'scale(' + scale.toFixed(3) + ')';
+    lab.style.opacity = opacity.toFixed(3);
+    lab.style.fontWeight = isCenter ? '600' : '500';
+    lab.style.fontSize = isCenter ? '13px' : '12px';
+    lab.style.color = isCenter ? '#007AFF' : '#8E8E93';
+    const ds = el.dataset.date;
+    lab.textContent = isCenter ? schDateCenterLabel(ds) : schDateSpindleShort(ds);
+    if (isCenter) el.setAttribute('aria-current', 'date');
+    else el.removeAttribute('aria-current');
+  });
+}
+function rebuildSchDateSpindle(wrap, state) {
+  const spindle = wrap.querySelector('.tc-sch-date-spindle');
+  const track = wrap.querySelector('.tc-sch-date-spindle-track');
+  if (!spindle || !track) return;
+  const sel = S.schDate || bjDate(0);
+  track.innerHTML = '';
+  track.style.width = (SCH_SPINDLE_RANGE * 2 + 1) * SCH_SPINDLE_SLOT + 'px';
+  for (let i = -SCH_SPINDLE_RANGE; i <= SCH_SPINDLE_RANGE; i++) {
+    const d = shiftIssueDate(sel, i);
+    const el = document.createElement('div');
+    el.className = 'tc-sch-date-spindle-slot';
+    el.style.width = SCH_SPINDLE_SLOT + 'px';
+    el.dataset.date = d;
+    const lab = document.createElement('span');
+    lab.className = 'tc-sch-date-spindle-label';
+    lab.textContent = schDateSpindleShort(d);
+    el.appendChild(lab);
+    track.appendChild(el);
+  }
+  state.offsetPx = 0;
+  const base = spindle.clientWidth / 2 - (SCH_SPINDLE_RANGE * SCH_SPINDLE_SLOT + SCH_SPINDLE_SLOT / 2);
+  track.style.transition = 'none';
+  track.style.transform = 'translate3d(' + base + 'px,0,0)';
+  paintSchDateSpindlePerspective(spindle, track);
+}
+function initSchDateSpindle() {
+  const wrap = document.querySelector('#top-chrome .tc-sch-date-spindle-wrap');
+  if (!wrap) return;
+  const spindle = wrap.querySelector('.tc-sch-date-spindle');
+  const track = wrap.querySelector('.tc-sch-date-spindle-track');
+  if (!spindle || !track) return;
+  let state = wrap._schSpindleState;
+  if (!state) {
+    state = { offsetPx: 0, dragging: false, startX: 0, startOffset: 0 };
+    wrap._schSpindleState = state;
+    if (wrap._schSpindleAbort) wrap._schSpindleAbort.abort();
+    const ac = new AbortController();
+    wrap._schSpindleAbort = ac;
+    const sig = ac.signal;
+    const centerTrack = () => spindle.clientWidth / 2 - (SCH_SPINDLE_RANGE * SCH_SPINDLE_SLOT + SCH_SPINDLE_SLOT / 2);
+    const applyTransform = animate => {
+      const base = centerTrack();
+      track.style.transition = animate ? 'transform 200ms cubic-bezier(.2,.9,.2,1)' : 'none';
+      track.style.transform = 'translate3d(' + (base + state.offsetPx) + 'px,0,0)';
+    };
+    const snap = () => {
+      const dayShift = Math.round(-state.offsetPx / SCH_SPINDLE_SLOT);
+      if (dayShift !== 0) {
+        window.__schDateSuppressClick = true;
+        commitSchDate(shiftIssueDate(S.schDate || bjDate(0), dayShift));
+        setTimeout(() => { window.__schDateSuppressClick = false; }, 80);
+        return;
+      }
+      state.offsetPx = 0;
+      applyTransform(true);
+      paintSchDateSpindlePerspective(spindle, track);
+    };
+    spindle.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      state.dragging = true;
+      state.startX = e.clientX;
+      state.startOffset = state.offsetPx;
+      spindle.classList.add('is-dragging');
+      track.style.transition = 'none';
+      try { spindle.setPointerCapture(e.pointerId); } catch (_) {}
+    }, { signal: sig });
+    spindle.addEventListener('pointermove', e => {
+      if (!state.dragging) return;
+      state.offsetPx = state.startOffset + (e.clientX - state.startX);
+      applyTransform(false);
+      paintSchDateSpindlePerspective(spindle, track);
+    }, { signal: sig });
+    const up = e => {
+      if (!state.dragging) return;
+      state.dragging = false;
+      spindle.classList.remove('is-dragging');
+      try { spindle.releasePointerCapture(e.pointerId); } catch (_) {}
+      snap();
+    };
+    spindle.addEventListener('pointerup', up, { signal: sig });
+    spindle.addEventListener('pointercancel', up, { signal: sig });
+    if (!window.__schSpindleResizeBound) {
+      window.__schSpindleResizeBound = true;
+      window.addEventListener('resize', () => {
+        const w = document.querySelector('#top-chrome .tc-sch-date-spindle-wrap');
+        if (!w || !w._schSpindleState) return;
+        const sp = w.querySelector('.tc-sch-date-spindle');
+        const tr = w.querySelector('.tc-sch-date-spindle-track');
+        if (!sp || !tr) return;
+        const st = w._schSpindleState;
+        const base = sp.clientWidth / 2 - (SCH_SPINDLE_RANGE * SCH_SPINDLE_SLOT + SCH_SPINDLE_SLOT / 2);
+        tr.style.transition = 'none';
+        tr.style.transform = 'translate3d(' + (base + st.offsetPx) + 'px,0,0)';
+        paintSchDateSpindlePerspective(sp, tr);
+      });
     }
-  };
-  root.addEventListener('pointerdown', onDown);
-  root.addEventListener('pointermove', onMove);
-  root.addEventListener('pointerup', onUp);
-  root.addEventListener('pointercancel', onUp);
+  }
+  rebuildSchDateSpindle(wrap, state);
 }
 function topChromeCenterHtml(rName) {
-  if (rName === 'schedule') return schDateAdjusterHtml();
+  if (rName === 'schedule') return schDateSpindleHtml();
   if (rName === 'data') {
     const sec = dataSectionOf();
     const tabs = [['team', '球队'], ['star', '球星']].map(([k, lab]) =>
@@ -1439,7 +1505,7 @@ function syncTopChrome(rName) {
       <button type="button" class="tc-ic" data-go="#/plans" aria-label="我的消息">${I.mail}${msgDot}</button>
     </div></div>`;
   if (el.innerHTML !== want) el.innerHTML = want;
-  if (show && rName === 'schedule') initSchDateCarousel();
+  if (show && rName === 'schedule') initSchDateSpindle();
 }
 const empty = (text, btn = '', title = '') => `<div class="empty">${EMPTY_SVG}${title ? `<div class="empty-t">${title}</div>` : ''}<div class="empty-d">${text}</div>${btn}</div>`;
 const skeleton = (n = 4) => '<div class="grid">' + Array.from({ length: n }, () => `<div class="card sk-card"><div style="display:flex;gap:8px"><div class="sk sk-line" style="width:48px;margin:0"></div><div class="sk sk-line" style="width:90px;margin:0"></div></div>

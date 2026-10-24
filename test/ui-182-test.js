@@ -7,8 +7,8 @@ const path = require('path');
 const appJs = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '../public/style.css'), 'utf8');
 
-assert.ok(/function schDateAdjusterHtml/.test(appJs), 'schedule date adjuster in top chrome');
-assert.ok(/tc-sch-date-pill|tc-sch-date-slot--center/.test(appJs), 'date pill markup');
+assert.ok(/function schDateSpindleHtml|function schDateAdjusterHtml/.test(appJs), 'schedule date control in top chrome');
+assert.ok(/tc-sch-date-spindle|tc-sch-date-pill|tc-sch-date-slot--center/.test(appJs), 'date spindle or pill markup');
 assert.ok(/schDateStep/.test(appJs), 'date step handler');
 assert.ok(!/data-act="schMode"/.test(appJs), 'schMode buttons removed from app');
 assert.ok(/let modeRows = classifiedDay/.test(appJs), 'schedule shows all matches for day');

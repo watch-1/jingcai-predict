@@ -185,47 +185,51 @@ html[data-ready="1"] .app {
   content: ""; position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
   width: 22px; height: 3px; border-radius: 2px; background: var(--tab-green, #2BB673);
 }
-/* 1.9.183: 赛程顶栏中部 = 五日日期轮播（中间宽、两侧渐窄，不遮挡邻日） */
+/* 1.9.184: 赛程顶栏中部 = 连续日期滚筒（无灰胶囊/无蓝框，仅字号颜色区分选中） */
 .top-chrome--schedule { grid-template-columns: auto minmax(0, 1fr) auto; }
-.tc-sch-date {
-  min-width: 0; max-width: min(100%, 296px); width: 100%;
-  margin: 0 auto; padding: 4px 6px; border-radius: 999px;
-  background: #e8eaef; overflow: hidden; cursor: grab;
-  touch-action: pan-y; user-select: none; -webkit-user-select: none;
+.tc-sch-date-spindle-wrap {
+  display: flex; align-items: center; gap: 0; min-width: 0; width: 100%; max-width: min(100%, 360px);
+  margin: 0 auto; justify-self: center;
 }
-.tc-sch-date.is-dragging { cursor: grabbing; }
-.tc-sch-date-track {
-  display: grid;
-  grid-template-columns: minmax(0, 0.7fr) minmax(0, 0.9fr) auto minmax(0, 0.9fr) minmax(0, 0.7fr);
-  align-items: center; gap: 4px; width: 100%;
-  will-change: transform;
+.tc-sch-date-step {
+  flex: none; width: 22px; height: 36px; margin: 0; padding: 0; border: none; background: transparent;
+  color: #c7c7cc; font-size: 17px; line-height: 1; font-weight: 400;
+  display: grid; place-items: center;
 }
-.tc-sch-date-slot {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 0; margin: 0; padding: 0; border: none; background: transparent;
-  font-variant-numeric: tabular-nums; white-space: nowrap;
-  overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+.tc-sch-date-step:active { color: #8e8e93; }
+.tc-sch-date-step span { pointer-events: none; }
+.tc-sch-date-spindle {
+  flex: 1; min-width: 0; height: 36px; position: relative;
+  touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab;
+  overflow: hidden; background: transparent; border: none; border-radius: 0;
 }
-.tc-sch-date-slot--far {
-  font-size: 10px; font-weight: 500; line-height: 1.05; color: #b4bac6;
-  padding: 1px 0; opacity: 0.5; transform: scale(0.9);
+.tc-sch-date-spindle.is-dragging { cursor: grabbing; }
+.tc-sch-date-spindle::before,
+.tc-sch-date-spindle::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 28px; z-index: 2; pointer-events: none;
 }
-.tc-sch-date-slot--near {
-  gap: 1px; font-size: 11px; font-weight: 500; line-height: 1.1; color: #9aa3b2;
-  padding: 4px 2px; opacity: 0.82; transform: scale(0.95);
-  border-radius: 8px;
+.tc-sch-date-spindle::before {
+  left: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, .98) 0%, rgba(255, 255, 255, 0) 100%);
 }
-.tc-sch-date-slot--near:active { background: rgba(15, 23, 42, .06); }
-.tc-sch-date-slot--far:active { opacity: 0.7; }
-.tc-sch-date-pill.tc-sch-date-slot--center {
-  flex: none; justify-self: center;
-  padding: 6px 11px; border-radius: 999px; background: #fff;
-  color: var(--pri); font-size: 13px; font-weight: 700; line-height: 1.2;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, .12); transform: none; opacity: 1;
-  max-width: none;
+.tc-sch-date-spindle::after {
+  right: 0;
+  background: linear-gradient(270deg, rgba(255, 255, 255, .98) 0%, rgba(255, 255, 255, 0) 100%);
 }
-.tc-sch-date-side-lab { font-variant-numeric: tabular-nums; font-weight: 500; }
-.tc-sch-date-chev { flex: none; font-size: 14px; line-height: 1; color: #b4bac6; font-weight: 400; }
+.tc-sch-date-spindle-track {
+  position: absolute; left: 0; top: 0; height: 100%;
+  display: flex; align-items: center; will-change: transform;
+}
+.tc-sch-date-spindle-slot {
+  flex: none; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+.tc-sch-date-spindle-label {
+  white-space: nowrap; transform-origin: center center;
+  font-variant-numeric: tabular-nums; font-weight: 500; letter-spacing: -0.2px;
+  position: relative; z-index: 1;
+}
 .top-chrome--data .tc-tabs--data { gap: 8px; }
 .top-chrome--data .tc-tab--data { min-width: 3.2em; }
 .top-chrome--data .tc-tab--data.on::after { width: 22px; }
