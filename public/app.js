@@ -297,6 +297,10 @@ try {
       _bundledCrestIds = new Set(
         (j && Array.isArray(j.teamIds) ? j.teamIds : []).map((id) => String(id))
       );
+      try {
+        const rn = route().name;
+        if (rn === 'data' || rn === 'tribe' || rn === 'tribe-club') render({ force: true });
+      } catch (_) {}
     })
     .catch(() => { _bundledCrestIds = new Set(); });
 } catch (_) { _bundledCrestIds = new Set(); }
@@ -304,9 +308,9 @@ try {
 function bundledCrestPath(teamId) {
   const tid = teamId != null && String(teamId) !== '' ? String(teamId) : '';
   if (!tid) return '';
-  if (_bundledCrestIds === null || _bundledCrestIds.has(tid)) {
-    return BUNDLED_CREST_BASE + tid + '.png';
-  }
+  // 1.9.203: before manifest loads, do not guess bundled path (avoids 404 → blank/hung remote)
+  if (_bundledCrestIds === null) return '';
+  if (_bundledCrestIds.has(tid)) return BUNDLED_CREST_BASE + tid + '.png';
   return '';
 }
 
@@ -439,7 +443,10 @@ function hydrateTribeCrests(root) {
       const tid = wrap.getAttribute('data-team-id') || '';
       if (!key || !logo) return;
       const bundled = bundledCrestPath(tid);
-      if (bundled && img.getAttribute('src') === bundled && img.complete && img.naturalWidth > 0) return;
+      const srcNow = img.getAttribute('src') || '';
+      const onBundled = bundled && srcNow === bundled;
+      if (onBundled && img.complete && img.naturalWidth > 0) return;
+      if (onBundled && !img.dataset.triedFb && !(img.complete && img.naturalWidth === 0)) return;
       jobs.push((async () => {
         try {
           let local = _crestMem.get(key);
@@ -448,7 +455,10 @@ function hydrateTribeCrests(root) {
             if (blob instanceof Blob && blob.size > 0) local = crestRemember(key, blob);
           }
           if (local && img.getAttribute('src') !== local) img.setAttribute('src', local);
-          else if (!bundled || img.naturalWidth === 0) {
+          else if (!onBundled && !bundled) {
+            const saved = await crestCacheFromRemote(logo, tid);
+            if (saved && img.getAttribute('src') !== saved) img.setAttribute('src', saved);
+          } else if (onBundled && img.dataset.triedFb) {
             const saved = await crestCacheFromRemote(logo, tid);
             if (saved && img.getAttribute('src') !== saved) img.setAttribute('src', saved);
           }
@@ -4030,7 +4040,8 @@ function renderStandingsTable(payload) {
       <thead><tr><th class="rk">#</th><th class="tm">球队</th><th class="dc-st">赛</th><th class="dc-st">胜</th><th class="dc-st">平</th><th class="dc-st">负</th><th class="dc-st gfga">进/失</th><th class="pts">积分</th></tr></thead><tbody>`;
     for (const r of rows) {
       const logoUrl = r.logo || (r.teamId ? ('https://a.espncdn.com/i/teamlogos/soccer/500/' + r.teamId + '.png') : '');
-      const logo = logoUrl ? badge(r.teamZh || r.team, '', logoUrl) : badge(r.teamZh || r.team);
+      const crestOpts = r.teamId ? { teamId: r.teamId, eager: Number(r.rank) <= 8 } : null;
+      const logo = logoUrl ? badge(r.teamZh || r.team, '', logoUrl, crestOpts) : badge(r.teamZh || r.team);
       const z = zoneForRank(lg, r.rank);
       const zoneCls = z ? z.cls : '';
       const href = r.teamId ? `#/team/${encodeURIComponent(r.teamId)}?league=${encodeURIComponent(lg)}` : '';
@@ -4081,7 +4092,8 @@ function renderScorersList(payload, kind) {
     const photo = r.photo
       ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><img alt="" width="88" height="88" decoding="async"${lazyAttr} src="${esc(API + '/api/logo?url=' + encodeURIComponent(r.photo))}" onerror="var p=this.parentNode;if(!p)return;if(p.dataset.alt&&!p.dataset.retried){p.dataset.retried=1;this.src='${esc(API)}/api/logo?url='+encodeURIComponent(p.dataset.alt);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');p.textContent=p.dataset.letter||'?';this.remove();"></span>`
       : `<span class="dc-avatar letter">${initial}</span>`;
-    const teamLogo = r.teamLogo ? badge(r.teamZh || r.team, 'sm', r.teamLogo) : badge(r.teamZh || r.team, 'sm');
+    const teamCrestOpts = r.teamId ? { teamId: r.teamId, eager: i < 8 } : null;
+    const teamLogo = r.teamLogo ? badge(r.teamZh || r.team, 'sm', r.teamLogo, teamCrestOpts) : badge(r.teamZh || r.team, 'sm');
     const primary = isMv
       ? (r.labelZh || r.text || '暂无')
       : (isAst ? (r.assists ?? 0) : (r.goals ?? 0));
@@ -4116,7 +4128,8 @@ function renderClubValuesTable(payload) {
     <thead><tr><th class="rk">#</th><th class="tm">球队</th><th class="mv">总身价</th><th class="sq">人数</th></tr></thead><tbody>`;
   for (const r of rows) {
     const logoUrl = r.logo || (r.teamId ? ('https://a.espncdn.com/i/teamlogos/soccer/500/' + r.teamId + '.png') : '');
-    const logo = logoUrl ? badge(r.teamZh || r.team, '', logoUrl) : badge(r.teamZh || r.team);
+    const crestOpts = r.teamId ? { teamId: r.teamId, eager: Number(r.rank) <= 8 } : null;
+    const logo = logoUrl ? badge(r.teamZh || r.team, '', logoUrl, crestOpts) : badge(r.teamZh || r.team);
     const href = r.teamId ? `#/team/${encodeURIComponent(r.teamId)}?league=${encodeURIComponent(lg)}` : '';
     const rowCls = (href ? 'dc-row-link' : '') + (r.ok === false ? ' dc-mv-miss' : '');
     const goAttr = href ? ` data-go="${esc(href)}" role="link" tabindex="0"` : '';
@@ -11234,7 +11247,6 @@ document.addEventListener('submit', async e => {
       const work = Promise.all([reloadData(true), refreshAccount()]);
       const timed = new Promise((resolve) => setTimeout(resolve, 12000));
       await Promise.race([work, timed]);
-      try { await work; } catch (_) {}
       invalidateTabKeep();
       render({ force: true });
       txt('刷新完成');

@@ -12,17 +12,22 @@ const bootPath = path.join(root, 'public/data-center-boot.json');
 const outDir = path.join(root, 'public/assets/crests');
 
 const LEAGUES = ['epl', 'laliga', 'seriea', 'bundesliga', 'ligue1', 'csl', 'ucl'];
+const SLICE_SUFFIXES = ['standings', 'topscorers', 'topassists', 'clubvalues'];
 
 function collectTeamIds() {
   const j = JSON.parse(fs.readFileSync(bootPath, 'utf8'));
   const ids = new Set();
+  const addRow = (r) => {
+    if (r && r.teamId) ids.add(String(r.teamId));
+  };
   for (const lg of LEAGUES) {
-    const s = j.slices && j.slices[lg + ':standings'];
-    if (!s) continue;
-    for (const tb of s.tables || []) {
-      for (const r of tb.rows || []) {
-        if (r.teamId) ids.add(String(r.teamId));
+    for (const suf of SLICE_SUFFIXES) {
+      const s = j.slices && j.slices[lg + ':' + suf];
+      if (!s) continue;
+      for (const tb of s.tables || []) {
+        for (const r of tb.rows || []) addRow(r);
       }
+      for (const r of s.rows || []) addRow(r);
     }
   }
   return [...ids].sort((a, b) => Number(a) - Number(b));
@@ -30,7 +35,7 @@ function collectTeamIds() {
 
 function fetchUrl(url, redirects = 0) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'jingcai-crest-sync/1.9.202' } }, (res) => {
+    https.get(url, { headers: { 'User-Agent': 'jingcai-crest-sync/1.9.203' } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects < 5) {
         const next = res.headers.location.startsWith('http')
           ? res.headers.location
@@ -84,11 +89,14 @@ async function main() {
   const manifest = {
     v: 1,
     source: 'espn-500',
-    teamIds: ids,
+    teamIds: ids.filter((id) => {
+      const fp = path.join(outDir, id + '.png');
+      return fs.existsSync(fp) && fs.statSync(fp).size > 400;
+    }),
     syncedAt: new Date().toISOString(),
   };
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-  console.log(JSON.stringify({ total: ids.length, downloaded: ok, skipped: skip, failed: fail }));
+  console.log(JSON.stringify({ total: ids.length, inManifest: manifest.teamIds.length, downloaded: ok, skipped: skip, failed: fail }));
 }
 
 main().catch((e) => {

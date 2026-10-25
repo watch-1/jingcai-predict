@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const lt = require('../lib/league-tables');
 
-const LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'ucl'];
+const LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'csl', 'ucl'];
 const KINDS = ['standings', 'topscorers', 'topassists', 'clubvalues', 'playervalues'];
 const FN = {
   standings: lt.getStandings,
@@ -31,7 +31,7 @@ function slimRow(kind, row) {
   };
 }
 
-function slimPayload(kind, r) {
+function slimPayload(kind, r, lgKey) {
   const slim = {
     ok: true,
     leagueKey: r.leagueKey,
@@ -48,7 +48,7 @@ function slimPayload(kind, r) {
   if (kind === 'standings' && r.tables) {
     slim.tables = r.tables.map((t) => ({
       group: t.group,
-      rows: (t.rows || []).slice(0, 20).map((row) => slimRow(kind, row)),
+      rows: (t.rows || []).slice(0, lgKey === 'ucl' ? 40 : 20).map((row) => slimRow(kind, row)),
     }));
   } else if (r.rows) {
     slim.rows = r.rows.slice(0, 25).map((row) => slimRow(kind, row));
@@ -65,7 +65,7 @@ function slimPayload(kind, r) {
       try {
         const r = await fn({ league: lg });
         if (!r || r.ok === false) continue;
-        slices[`${lg}:${kind}`] = slimPayload(kind, r);
+        slices[`${lg}:${kind}`] = slimPayload(kind, r, lg);
       } catch (e) {
         console.warn('[boot]', lg, kind, e.message);
       }
