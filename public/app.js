@@ -282,7 +282,7 @@ function issueWeek(m) {
 }
 const kickoff = m => new Date(`${m.date}T${m.time || '00:00'}:00+08:00`).getTime();
 const BADGE_COLORS = ['#e5484d', '#1a62f0', '#12a150', '#ff8a1f', '#7b4ce0', '#0aa5b8', '#c2185b', '#546e7a', '#d97706', '#0f766e'];
-function badge(name, cls = '', logo) {
+function badge(name, cls = '', logo, opts) {
   let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const c1 = BADGE_COLORS[h % BADGE_COLORS.length];
   const letter = esc([...String(name)][0] || '?');
@@ -291,7 +291,9 @@ function badge(name, cls = '', logo) {
   const src = esc(API + '/api/logo?url=' + encodeURIComponent(logo));
   // Intrinsic 160≈3–4× of 40–42 CSS px crests; sources TSDB 512 / ESPN 500 (1.9.91 sharper).
   // Broken or missing crest (404) falls back to the letter badge. Do not invent a logo.
-  return `<span class="badge crest ${cls}" data-letter="${letter}"><img alt="" width="160" height="160" decoding="async" loading="lazy" src="${src}" onerror="var p=this.parentNode;if(!p||p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter ${cls}';p.style.background='${bg}';p.textContent=p.dataset.letter||'';this.remove()"></span>`;
+  // 1.9.200: tribe hub uses eager — Capacitor first-paint + loading=lazy left empty crest discs.
+  const lazyAttr = (opts && opts.eager) ? '' : ' loading="lazy"';
+  return `<span class="badge crest ${cls}" data-letter="${letter}"><img alt="" width="160" height="160" decoding="async"${lazyAttr} src="${src}" onerror="var p=this.parentNode;if(!p||p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter ${cls}';p.style.background='${bg}';p.textContent=p.dataset.letter||'';this.remove()"></span>`;
 }
 const shortRk = s => (String(s || '').length <= 5 ? esc(s) : ''); // long group ranks like [亚运男足1] only shown on the detail page
 const lgTag = m => homeTheme() === 'pitch'
@@ -856,6 +858,29 @@ function dataCacheRenderable(cached, kind) {
 function dataCacheTribeReady(cached) {
   return dataCacheRenderable(cached, 'standings') && standingsSliceHasTeamIds(cached);
 }
+/** 1.9.200: rebuild when cache has league standings the settled catalog still lacks (partial cold fill). */
+function tribeCatalogNeedsRebuildFromCache() {
+  const cat = S.tribeCat;
+  const slices = tribeStandingsSlicesFromCache();
+  let cacheLeagues = 0;
+  let catLeagues = 0;
+  for (const lg of TRIBE_LEAGUES) {
+    const slice = slices[lg.key + ':standings'];
+    if (!dataCacheTribeReady(slice)) continue;
+    cacheLeagues++;
+    const has = !!(cat && cat.teams && cat.teams.some((t) => t && t.leagueKey === lg.key && t.teamId));
+    if (has) catLeagues++;
+  }
+  if (!cacheLeagues) return false;
+  if (!cat || !cat.byId || !Object.keys(cat.byId).length) return true;
+  if (catLeagues < cacheLeagues) return true;
+  try {
+    for (const t of cat.teams || []) {
+      if (t && t.teamId && !t.logo) return true;
+    }
+  } catch (_) {}
+  return false;
+}
 function purgeStandingsWithoutTeamIds() {
   try {
     S.dataCache = S.dataCache || {};
@@ -1041,6 +1066,12 @@ function loadDataCenterBootPack() {
           if (dataCacheRenderable(ensureDataCacheSlice(lg + ':' + kind), kind)) {
             if (!softPatchDataBody(lg, kind)) render({ force: true });
           }
+        }
+      } catch (_) {}
+      // 1.9.200: boot pack may arrive after ensureTribeCatalog settled empty/partial — re-render tribe.
+      try {
+        if ((route().name === 'tribe' || route().name === 'tribe-club') && tribeCatalogNeedsRebuildFromCache()) {
+          rebuildTribeCatalogFromCache({ renderIfTribe: true });
         }
       } catch (_) {}
     } catch (_) {}
@@ -2401,7 +2432,7 @@ function buildTribeCatalogFromSlices(slices) {
         const heat = Math.max(1, pts + Math.max(0, 22 - rank));
         const t = {
           tribeId: id, leagueKey: lg.key, leagueZh, teamId: String(r.teamId),
-          nameZh: r.teamZh || r.team || '球队', logo: r.logo || '', points: pts, rank, heat,
+          nameZh: r.teamZh || r.team || '球队', logo: r.logo || (r.teamId ? ('https://a.espncdn.com/i/teamlogos/soccer/500/' + r.teamId + '.png') : ''), points: pts, rank, heat,
         };
         byId[id] = t;
         teams.push(t);
@@ -2623,7 +2654,7 @@ function tribeGridHtml(teams, title, opts) {
   }
   const head = title ? `<div class="tribe-sec-hd">${esc(title)}<small>${teams.length}个</small></div>` : '';
   const cells = teams.map(t => {
-    const crest = badge(t.nameZh, 'tribe', t.logo);
+    const crest = badge(t.nameZh, 'tribe', t.logo, { eager: true });
     const heat = t.heat > 0 ? `<span class="tribe-heat num">🔥 ${t.heat}</span>` : '';
     const fol = isTribeFollow(t.tribeId) ? '<span class="tribe-fol-dot" aria-hidden="true"></span>' : '';
     return `<button type="button" class="tribe-cell" data-go="#/tribe-club/${encodeURIComponent(t.tribeId)}" aria-label="${esc(t.nameZh)}">
@@ -2649,11 +2680,29 @@ function tribeMainInnerHtml() {
   const title = tribeHubTitleForSide(side, raw);
   return tribeGridHtml(teams, title, { searching: !!q });
 }
+function hardenTribeCrestImgs(root) {
+  try {
+    const scope = root || document;
+    scope.querySelectorAll('.tribe-crest-wrap .badge.crest img').forEach((img) => {
+      if (img.complete && img.naturalWidth > 0) return;
+      let done = false;
+      const fall = () => {
+        if (done) return;
+        done = true;
+        try { if (typeof img.onerror === 'function') img.onerror(); } catch (_) {}
+      };
+      const t = setTimeout(fall, 2800);
+      img.addEventListener('load', () => { done = true; clearTimeout(t); }, { once: true });
+      img.addEventListener('error', () => { done = true; clearTimeout(t); }, { once: true });
+    });
+  } catch (_) {}
+}
 function softPatchTribeHub() {
   if (route().name !== 'tribe') return false;
   const main = document.querySelector('.tribe-hub .tribe-main');
   if (!main) return false;
   main.innerHTML = tribeMainInnerHtml();
+  try { hardenTribeCrestImgs(main); } catch (_) {}
   return true;
 }
 function pageTribe() {
@@ -4005,12 +4054,13 @@ async function loadDataCenter(lg, kind, { soft, signal } = {}) {
   if (route().name === 'data' && dataLeagueOf() === lg && dataKindOf() === kind) {
     if (!softPatchDataBody(lg, kind)) render({ force: true });
   }
-  // 1.9.199: standings refresh can fill tribe after purge left an empty settled catalog.
+  // 1.9.199/200: standings refresh rebuilds tribe when catalog empty OR missing leagues/crests.
   if (kind === 'standings' && (route().name === 'tribe' || route().name === 'tribe-club')) {
     try {
       const ready = dataCacheTribeReady(S.dataCache && S.dataCache[key]);
-      const empty = !(S.tribeCat && S.tribeCat.byId && Object.keys(S.tribeCat.byId).length);
-      if (ready && empty) rebuildTribeCatalogFromCache({ renderIfTribe: true });
+      if (ready && tribeCatalogNeedsRebuildFromCache()) {
+        rebuildTribeCatalogFromCache({ renderIfTribe: true });
+      }
     } catch (_) {}
   }
 }
