@@ -48,10 +48,10 @@ assert.ok(!/ha-pastel|ha-shell/.test(appJs), 'no section gradient flash layers')
 assert.ok(/homeAttitudeCardGlow/.test(appJs), 'per-card scroll glow retained');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.198');
+assert.ok(pkg.version >= '1.9.198', 'version at least 1.9.198');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.198/.test(ver));
-assert.ok(/VERSION_CODE=235/.test(ver));
-assert.ok(/jc-v1\.9\.198/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.19[89]/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-198-test OK');

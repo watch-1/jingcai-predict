@@ -18,10 +18,10 @@ assert.ok(/pointer-events:\s*auto/.test(css) && /\.tc-sch-date-spindle-center-hi
 assert.ok(!/tc-sch-date-step[\s\S]*schDateSpindleHtml/.test(appJs), 'no side step buttons in top-bar spindle');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.187');
+assert.ok(/^1\.9\.\d+$/.test(pkg.version), 'semver 1.9.x');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.187/.test(ver));
-assert.ok(/VERSION_CODE=224/.test(ver));
-assert.ok(/jc-v1\.9\.187/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-187-test OK');

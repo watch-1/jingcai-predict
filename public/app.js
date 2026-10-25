@@ -2411,53 +2411,108 @@ function buildTribeCatalogFromSlices(slices) {
   teams.sort((a, b) => b.heat - a.heat || a.nameZh.localeCompare(b.nameZh, 'zh-CN'));
   return { teams, byId };
 }
-function ensureTribeCatalog() {
-  if (S.tribeCat && S.tribeCat.byId && Object.keys(S.tribeCat.byId).length) return Promise.resolve(S.tribeCat);
+function tribeStandingsSlicesFromCache() {
+  const slices = {};
+  try {
+    const dc = S.dataCache || {};
+    for (const k of Object.keys(dc)) {
+      if (k.endsWith(':standings') && dc[k]) slices[k] = dc[k];
+    }
+  } catch (_) {}
+  return slices;
+}
+function rebuildTribeCatalogFromCache({ renderIfTribe } = {}) {
+  const cat = buildTribeCatalogFromSlices(tribeStandingsSlicesFromCache());
+  cat._settled = true;
+  S.tribeCat = cat;
+  if (renderIfTribe && (route().name === 'tribe' || route().name === 'tribe-club')) {
+    try {
+      if (route().name === 'tribe') {
+        if (!softPatchTribeHub()) render({ force: true });
+      } else render({ force: true });
+    } catch (_) {}
+  }
+  return cat;
+}
+async function fetchTribeBootPackOnce({ timeoutMs, cache } = {}) {
+  const ms = timeoutMs == null ? 8000 : timeoutMs;
+  const base = (typeof CFG !== 'undefined' && CFG.apiBase) ? CFG.apiBase : '';
+  const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  let timer = null;
+  try {
+    if (ctrl) timer = setTimeout(() => { try { ctrl.abort(); } catch (_) {} }, ms);
+    const r = await fetch(base + '/data-center-boot.json', {
+      cache: cache || 'no-store',
+      signal: ctrl ? ctrl.signal : undefined,
+    });
+    if (!r.ok) return false;
+    const j = await r.json();
+    if (!j || !j.slices || typeof j.slices !== 'object') return false;
+    for (const [key, payload] of Object.entries(j.slices)) mergeBootPackSlice(key, payload);
+    return true;
+  } catch (_) {
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+function ensureTribeCatalog(opts) {
+  opts = opts || {};
+  const force = !!opts.force;
+  // Non-empty catalog: reuse.
+  if (!force && S.tribeCat && S.tribeCat.byId && Object.keys(S.tribeCat.byId).length) {
+    return Promise.resolve(S.tribeCat);
+  }
+  // 1.9.199: empty-but-settled must NOT re-enter (1.9.198 keys.length gate → endless spinner).
+  if (!force && S.tribeCat && S.tribeCat.byId && S.tribeCat._settled) {
+    return Promise.resolve(S.tribeCat);
+  }
   if (S.tribeCatBusy) return (S._tribeCatWait || Promise.resolve(S.tribeCat));
   S.tribeCatBusy = true;
   S._tribeCatWait = (async () => {
+    const finish = (cat) => {
+      cat = cat || { teams: [], byId: {} };
+      cat._settled = true;
+      S.tribeCat = cat;
+      S.tribeCatBusy = false;
+      try {
+        if (route().name === 'tribe') {
+          if (!softPatchTribeHub()) render({ force: true });
+        } else if (route().name === 'tribe-club') {
+          render({ force: true });
+        }
+      } catch (_) {}
+      return S.tribeCat;
+    };
     try {
       // Drop legacy standings that paint OK but lack teamId (blocks tribe catalog).
       purgeStandingsWithoutTeamIds();
+      // Prefer timed no-store boot after purge — force-cache can hang forever on some WebViews.
       _bootPackInflight = null;
-      await loadDataCenterBootPack();
-      let slices = {};
-      try {
-        const dc = S.dataCache || {};
-        for (const k of Object.keys(dc)) {
-          if (k.endsWith(':standings') && dc[k]) slices[k] = dc[k];
-        }
-      } catch (_) {}
-      let cat = buildTribeCatalogFromSlices(slices);
+      await fetchTribeBootPackOnce({ timeoutMs: 8000, cache: 'no-store' });
+      let cat = buildTribeCatalogFromSlices(tribeStandingsSlicesFromCache());
       if (!Object.keys(cat.byId || {}).length) {
-        // Force network boot once if LS/boot-cache still empty of teamIds.
-        try {
-          const base = (typeof CFG !== 'undefined' && CFG.apiBase) ? CFG.apiBase : '';
-          const r = await fetch(base + '/data-center-boot.json', { cache: 'no-store' });
-          if (r.ok) {
-            const j = await r.json();
-            if (j && j.slices) {
-              for (const [key, payload] of Object.entries(j.slices)) mergeBootPackSlice(key, payload);
-            }
-          }
-        } catch (_) {}
-        slices = {};
-        try {
-          const dc = S.dataCache || {};
-          for (const k of Object.keys(dc)) {
-            if (k.endsWith(':standings') && dc[k]) slices[k] = dc[k];
-          }
-        } catch (_) {}
-        cat = buildTribeCatalogFromSlices(slices);
+        // One more timed attempt (still no-store); then soft-fill via DC queue.
+        await fetchTribeBootPackOnce({ timeoutMs: 8000, cache: 'no-store' });
+        cat = buildTribeCatalogFromSlices(tribeStandingsSlicesFromCache());
       }
-      S.tribeCat = cat;
-      S.tribeCatBusy = false;
-      if (route().name === 'tribe' || route().name === 'tribe-club') render({ force: true });
-      return S.tribeCat;
+      if (!Object.keys(cat.byId || {}).length) {
+        try {
+          for (const lg of TRIBE_LEAGUES) {
+            scheduleDataCenterRefresh(lg.key, 'standings', { urgent: true });
+          }
+        } catch (_) {}
+      }
+      return finish(cat);
     } catch (_) {
-      S.tribeCatBusy = false;
-      S.tribeCat = { teams: [], byId: {} };
-      return S.tribeCat;
+      return finish({ teams: [], byId: {} });
+    } finally {
+      // Belt-and-suspenders: never leave spinner stuck if finish was skipped.
+      if (S.tribeCatBusy) {
+        S.tribeCatBusy = false;
+        if (!S.tribeCat) S.tribeCat = { teams: [], byId: {}, _settled: true };
+        else S.tribeCat._settled = true;
+      }
     }
   })();
   return S._tribeCatWait;
@@ -3949,6 +4004,14 @@ async function loadDataCenter(lg, kind, { soft, signal } = {}) {
   }
   if (route().name === 'data' && dataLeagueOf() === lg && dataKindOf() === kind) {
     if (!softPatchDataBody(lg, kind)) render({ force: true });
+  }
+  // 1.9.199: standings refresh can fill tribe after purge left an empty settled catalog.
+  if (kind === 'standings' && (route().name === 'tribe' || route().name === 'tribe-club')) {
+    try {
+      const ready = dataCacheTribeReady(S.dataCache && S.dataCache[key]);
+      const empty = !(S.tribeCat && S.tribeCat.byId && Object.keys(S.tribeCat.byId).length);
+      if (ready && empty) rebuildTribeCatalogFromCache({ renderIfTribe: true });
+    } catch (_) {}
   }
 }
 
@@ -10086,7 +10149,7 @@ document.addEventListener('click', async e => {
       _bootPackInflight = null;
       purgeStandingsWithoutTeamIds();
       invalidateTabKeep('tribe');
-      ensureTribeCatalog();
+      ensureTribeCatalog({ force: true });
       return render({ force: true });
     }
     case 'schRefresh': {
@@ -10912,8 +10975,20 @@ document.addEventListener('submit', async e => {
     if (y0 === null) return; const d = Math.min(dy * 0.5, 90); y0 = null; ptr.style.transition = '';
     if (d <= 60) { ptr.style.transform = ''; return; }
     busy = true; ptr.classList.add('loading'); ptr.style.transform = 'translate(-50%, 14px)'; txt('正在刷新…');
-    await Promise.all([reloadData(true), refreshAccount()]); invalidateTabKeep(); render({ force: true });
-    txt('刷新完成'); setTimeout(() => { ptr.classList.remove('loading'); ptr.style.transform = ''; busy = false; }, 500);
+    try {
+      const work = Promise.all([reloadData(true), refreshAccount()]);
+      const timed = new Promise((resolve) => setTimeout(resolve, 12000));
+      await Promise.race([work, timed]);
+      try { await work; } catch (_) {}
+      invalidateTabKeep();
+      render({ force: true });
+      txt('刷新完成');
+    } catch (_) {
+      txt('刷新失败');
+      try { invalidateTabKeep(); render({ force: true }); } catch (_) {}
+    } finally {
+      setTimeout(() => { ptr.classList.remove('loading'); ptr.style.transform = ''; busy = false; }, 500);
+    }
   });
 })();
 
