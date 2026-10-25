@@ -529,12 +529,15 @@ body.me-drawer-on { overflow: hidden; }
   padding-bottom: 6px; border-bottom: 3px solid var(--orange, #f0861a);
   display: inline-block;
 }
+.ha-sec-h.ha-tabs {
+  justify-content: flex-start;
+}
 .ha-tabs {
-  display: flex; align-items: flex-end; gap: 0; margin-bottom: 0;
+  display: flex; align-items: flex-end; gap: 14px; margin-bottom: 0;
 }
 .ha-tab {
-  flex: 0 0 auto; min-height: 40px; margin: 0 16px 0 0; padding: 0 2px 6px;
-  font: inherit; font-size: 16px; font-weight: 500; line-height: 1.3;
+  flex: 0 0 auto; min-height: 34px; margin: 0; padding: 0 2px 5px;
+  font: inherit; font-size: 14px; font-weight: 500; line-height: 1.3;
   color: #8b95a8; background: transparent; border: 0;
   border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap;
 }
