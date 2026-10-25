@@ -722,7 +722,7 @@ const S = {
   playerDbKey: (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('jc_player_db_key')) || null,
   playerDbCache: { overview: null, recent: null, outcomes: null, search: null, match: {}, player: {} },
   columnFeed: { attitude: null, interact: null }, columnAuthors: null, columnMe: null, columnTab: 'attitude', columnSearch: '',
-  homeMidTab: 'attitude', homeHotLoaded: false,
+  homeMidTab: 'attitude', homeHotLoaded: false, homeHotPosts: null,
   columnCompose: { kind: 'match', topic: '分析', matchId: '', matchLabel: '', title: '', body: '', pick: '' },
   columnAuthorCache: {}, columnPostCache: {},
   meBackToDrawer: false,
@@ -2737,6 +2737,7 @@ async function fillHomeTribeHot() {
       S.homeHotLoaded = true;
       return;
     }
+    S.homeHotPosts = posts;
     feedEl.innerHTML = posts.map(homeHotPostCard).join('');
     S.homeHotLoaded = true;
   } catch (e) {

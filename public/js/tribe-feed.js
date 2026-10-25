@@ -254,7 +254,7 @@
       ${reactionsHtml(post)}
       <div class="tf-stat">
         <span class="tf-stat-i">${rc > 0 ? rc + ' 评论' : '评论'}</span>
-        <span class="tf-stat-i tf-like">${likeLab}</span>
+        <button type="button" class="tf-stat-i tf-like" data-act="tribeReact" data-post="${post.id}" data-kind="like">${likeLab}</button>
       </div>
     </div>`;
     const follow = (detail || homeHot) ? '' : followPill(post.author);
@@ -793,15 +793,106 @@
     return posts.find((p) => String(p.id) === pid);
   }
 
+  function patchHomeHotPost(postId, patch) {
+    if (!Array.isArray(S.homeHotPosts)) return null;
+    const pid = String(postId);
+    let found = null;
+    S.homeHotPosts = S.homeHotPosts.map((p) => {
+      if (String(p.id) !== pid) return p;
+      found = Object.assign({}, p, patch);
+      return found;
+    });
+    return found;
+  }
+
+  function findReactionPost(postId) {
+    const pid = String(postId);
+    const card = document.querySelector('.tf-card[data-post="' + pid + '"]');
+    const cardTid = card && card.dataset.tribe ? String(card.dataset.tribe) : '';
+    if (S.tribeDetailPost && String(S.tribeDetailPost.id) === pid) {
+      return { post: S.tribeDetailPost, tribeId: S.tribeDetailPost.tribeId || cardTid || '' };
+    }
+    if (Array.isArray(S.homeHotPosts)) {
+      const hit = S.homeHotPosts.find((p) => String(p.id) === pid);
+      if (hit) return { post: hit, tribeId: hit.tribeId || cardTid || '' };
+    }
+    const r = route();
+    if (r.name === 'tribe-club') {
+      const tid = String(r.arg || '');
+      const posts = (S.tribeFeedCache && S.tribeFeedCache[tid]) || [];
+      const hit = posts.find((p) => String(p.id) === pid);
+      if (hit) return { post: hit, tribeId: tid };
+    }
+    if (cardTid && S.tribeFeedCache && S.tribeFeedCache[cardTid]) {
+      const hit = S.tribeFeedCache[cardTid].find((p) => String(p.id) === pid);
+      if (hit) return { post: hit, tribeId: cardTid };
+    }
+    for (const key of Object.keys(S.tribeFeedCache || {})) {
+      const hit = (S.tribeFeedCache[key] || []).find((p) => String(p.id) === pid);
+      if (hit) return { post: hit, tribeId: String(key) };
+    }
+    return { post: null, tribeId: cardTid || '' };
+  }
+
+  function applyReactionPatch(postId, tribeId, patch) {
+    const pid = String(postId);
+    let post = tribeId ? patchPostInCache(tribeId, pid, patch) : null;
+    const homeHit = patchHomeHotPost(pid, patch);
+    if (homeHit) post = homeHit;
+    if (S.tribeDetailPost && String(S.tribeDetailPost.id) === pid) {
+      S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, patch);
+      post = post || S.tribeDetailPost;
+    }
+    return post;
+  }
+
+  function refreshCardReactionUi(postId, rx, myReactions) {
+    const card = document.querySelector('.tf-card[data-post="' + postId + '"]');
+    if (!card) return;
+    const reactWrap = card.querySelector('.tf-react');
+    if (reactWrap) paintReactionButtons(reactWrap, rx, myReactions);
+    const likeEl = card.querySelector('.tf-like');
+    if (likeEl) {
+      const likeN = (rx && rx.like) || 0;
+      likeEl.textContent = likeN > 0 ? likeN + ' 赞' : '赞';
+    }
+  }
+
+  function refreshFeedReactionUi(postId, rx, myReactions) {
+    refreshCardReactionUi(postId, rx, myReactions);
+    const detailWrap = document.querySelector('.tf-post-react-wrap');
+    if (detailWrap && S.tribeDetailPost && String(S.tribeDetailPost.id) === String(postId)) {
+      paintReactionButtons(detailWrap, rx, myReactions);
+    }
+  }
+
+  function repaintFeedCardDom(postId, tribeId) {
+    const pid = String(postId);
+    const cardNow = document.querySelector('.tf-card[data-post="' + pid + '"]');
+    if (!cardNow) return;
+    let fresh = null;
+    if (tribeId && S.tribeFeedCache) {
+      fresh = (S.tribeFeedCache[tribeId] || []).find((p) => String(p.id) === pid);
+    }
+    if (!fresh && Array.isArray(S.homeHotPosts)) {
+      fresh = S.homeHotPosts.find((p) => String(p.id) === pid);
+    }
+    if (!fresh) return;
+    const tmp = document.createElement('div');
+    if (cardNow.classList.contains('tf-card--home-hot')) {
+      const t = typeof global.tribeById === 'function' ? global.tribeById(fresh.tribeId) : null;
+      const label = (t && t.nameZh) || (fresh.tribeId || '').replace(/^[^-]+-/, '') || '部落';
+      tmp.innerHTML = postCard(fresh, { tribeId: fresh.tribeId, tribeLabel: label, homeHot: true });
+    } else if (tribeId) {
+      tmp.innerHTML = postCard(fresh, { tribeId });
+    } else return;
+    cardNow.replaceWith(tmp.firstElementChild);
+  }
+
   async function togglePostReaction(postId, kind, btnEl) {
     if (!loggedIn()) { toast('登录后可表态'); return go('#/login'); }
-    const r = route();
-    const tid = r.name === 'tribe-club' ? r.arg : '';
-    const posts = (tid && S.tribeFeedCache && S.tribeFeedCache[tid]) || [];
-    let post = posts.find((p) => String(p.id) === String(postId));
-    if (!post && S.tribeDetailPost && String(S.tribeDetailPost.id) === String(postId)) {
-      post = S.tribeDetailPost;
-    }
+    const { post: post0, tribeId: tid } = findReactionPost(postId);
+    let post = post0;
     const prevRx = post ? Object.assign({}, post.reactions || defaultReactions()) : defaultReactions();
     const prevMine = post ? myReactionsList(post) : [];
     const nextRx = Object.assign({}, prevRx);
@@ -815,43 +906,33 @@
       nextRx[kind] = (nextRx[kind] || 0) + 1;
       nextRx.total = (nextRx.total || 0) + 1;
     }
-    if (post && tid) patchPostInCache(tid, postId, { reactions: nextRx, myReactions: nextMine });
-    if (post && S.tribeDetailPost && String(S.tribeDetailPost.id) === String(postId)) {
-      S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, { reactions: nextRx, myReactions: nextMine });
-    }
+    const patch = { reactions: nextRx, myReactions: nextMine };
+    if (post) post = applyReactionPatch(postId, tid, patch) || post;
+    else applyReactionPatch(postId, tid, patch);
+    refreshFeedReactionUi(postId, nextRx, nextMine);
     const animDone = bumpReactAnim(btnEl, kind);
-    const card = document.querySelector('.tf-card[data-post="' + postId + '"]');
-    const updated = post && tid ? patchPostInCache(tid, post.id, { reactions: nextRx, myReactions: nextMine }) : post;
-    const repaintFeedCard = () => {
-      const cardNow = document.querySelector('.tf-card[data-post="' + postId + '"]');
-      const fresh = tid ? (S.tribeFeedCache[tid] || []).find((p) => String(p.id) === String(postId)) : updated;
-      if (cardNow && fresh && tid) {
-        const tmp = document.createElement('div');
-        tmp.innerHTML = postCard(fresh, { tribeId: tid });
-        cardNow.replaceWith(tmp.firstElementChild);
-      }
-    };
+    const repaintFeedCard = () => repaintFeedCardDom(postId, tid);
     animDone.then(repaintFeedCard);
-    const detailWrap = document.querySelector('.tf-post-react-wrap');
-    if (detailWrap && S.tribeDetailPost && String(S.tribeDetailPost.id) === String(postId)) {
-      paintReactionButtons(detailWrap, nextRx, nextMine);
-    }
     try {
       const j = await api('/tribe/posts/' + encodeURIComponent(postId) + '/reactions', { method: 'POST', body: { kind }, timeout: 10000 });
       await animDone;
-      if (post && j.reactions) {
-        if (tid) patchPostInCache(tid, postId, { reactions: j.reactions, myReactions: j.myReactions || [] });
+      if (j.reactions) {
+        const serverPatch = { reactions: j.reactions, myReactions: j.myReactions || [] };
+        applyReactionPatch(postId, tid, serverPatch);
+        refreshFeedReactionUi(postId, j.reactions, j.myReactions || []);
         if (S.tribeDetailPost && String(S.tribeDetailPost.id) === String(postId)) {
-          S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, { reactions: j.reactions, myReactions: j.myReactions || [] });
           refreshDetailReactions(S.tribeDetailPost);
         }
+        repaintFeedCardDom(postId, tid);
       }
     } catch (e) {
       await animDone;
-      if (post && tid) patchPostInCache(tid, postId, { reactions: prevRx, myReactions: prevMine });
-      if (S.tribeDetailPost && String(S.tribeDetailPost.id) === String(postId)) {
-        S.tribeDetailPost = Object.assign({}, S.tribeDetailPost, { reactions: prevRx, myReactions: prevMine });
-        refreshDetailReactions(S.tribeDetailPost);
+      if (post || tid || (Array.isArray(S.homeHotPosts) && S.homeHotPosts.some((p) => String(p.id) === String(postId)))) {
+        applyReactionPatch(postId, tid, { reactions: prevRx, myReactions: prevMine });
+        refreshFeedReactionUi(postId, prevRx, prevMine);
+        if (S.tribeDetailPost && String(S.tribeDetailPost.id) === String(postId)) {
+          refreshDetailReactions(S.tribeDetailPost);
+        }
       }
       repaintFeedCard();
       toast(e.message || '表态失败');
