@@ -26,10 +26,10 @@ const outDir = path.join(root, 'public/assets/players');
 
 const LEAGUES = ['epl', 'laliga', 'seriea', 'bundesliga', 'ligue1', 'csl', 'ucl'];
 const SLICE_LIMITS = {
-  topscorers: 25,
-  topassists: 25,
-  playervalues: 20,
-  topkeepers: 25,
+  topscorers: 30,
+  topassists: 30,
+  playervalues: 25,
+  topkeepers: 30,
 };
 /** Raw download cap (large TSDB cutouts); sharp compresses before APK bundle. */
 const MAX_RAW_DOWNLOAD_BYTES = 900000;
@@ -37,6 +37,8 @@ const MIN_BYTES = 1200;
 /** API-Football placeholder when ESPN id is used as AF player id */
 const AF_PLACEHOLDER_MD5 = '430d67fd79ad0a355b212d5780886e34';
 const AF_PLACEHOLDER_SIZE = 5192;
+/** ESPN gray "NO PHOTO YET" card after 150×150 sharp pass */
+const ESPN_GRAY_PLACEHOLDER_BYTES = new Set([5969]);
 
 function md5(buf) {
   return crypto.createHash('md5').update(buf).digest('hex');
@@ -44,6 +46,7 @@ function md5(buf) {
 
 function isPlaceholderBuffer(buf) {
   if (!buf || buf.length < MIN_BYTES) return true;
+  if (ESPN_GRAY_PLACEHOLDER_BYTES.has(buf.length)) return true;
   if (buf.length === AF_PLACEHOLDER_SIZE && md5(buf) === AF_PLACEHOLDER_MD5) return true;
   return false;
 }
@@ -51,6 +54,7 @@ function isPlaceholderBuffer(buf) {
 function isPlaceholderFile(fp) {
   try {
     const st = fs.statSync(fp);
+    if (ESPN_GRAY_PLACEHOLDER_BYTES.has(st.size)) return true;
     if (st.size === AF_PLACEHOLDER_SIZE) {
       const buf = fs.readFileSync(fp);
       return isPlaceholderBuffer(buf);
@@ -98,6 +102,9 @@ function photoCandidatesForRow(row, leaderPhotos) {
   if (row && row.tmId != null && String(row.tmId)) {
     push(`https://img.a.transfermarkt.technology/portrait/header/${String(row.tmId)}.jpg`);
   }
+  if (!urls.length && id && /^\d+$/.test(id)) {
+    push(`https://a.espncdn.com/i/headshots/soccer/players/full/${id}.png`);
+  }
   return urls;
 }
 
@@ -105,7 +112,7 @@ function buildLeaderPhotoMaps(boot) {
   const byId = new Map();
   const byClub = new Map();
   for (const lg of LEAGUES) {
-    for (const suf of ['topscorers', 'topassists']) {
+    for (const suf of ['topscorers', 'topassists', 'playervalues']) {
       const s = boot.slices && boot.slices[lg + ':' + suf];
       if (!s || !s.rows) continue;
       for (const r of s.rows) {
@@ -139,10 +146,10 @@ function collectFromBoot() {
   };
   for (const lg of LEAGUES) {
     for (const [suf, cap] of Object.entries(SLICE_LIMITS)) {
-      if (suf === 'topkeepers') continue;
       const s = boot.slices && boot.slices[lg + ':' + suf];
       if (!s || !s.rows) continue;
-      for (const r of s.rows.slice(0, cap)) ingest(r);
+      const rows = s.rows.length <= cap ? s.rows : s.rows.slice(0, cap);
+      for (const r of rows) ingest(r);
     }
   }
   return { players: [...map.values()], boot, leaderPhotos };
@@ -167,6 +174,7 @@ function mergePlayers(map, list, leaderPhotos) {
     if (!row || row.playerId == null || String(row.playerId) === '') continue;
     const id = String(row.playerId);
     const urls = photoCandidatesForRow(row, leaderPhotos);
+    if (!urls.length && !map.has(id)) continue;
     if (!map.has(id)) map.set(id, { id, urls, player: row.player, team: row.team });
     else {
       const e = map.get(id);
@@ -356,7 +364,11 @@ async function main() {
   const live = process.argv.includes('--live');
   fs.mkdirSync(outDir, { recursive: true });
   const { players: bootPlayers, leaderPhotos } = collectFromBoot();
+  const bootIds = new Set(bootPlayers.map((p) => p.id));
   const map = new Map(bootPlayers.map((p) => [p.id, p]));
+  if (process.env.SYNC_DEBUG) {
+    console.error('[sync-players] boot', bootPlayers.length, 'bootUrls', bootPlayers.filter((p) => p.urls && p.urls.length).length);
+  }
   await expandFromEspnCaches(map, leaderPhotos, live);
   if (live) {
     const keeperRows = await collectFromLiveKeepers();
@@ -366,7 +378,8 @@ async function main() {
     if (!entry.urls) entry.urls = [];
   }
   const allPlayers = [...map.values()];
-  let players = allPlayers.filter((p) => p.urls && p.urls.length);
+  let players = allPlayers.filter((p) => bootIds.has(p.id) && p.urls && p.urls.length);
+  if (process.env.SYNC_DEBUG) console.error('[sync-players] map', allPlayers.length, 'withUrls', players.length);
   let ok = 0;
   let skip = 0;
   let fail = 0;
@@ -391,8 +404,8 @@ async function main() {
     })
     .sort((a, b) => Number(a) - Number(b));
 
-  const missingAfterDl = allPlayers.filter((p) => !playerIds.includes(p.id));
-  if (live && missingAfterDl.length && missingAfterDl.length <= 120) {
+  const missingAfterDl = players.filter((p) => !playerIds.includes(p.id));
+  if (live && missingAfterDl.length && missingAfterDl.length <= 220) {
     const gapMap = new Map(missingAfterDl.map((p) => [p.id, { ...p, urls: p.urls ? [...p.urls] : [] }]));
     await gapFillFromTsdb(gapMap);
     const retryList = [...gapMap.values()].filter((p) => p.urls && p.urls.length);
@@ -407,7 +420,7 @@ async function main() {
       }
     }
     await Promise.all(Array.from({ length: concurrency }, () => gapWorker()));
-    playerIds = allPlayers
+    playerIds = players
       .map((p) => p.id)
       .filter((id) => {
         const fp = path.join(outDir, id + '.png');
@@ -416,6 +429,28 @@ async function main() {
       .sort((a, b) => Number(a) - Number(b));
   }
 
+  if (sharp) {
+    for (const id of playerIds) {
+      await optimizePlayerPng(path.join(outDir, id + '.png'));
+    }
+  }
+  for (const id of bootIds) {
+    const fp = path.join(outDir, id + '.png');
+    if (playerIds.includes(id)) continue;
+    if (fs.existsSync(fp) && fs.statSync(fp).size > MIN_BYTES && !isPlaceholderFile(fp)) {
+      playerIds.push(id);
+    }
+  }
+  playerIds.sort((a, b) => Number(a) - Number(b));
+  const idSet = new Set(playerIds);
+  for (const f of fs.readdirSync(outDir)) {
+    if (!f.endsWith('.png')) continue;
+    const id = f.slice(0, -4);
+    const fp = path.join(outDir, f);
+    if (!idSet.has(id) || isPlaceholderFile(fp)) {
+      try { fs.unlinkSync(fp); } catch (_) { /* */ }
+    }
+  }
   const manifest = {
     v: 2,
     source: 'boot-leader-photos',
@@ -437,21 +472,6 @@ async function main() {
     const next = `window.APP_CONFIG={apiBase:"",platform:"web",version:"${ver}",bundledPlayerIds:${JSON.stringify(playerIds)}};\n`;
     fs.writeFileSync(configPath, next);
   } catch (_) { /* optional */ }
-
-  if (sharp) {
-    for (const id of playerIds) {
-      await optimizePlayerPng(path.join(outDir, id + '.png'));
-    }
-  }
-  const idSet = new Set(playerIds);
-  for (const f of fs.readdirSync(outDir)) {
-    if (!f.endsWith('.png')) continue;
-    const id = f.slice(0, -4);
-    const fp = path.join(outDir, f);
-    if (!idSet.has(id) || isPlaceholderFile(fp)) {
-      try { fs.unlinkSync(fp); } catch (_) { /* */ }
-    }
-  }
   const bytes = playerIds.reduce((n, id) => n + fs.statSync(path.join(outDir, id + '.png')).size, 0);
   const placeholdersLeft = fs.readdirSync(outDir).filter((f) => f.endsWith('.png') && isPlaceholderFile(path.join(outDir, f))).length;
   console.log(JSON.stringify({

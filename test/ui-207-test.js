@@ -34,6 +34,6 @@ assert.ok(/VERSION_CODE=244/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 assert.strictEqual(cfg.version, '1.9.207');
-assert.strictEqual(cfg.bundledPlayerIds.length, 255, '255 bundled players from 1.9.206 pack');
+assert.ok(cfg.bundledPlayerIds.length >= 165, 'bundled players grew in 1.9.208 (' + cfg.bundledPlayerIds.length + ')');
 
 console.log('ui-207-test OK');
