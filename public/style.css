@@ -608,7 +608,7 @@ body.me-drawer-on { overflow: hidden; }
     0 calc(1px + var(--ha-g) * 3px) calc(6px + var(--ha-g) * 12px) rgba(26, 35, 54, calc(var(--ha-edge-shadow-b0) + var(--ha-g) * (var(--ha-edge-shadow-b1) - var(--ha-edge-shadow-b0))));
   padding: 12px 13px 11px; cursor: pointer;
   overflow: hidden;
-  will-change: box-shadow, background-color;
+  /* 1.9.198: drop will-change — WebView compositor was dropping mid-card header layers */
 }
 .ha-card::before {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
@@ -632,11 +632,19 @@ body.me-drawer-on { overflow: hidden; }
       rgba(var(--ha-wrap-silver), calc(0.08 + var(--ha-g) * 0.16)) 0%,
       transparent 54%
     );
-  will-change: opacity;
 }
-.ha-card > * { position: relative; z-index: 2; transform: translateZ(0); }
+/* No translateZ on children — avoids blank ha-hd while teaser still paints on some Android WebViews */
+.ha-card > * { position: relative; z-index: 2; }
 .ha-card:active { transform: scale(.995); }
-.ha-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ha-hd {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+  position: relative; z-index: 3;
+  min-height: 40px;
+  opacity: 1;
+  visibility: visible;
+  -webkit-transform: none;
+  transform: none;
+}
 .ha-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ha-av {
   width: 40px; height: 40px; flex: none; border-radius: 50%;

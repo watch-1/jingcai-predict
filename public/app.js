@@ -526,7 +526,7 @@ function hydrateFromCache() {
 const HOME_SNAP_KEY = 'jc_home_snap_v1';
 const PRED_CACHE_KEY = 'jc_pred_cache_v1';
 const DATA_TAB_SNAP_KEY = 'jc_data_snap_v1';
-const HOME_ATT_CACHE_KEY = 'jc_home_att_v2';
+const HOME_ATT_CACHE_KEY = 'jc_home_att_v3';
 const KB_PACKS_CACHE_KEY = 'jc_kb_packs_v1';
 const KB_ITEM_BODY_CACHE_KEY = 'jc_kb_item_body_v1';
 /** Must match lib/home-snap-guard.js HOME_SNAP_VER (invalidates legacy offline-bar snaps). */
@@ -638,9 +638,39 @@ function homeAttitudeFeedDomValid(feedEl) {
   const cards = feedEl.querySelectorAll('.ha-card:not(.ha-skel)');
   if (!cards.length) return false;
   for (const card of cards) {
-    if (!card.querySelector('.ha-hd') || !card.querySelector('.ha-name') || !card.querySelector('.ha-teaser')) return false;
+    const hd = card.querySelector('.ha-hd');
+    const name = card.querySelector('.ha-name');
+    const teaser = card.querySelector('.ha-teaser');
+    if (!hd || !name || !teaser) return false;
+    if (!(name.textContent || '').trim()) return false;
+    if (!(teaser.textContent || '').trim()) return false;
   }
   return true;
+}
+/** Layout/paint suspect: header exists but has no measurable box (WebView layer drop). */
+function homeAttitudeFeedPaintSuspect(feedEl) {
+  if (!feedEl || !feedEl.isConnected) return false;
+  try {
+    const cards = feedEl.querySelectorAll('.ha-card:not(.ha-skel)');
+    for (const card of cards) {
+      const hd = card.querySelector('.ha-hd');
+      const name = card.querySelector('.ha-name');
+      if (!hd || !name) return true;
+      const hr = hd.getBoundingClientRect();
+      const nr = name.getBoundingClientRect();
+      if (hr.height < 8 || nr.height < 4 || nr.width < 8) return true;
+      const cs = window.getComputedStyle(name);
+      if (cs.visibility === 'hidden' || Number(cs.opacity) === 0) return true;
+    }
+  } catch (_) { return false; }
+  return false;
+}
+function discardHomeAttitudeCaches() {
+  try { LS.del(HOME_ATT_CACHE_KEY); } catch (_) {}
+  try {
+    const s = LS.get(HOME_SNAP_KEY, null);
+    if (s && s.html && String(s.html).indexOf('homeAttitudeFeed') >= 0) LS.del(HOME_SNAP_KEY);
+  } catch (_) {}
 }
 function readHomeAttitudeCacheHtml() {
   try {
@@ -803,12 +833,46 @@ function revealBootShell() {
 const DATA_DC_PREFETCH_LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'ucl'];
 const DATA_CACHE_LS_MAX = 28;
 
+function standingsSliceHasTeamIds(cached) {
+  if (!cached || !cached.tables) return false;
+  for (const tb of cached.tables) {
+    for (const r of tb.rows || []) {
+      if (r && r.teamId) return true;
+    }
+  }
+  return false;
+}
+/** Standings usable for tribe catalog need at least one teamId (legacy LS rows often lack it). */
 function dataCacheRenderable(cached, kind) {
   if (!cached || cached.ok === false) return false;
   if (kind === 'topkeepers') return true;
-  if (kind === 'standings') return !!(cached.tables && cached.tables.some(t => (t.rows || []).length));
+  if (kind === 'standings') {
+    if (!(cached.tables && cached.tables.some(t => (t.rows || []).length))) return false;
+    return true;
+  }
   if (kind === 'clubvalues') return !!(cached.rows && cached.rows.length);
   return !!(cached.rows && cached.rows.length);
+}
+function dataCacheTribeReady(cached) {
+  return dataCacheRenderable(cached, 'standings') && standingsSliceHasTeamIds(cached);
+}
+function purgeStandingsWithoutTeamIds() {
+  try {
+    S.dataCache = S.dataCache || {};
+    for (const k of Object.keys(S.dataCache)) {
+      if (!k.endsWith(':standings')) continue;
+      if (!standingsSliceHasTeamIds(S.dataCache[k])) delete S.dataCache[k];
+    }
+    const all = LS.get('jc_data_cache_v1', null);
+    if (all && typeof all === 'object') {
+      let changed = false;
+      for (const k of Object.keys(all)) {
+        if (!k.endsWith(':standings')) continue;
+        if (!standingsSliceHasTeamIds(all[k])) { delete all[k]; changed = true; }
+      }
+      if (changed) LS.set('jc_data_cache_v1', all);
+    }
+  } catch (_) {}
 }
 function readDataCacheSlice(key) {
   try {
@@ -946,8 +1010,16 @@ let _bootPackInflight = null;
 function mergeBootPackSlice(key, payload) {
   if (!key || !payload || payload.ok === false) return;
   const kind = String(key).split(':')[1] || 'standings';
-  if (dataCacheRenderable(ensureDataCacheSlice(key), kind)) return;
-  if (!dataCacheRenderable(payload, kind)) return;
+  const existing = ensureDataCacheSlice(key);
+  if (kind === 'standings') {
+    // Prefer boot/API rows that carry teamId so tribe「当前热门」can build.
+    if (dataCacheTribeReady(existing) && dataCacheTribeReady(payload)) return;
+    if (dataCacheTribeReady(existing) && !dataCacheTribeReady(payload)) return;
+    if (!dataCacheRenderable(payload, kind)) return;
+  } else {
+    if (dataCacheRenderable(existing, kind)) return;
+    if (!dataCacheRenderable(payload, kind)) return;
+  }
   const row = Object.assign({}, payload, { fromCache: true, bootPack: true });
   S.dataCache = S.dataCache || {};
   S.dataCache[key] = row;
@@ -2135,30 +2207,72 @@ function refreshHomeMidFeed() {
   if ((S.homeMidTab || 'attitude') === 'hot') fillHomeTribeHot();
   else fillHomePlatformAttitude();
 }
-async function fillHomePlatformAttitude() {
+let _homeAttFillBusy = false;
+let _homeAttRepairOnce = false;
+async function fillHomePlatformAttitude(opts) {
   const feedEl = document.getElementById('homeAttitudeFeed');
   if (!feedEl || route().name !== 'home') return;
+  if (_homeAttFillBusy && !(opts && opts.forceRepair)) return;
+  _homeAttFillBusy = true;
   const ms = S.matches;
   const cached = readHomeAttitudeCacheHtml();
   if (cached && !homeAttitudeFeedDomValid(feedEl)) feedEl.innerHTML = cached;
+  const afterPaintRepair = () => {
+    try {
+      if (!feedEl.isConnected || route().name !== 'home') return;
+      if (!homeAttitudeFeedDomValid(feedEl) || homeAttitudeFeedPaintSuspect(feedEl)) {
+        discardHomeAttitudeCaches();
+        const html = feedEl.innerHTML;
+        feedEl.querySelectorAll('.ha-card').forEach((c) => {
+          try { c.style.removeProperty('--ha-card-glow'); } catch (_) {}
+        });
+        feedEl.innerHTML = html;
+        syncHomeAttitudeScroll();
+        if (!_homeAttRepairOnce) {
+          _homeAttRepairOnce = true;
+          requestAnimationFrame(() => {
+            if (feedEl.isConnected && homeAttitudeFeedPaintSuspect(feedEl)) {
+              discardHomeAttitudeCaches();
+              feedEl.innerHTML = [1, 2, 3].map(() =>
+                '<div class="ha-card ha-skel"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line" style="height:36px;margin-top:10px"></div><div class="sk sk-line" style="width:90%;margin-top:8px"></div></div>'
+              ).join('');
+              _homeAttFillBusy = false;
+              fillHomePlatformAttitude({ forceRepair: true });
+            }
+          });
+        }
+      }
+    } catch (_) {}
+  };
   try {
     const j = await api('/column/feed?tab=attitude&author=platform&limit=12', { timeout: 14000 });
     if (!feedEl.isConnected) return;
     const posts = (j && j.posts) || [];
     if (paintHomeAttitudeFeed(feedEl, ms, posts)) {
       if (homeAttitudeFeedDomValid(feedEl)) persistHomeAttitudeCache(feedEl.innerHTML);
+      else discardHomeAttitudeCaches();
       syncHomeAttitudeScroll();
+      requestAnimationFrame(() => requestAnimationFrame(afterPaintRepair));
     }
   } catch (e) {
-    if (!feedEl.isConnected) return;
-    if (homeAttitudeFeedDomValid(feedEl)) return;
-    if (cached) { feedEl.innerHTML = cached; return; }
+    if (!feedEl.isConnected) { _homeAttFillBusy = false; return; }
+    if (homeAttitudeFeedDomValid(feedEl) && !homeAttitudeFeedPaintSuspect(feedEl)) { _homeAttFillBusy = false; return; }
+    if (cached && homeAttitudeFeedHtmlValid(cached)) {
+      feedEl.innerHTML = cached;
+      syncHomeAttitudeScroll();
+      requestAnimationFrame(() => requestAnimationFrame(afterPaintRepair));
+      _homeAttFillBusy = false;
+      return;
+    }
     if (ms) {
       const rows = homeAttitudeRows(ms);
       feedEl.innerHTML = rows.length
         ? rows.map(homeAttitudeCard).join('')
         : empty('加载失败，请稍后重试', `<button type="button" class="btn ghost sm" data-act="reload">重试</button>`, '暂无场次');
+      syncHomeAttitudeScroll();
     }
+  } finally {
+    _homeAttFillBusy = false;
   }
 }
 let homeAttitudeScrollHooked = false;
@@ -2188,7 +2302,10 @@ function syncHomeAttitudeScroll() {
     const anchorY = fd.getBoundingClientRect().top + 4;
     fd.querySelectorAll('.ha-card:not(.ha-skel)').forEach((card) => {
       const g = homeAttitudeCardGlow(card, anchorY);
-      card.style.setProperty('--ha-card-glow', g.toFixed(3));
+      const next = g.toFixed(3);
+      if (card.style.getPropertyValue('--ha-card-glow') !== next) {
+        card.style.setProperty('--ha-card-glow', next);
+      }
     });
   };
   apply();
@@ -2295,22 +2412,54 @@ function buildTribeCatalogFromSlices(slices) {
   return { teams, byId };
 }
 function ensureTribeCatalog() {
-  if (S.tribeCat && S.tribeCat.byId) return Promise.resolve(S.tribeCat);
+  if (S.tribeCat && S.tribeCat.byId && Object.keys(S.tribeCat.byId).length) return Promise.resolve(S.tribeCat);
   if (S.tribeCatBusy) return (S._tribeCatWait || Promise.resolve(S.tribeCat));
   S.tribeCatBusy = true;
-  S._tribeCatWait = loadDataCenterBootPack().then(() => {
-    const slices = {};
+  S._tribeCatWait = (async () => {
     try {
-      const dc = S.dataCache || {};
-      for (const k of Object.keys(dc)) {
-        if (k.endsWith(':standings') && dc[k]) slices[k] = dc[k];
+      // Drop legacy standings that paint OK but lack teamId (blocks tribe catalog).
+      purgeStandingsWithoutTeamIds();
+      _bootPackInflight = null;
+      await loadDataCenterBootPack();
+      let slices = {};
+      try {
+        const dc = S.dataCache || {};
+        for (const k of Object.keys(dc)) {
+          if (k.endsWith(':standings') && dc[k]) slices[k] = dc[k];
+        }
+      } catch (_) {}
+      let cat = buildTribeCatalogFromSlices(slices);
+      if (!Object.keys(cat.byId || {}).length) {
+        // Force network boot once if LS/boot-cache still empty of teamIds.
+        try {
+          const base = (typeof CFG !== 'undefined' && CFG.apiBase) ? CFG.apiBase : '';
+          const r = await fetch(base + '/data-center-boot.json', { cache: 'no-store' });
+          if (r.ok) {
+            const j = await r.json();
+            if (j && j.slices) {
+              for (const [key, payload] of Object.entries(j.slices)) mergeBootPackSlice(key, payload);
+            }
+          }
+        } catch (_) {}
+        slices = {};
+        try {
+          const dc = S.dataCache || {};
+          for (const k of Object.keys(dc)) {
+            if (k.endsWith(':standings') && dc[k]) slices[k] = dc[k];
+          }
+        } catch (_) {}
+        cat = buildTribeCatalogFromSlices(slices);
       }
-    } catch (_) {}
-    S.tribeCat = buildTribeCatalogFromSlices(slices);
-    S.tribeCatBusy = false;
-    if (route().name === 'tribe' || route().name === 'tribe-club') render({ force: true });
-    return S.tribeCat;
-  }).catch(() => { S.tribeCatBusy = false; S.tribeCat = { teams: [], byId: {} }; return S.tribeCat; });
+      S.tribeCat = cat;
+      S.tribeCatBusy = false;
+      if (route().name === 'tribe' || route().name === 'tribe-club') render({ force: true });
+      return S.tribeCat;
+    } catch (_) {
+      S.tribeCatBusy = false;
+      S.tribeCat = { teams: [], byId: {} };
+      return S.tribeCat;
+    }
+  })();
   return S._tribeCatWait;
 }
 function tribeById(id) {
@@ -9933,7 +10082,9 @@ document.addEventListener('click', async e => {
       return;
     }
     case 'tribeReload': {
-      S.tribeCat = null; S.tribeCatBusy = false;
+      S.tribeCat = null; S.tribeCatBusy = false; S._tribeCatWait = null;
+      _bootPackInflight = null;
+      purgeStandingsWithoutTeamIds();
       invalidateTabKeep('tribe');
       ensureTribeCatalog();
       return render({ force: true });
