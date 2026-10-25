@@ -15,3 +15,4 @@ server.log
 .env.*
 android/build/
 android/.gradle/
+data/market-value/
