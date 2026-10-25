@@ -6,11 +6,12 @@ const path = require('path');
 const lt = require('../lib/league-tables');
 
 const LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'csl', 'ucl'];
-const KINDS = ['standings', 'topscorers', 'topassists', 'clubvalues', 'playervalues'];
+const KINDS = ['standings', 'topscorers', 'topassists', 'topkeepers', 'clubvalues', 'playervalues'];
 const FN = {
   standings: lt.getStandings,
   topscorers: lt.getTopScorers,
   topassists: lt.getTopAssists,
+  topkeepers: lt.getTopKeepers,
   clubvalues: lt.getClubMarketValues,
   playervalues: lt.getPlayerMarketValues,
 };
@@ -21,6 +22,14 @@ function slimRow(kind, row) {
       rank: row.rank, team: row.team, teamZh: row.teamZh, teamId: row.teamId, logo: row.logo,
       played: row.played, win: row.win, draw: row.draw, lose: row.lose, gf: row.gf, ga: row.ga,
       points: row.points, form: row.form,
+    };
+  }
+  if (kind === 'topkeepers') {
+    return {
+      rank: row.rank, player: row.player, playerZh: row.playerZh, playerId: row.playerId,
+      photo: row.photo, photoAlt: row.photoAlt, team: row.team, teamZh: row.teamZh,
+      teamId: row.teamId, teamLogo: row.teamLogo, goals: row.goals, assists: row.assists,
+      labelZh: row.labelZh, text: row.text,
     };
   }
   if (kind === 'playervalues') {
@@ -61,6 +70,10 @@ function slimPayload(kind, r, lgKey) {
   } else if (r.rows) {
     const cap = kind === 'playervalues' ? 20 : 25;
     slim.rows = r.rows.slice(0, cap).map((row) => slimRow(kind, row));
+  }
+  if (kind === 'topkeepers') {
+    slim.preparing = !!r.preparing;
+    if (!slim.rows) slim.rows = [];
   }
   return slim;
 }

@@ -1177,7 +1177,7 @@ function mergeStandingsPreferTeamIds(prev, next) {
 /** Standings usable for tribe catalog need at least one teamId (legacy LS rows often lack it). */
 function dataCacheRenderable(cached, kind) {
   if (!cached || cached.ok === false) return false;
-  if (kind === 'topkeepers') return true;
+  if (kind === 'topkeepers') return !!(cached.preparing || (cached.rows && cached.rows.length));
   if (kind === 'standings') {
     if (!(cached.tables && cached.tables.some(t => (t.rows || []).length))) return false;
     return true;
@@ -1369,6 +1369,12 @@ function tryMergeBootPackSlice(lg, kind) {
   const payload = _bootPackSlices && _bootPackSlices[key];
   if (payload) mergeBootPackSlice(key, payload);
 }
+/** Sync merge boot slice before deciding skeleton (1.9.207). */
+function primeDataSliceFromBoot(lg, kind) {
+  tryMergeBootPackSlice(lg, kind);
+  if (!_bootPackOk && !_bootPackInflight) loadDataCenterBootPack();
+  return ensureDataCacheSlice(lg + ':' + kind);
+}
 function mergeDcRowsPreferIdentity(prev, next) {
   if (!prev || !next || prev.ok === false || !Array.isArray(prev.rows) || !Array.isArray(next.rows)) return next;
   const byKey = new Map();
@@ -1443,16 +1449,25 @@ function loadDataCenterBootPack(opts) {
   if (_bootPackInflight && !force) return _bootPackInflight;
   _bootPackInflight = (async () => {
     try {
-      let ok = await fetchTribeBootPackOnce({ timeoutMs: 8000, cache: 'no-store' });
-      if (!ok) ok = await fetchTribeBootPackOnce({ timeoutMs: 6000, cache: 'default' });
-      _bootPackOk = !!ok;
-      if (ok) afterBootPackMerged();
-      return ok;
+      if (!_bootPackOk || force) {
+        const fast = await fetchTribeBootPackOnce({ timeoutMs: 2500, cache: 'force-cache' });
+        if (fast) {
+          _bootPackOk = true;
+          afterBootPackMerged();
+        }
+      }
+      if (!_bootPackOk || force) {
+        let ok = await fetchTribeBootPackOnce({ timeoutMs: 8000, cache: 'no-store' });
+        if (!ok) ok = await fetchTribeBootPackOnce({ timeoutMs: 6000, cache: 'default' });
+        _bootPackOk = !!ok || _bootPackOk;
+        if (ok) afterBootPackMerged();
+      }
+      return _bootPackOk;
     } catch (_) {
-      _bootPackOk = false;
-      return false;
+      return _bootPackOk;
     } finally {
-      if (!_bootPackOk) _bootPackInflight = null;
+      if (_bootPackOk) _bootPackInflight = null;
+      else _bootPackInflight = null;
     }
   })();
   return _bootPackInflight;
@@ -1498,9 +1513,16 @@ function persistDataCacheSlice(key, payload) {
       pastSeason: payload.pastSeason,
       refreshHint: payload.refreshHint,
       preparing: payload.preparing,
+      bootPack: !!payload.bootPack,
     };
     const keys = Object.keys(all);
-    if (keys.length > DATA_CACHE_LS_MAX) keys.slice(0, keys.length - DATA_CACHE_LS_MAX).forEach(k => { delete all[k]; });
+    if (keys.length > DATA_CACHE_LS_MAX) {
+      const dropOrder = keys.filter((k) => !all[k] || !all[k].bootPack);
+      while (Object.keys(all).length > DATA_CACHE_LS_MAX && dropOrder.length) {
+        const k = dropOrder.shift();
+        delete all[k];
+      }
+    }
     LS.set('jc_data_cache_v1', all);
   } catch (_) {}
 }
@@ -4350,8 +4372,7 @@ function pageData() {
   ).join('')}</div>`;
 
   const cacheKey = lg + ':' + kind;
-  tryMergeBootPackSlice(lg, kind);
-  const cached = ensureDataCacheSlice(cacheKey);
+  const cached = primeDataSliceFromBoot(lg, kind);
   if (!dataCacheRenderable(cached, kind)) {
     const snapBody = dataTabSnapBodyHtml(lg, kind);
     if (snapBody) {
@@ -6752,6 +6773,11 @@ function eventsTabHtml(x, live) {
   }
   if (!live.ok) {
     const why = liveStatsUserMsg(live);
+    const recovering = liveStatsFailRetryable(live) && matchExpectsLiveStats(x)
+      && (Date.now() - (live._at || 0) < 180000);
+    if (recovering) {
+      return `<div class="events-chat-stack"><div class="ev-tree-wrap" id="${wrapId}"><div class="spinner"></div><p class="note" style="text-align:center">连接实时数据中…</p></div>${chatBelow()}</div>`;
+    }
     return `<div class="events-chat-stack"><div class="ev-tree-wrap" id="${wrapId}"><div class="ana-card"><p class="note">${esc(why)}</p></div></div>${chatBelow()}</div>`;
   }
   const raw = (live.events || []).slice();
@@ -6810,8 +6836,11 @@ function eventsTabHtml(x, live) {
     </div>`);
   }
   const finished = isMatchFinished(x) || (live.status && /^(FT|AET|PEN)$/.test(String(live.status.short || '')));
+  const eventsGap = !rows.length && liveStatsNeedsEventsRetry(live, x);
   const empty = !rows.length
-    ? `<div class="ev-empty"><p class="note">暂无事件记录（未开赛、无数据源或尚未产生进球/牌/换人）。</p></div>`
+    ? (eventsGap
+      ? `<div class="ev-empty"><div class="spinner"></div><p class="note" style="text-align:center">事件加载中…</p></div>`
+      : `<div class="ev-empty"><p class="note">暂无事件记录（未开赛、无数据源或尚未产生进球/牌/换人）。</p></div>`)
     : '';
   const legend = `<div class="ev-legend">
     <span><i class="ev-ico goal"><span class="ev-ball">⚽</span></i>进球</span>
@@ -6978,13 +7007,115 @@ function syncLiveScoreFromStats(matchId, live) {
   };
   return true;
 }
+function appColdLiveStatsSession() {
+  try {
+    if (!IS_APP) return false;
+    return !localStorage.getItem('jc_live_stats_warm_v1');
+  } catch (_) { return false; }
+}
+function markLiveStatsWarmed() {
+  try { localStorage.setItem('jc_live_stats_warm_v1', '1'); } catch (_) {}
+}
+/** Match header / list already shows score or kickoff — events should not stick on error card. */
+function matchExpectsLiveStats(x) {
+  if (!x) return false;
+  if (isMatchFinished(x)) return true;
+  const ko = matchKickoffMs(x);
+  if (Number.isFinite(ko) && Date.now() >= ko - 90e3) return true;
+  const id = String(x.id || '');
+  const ls = S.liveScores && S.liveScores[id];
+  if (ls && (ls.homeScore != null || ls.awayScore != null || ls.live || ls.finished)) return true;
+  if (x.homeScore != null || x.awayScore != null) return true;
+  const sc = String(x.score || x.full || x.half || '').match(/(\d+)\s*[:：\-]\s*(\d+)/);
+  return !!(sc && Number(sc[1]) + Number(sc[2]) >= 0);
+}
+function liveStatsFailRetryable(live) {
+  if (!live || live.ok) return false;
+  const r = String(live.reason || '');
+  return r === 'error' || r === 'upstream' || r === 'no_fixture';
+}
+function liveStatsNeedsRecover(live, x) {
+  if (!live) return false;
+  if (liveStatsFailRetryable(live) && matchExpectsLiveStats(x)) return true;
+  return liveStatsNeedsEventsRetry(live, x);
+}
+async function waitForLiveStatsNetworkReady() {
+  try {
+    await Promise.race([
+      (window.__partnerGateReady || Promise.resolve(true)),
+      new Promise((r) => setTimeout(r, 3500)),
+    ]);
+  } catch (_) {}
+  if (appColdLiveStatsSession()) {
+    await new Promise((r) => setTimeout(r, 450));
+  }
+}
+function liveStatsNeedsEventsRetry(live, x) {
+  if (!live || !live.ok) return false;
+  if ((live.events || []).length) return false;
+  const h = live.score && live.score.home != null ? Number(live.score.home) : null;
+  const a = live.score && live.score.away != null ? Number(live.score.away) : null;
+  if (h != null && a != null && h + a > 0) return true;
+  if (x) {
+    const mh = x.homeScore != null ? Number(x.homeScore) : (x.homeGoals != null ? Number(x.homeGoals) : null);
+    const ma = x.awayScore != null ? Number(x.awayScore) : (x.awayGoals != null ? Number(x.awayGoals) : null);
+    if (mh != null && ma != null && mh + ma > 0) return true;
+    const sc = String(x.score || x.full || '').match(/(\d+)\s*[:：\-]\s*(\d+)/);
+    if (sc && Number(sc[1]) + Number(sc[2]) > 0) return true;
+  }
+  const st = live.status || {};
+  if (live.live && st.elapsed != null && Number(st.elapsed) >= 5) return true;
+  return !!live.eventsError;
+}
+function patchEventsTabIfVisible(x) {
+  if (!x) return;
+  const id = String(x.id || '');
+  if (route().name !== 'match' || String(route().arg) !== id) return;
+  if (detailTabOf(id) !== 'events') return;
+  const live = (S.liveStatsCache && S.liveStatsCache[id]) || null;
+  const pane = document.getElementById('detail-pane-' + id);
+  if (!pane) return;
+  const wrap = document.getElementById('events-tree-' + id);
+  const tmp = document.createElement('div');
+  tmp.innerHTML = eventsTabHtml(x, live);
+  const nextTree = tmp.querySelector('.ev-tree-wrap');
+  if (wrap && nextTree) wrap.replaceWith(nextTree);
+  else pane.innerHTML = tmp.innerHTML;
+  try { ensureChatPoll(x); renderAiChatList(id); } catch (_) {}
+}
+function scheduleLiveStatsRecover(x, key) {
+  if (!x || !key) return;
+  S._liveEvRetry = S._liveEvRetry || {};
+  const st = S._liveEvRetry[key];
+  if (st && st.timer) return;
+  const n = (st && st.n) || 0;
+  if (n >= 16) return;
+  const cold = appColdLiveStatsSession();
+  const delay = cold && n < 5
+    ? [500, 1000, 1800, 3000, 5000][n]
+    : Math.min(45000, 2000 + n * 2500);
+  const timer = setTimeout(async () => {
+    S._liveEvRetry[key] = { n: n + 1, timer: null };
+    if (route().name !== 'match' || String(route().arg) !== String(x.id)) return;
+    try { await loadLiveStats(x, { force: true }); } catch (_) {}
+    const live = S.liveStatsCache && S.liveStatsCache[key];
+    patchEventsTabIfVisible(x);
+    if (detailTabOf(x.id) === 'data') renderLivePitch(x);
+    if (liveStatsNeedsRecover(live, x)) scheduleLiveStatsRecover(x, key);
+  }, delay);
+  S._liveEvRetry[key] = { n, timer };
+}
 async function loadLiveStats(x, { force } = {}) {
   if (!x) return null;
   const key = String(x.id || '') || (String(x.homeTeamId || '') + '|' + String(x.awayTeamId || ''));
   S.liveStatsCache = S.liveStatsCache || {};
   const prev = S.liveStatsCache[key];
-  if (!force && prev && prev._at && Date.now() - prev._at < 20000) return prev;
+  const prevGap = prev && liveStatsNeedsRecover(prev, x);
+  if (!force && !prevGap && prev && prev.ok && prev._at && Date.now() - prev._at < 20000) return prev;
   try {
+    if (!force && appColdLiveStatsSession() && matchExpectsLiveStats(x)) {
+      await waitForLiveStatsNetworkReady();
+    }
     const q = [];
     if (x.id) q.push('matchId=' + encodeURIComponent(x.id));
     if (x.homeTeamId) q.push('homeTeamId=' + encodeURIComponent(x.homeTeamId));
@@ -6996,6 +7127,12 @@ async function loadLiveStats(x, { force } = {}) {
     const j = await api('/live-stats?' + q.join('&'), { timeout: 20000 });
     j._at = Date.now();
     S.liveStatsCache[key] = j;
+    if (j && j.ok) markLiveStatsWarmed();
+    if (liveStatsNeedsRecover(j, x)) scheduleLiveStatsRecover(x, key);
+    else if (S._liveEvRetry && S._liveEvRetry[key] && S._liveEvRetry[key].timer) {
+      try { clearTimeout(S._liveEvRetry[key].timer); } catch (_) {}
+      delete S._liveEvRetry[key];
+    }
     if (syncLiveScoreFromStats(x.id, j)) {
       // Refresh list cards / hero if visible
       try {
@@ -7013,6 +7150,7 @@ async function loadLiveStats(x, { force } = {}) {
   } catch (e) {
     const fail = { ok: false, reason: 'error', error: liveStatsUserMsg({ reason: 'error', error: e.message }), _at: Date.now() };
     S.liveStatsCache[key] = fail;
+    if (matchExpectsLiveStats(x)) scheduleLiveStatsRecover(x, key);
     return fail;
   }
 }
@@ -7030,12 +7168,13 @@ function ensureLivePoll(x) {
   const key = String(x.id || '');
   const live = S.liveStatsCache && S.liveStatsCache[key];
   if (!live) return;
-  // 1.9.96: also retry when mapping is temporarily empty (no_fixture/error), up to ~6 min
-  const retrying = !live.ok && ['no_fixture', 'error', 'upstream'].includes(live.reason);
-  if (!retrying && (!live.ok || !live.live)) return;
+  const retrying = liveStatsFailRetryable(live);
+  const eventsGap = live.ok && liveStatsNeedsEventsRetry(live, x);
+  if (!retrying && !eventsGap && (!live.ok || !live.live)) return;
   let tries = 0;
-  S.livePoll = setInterval(async () => {
-    if (++tries > 8 && !(S.liveStatsCache[key] && S.liveStatsCache[key].ok)) return stopLivePoll();
+  const pollMs = (retrying || eventsGap) ? 12000 : 45000;
+  const tick = async () => {
+    if (++tries > 12 && !(S.liveStatsCache[key] && S.liveStatsCache[key].ok)) return stopLivePoll();
     if (document.hidden) return;
     if (route().name !== 'match' || String(route().arg) !== String(x.id)) return stopLivePoll();
     const tabNow = detailTabOf(x.id);
@@ -7043,23 +7182,15 @@ function ensureLivePoll(x) {
     const hadReview = detailTabsFor(x).some(t => t[0] === 'review');
     await loadLiveStats(x, { force: true });
     if (route().name === 'match' && String(route().arg) === String(x.id) && (detailTabOf(x.id) === 'data' || detailTabOf(x.id) === 'events')) {
-      if (detailTabOf(x.id) === 'events') {
-        const pane = document.getElementById('detail-pane-' + x.id);
-        const live2 = S.liveStatsCache[key];
-        if (pane) {
-          const wrap = document.getElementById('events-tree-' + x.id);
-          const tmp = document.createElement('div');
-          tmp.innerHTML = eventsTabHtml(x, live2);
-          const nextTree = tmp.querySelector('.ev-tree-wrap');
-          if (wrap && nextTree) wrap.replaceWith(nextTree);
-          else pane.innerHTML = tmp.innerHTML;
-        }
-      } else renderLivePitch(x);
+      if (detailTabOf(x.id) === 'events') patchEventsTabIfVisible(x);
+      else renderLivePitch(x);
       if (!hadReview && detailTabsFor(x).some(t => t[0] === 'review')) refreshDetailTabs(x);
       const again = S.liveStatsCache[key];
-      if (again && again.ok && !again.live) stopLivePoll();
+      if (again && again.ok && !again.live && !liveStatsNeedsEventsRetry(again, x)) stopLivePoll();
     }
-  }, 45000);
+  };
+  setTimeout(tick, retrying ? 600 : 0);
+  S.livePoll = setInterval(tick, pollMs);
 }
 
 
@@ -7865,7 +7996,7 @@ async function enrichMatchDetail(x) {
     if (tab === 'intel' || tab === 'data') tasks.push(loadMatchStats(x));
     if (tab === 'intel') tasks.push(loadPredictReport(findMatch(x.id) || x));
     // live-stats already warmed above when kickedOff; still refresh on data/events
-    if (tab === 'data' || tab === 'events') tasks.push(loadLiveStats(x));
+    if (tab === 'data' || tab === 'events') tasks.push(loadLiveStats(x, { force: tab === 'events' }));
     if (tab === 'events') {
       tasks.push(loadChat(String(x.id)));
       tasks.push(loadAiChatHistory(String(x.id)).then(() => loadAiChatQuota(String(x.id))));
@@ -10543,7 +10674,7 @@ document.addEventListener('click', async e => {
       setDataSection(el.dataset.sec === 'star' ? 'star' : 'team');
       syncTopChrome('data');
       const lg = dataLeagueOf(), kind = dataKindOf();
-      ensureDataCacheSlice(lg + ':' + kind);
+      primeDataSliceFromBoot(lg, kind);
       scheduleDataCenterRefresh(lg, kind, { urgent: !dataCacheRenderable(S.dataCache[lg + ':' + kind], kind) });
       warmDataCenterPrefetch(lg, kind);
       invalidateTabKeep('data');
@@ -10704,7 +10835,7 @@ document.addEventListener('click', async e => {
       setDataLeague(el.dataset.lg || 'epl');
       {
         const lg = dataLeagueOf(), kind = dataKindOf();
-        ensureDataCacheSlice(lg + ':' + kind);
+        primeDataSliceFromBoot(lg, kind);
         if (softPatchDataBody(lg, kind)) {
           scheduleDataCenterRefresh(lg, kind, { urgent: !dataCacheRenderable(S.dataCache[lg + ':' + kind], kind) });
           warmDataCenterPrefetch(lg, kind);
@@ -10717,7 +10848,7 @@ document.addEventListener('click', async e => {
       setDataKind(el.dataset.kind || 'standings');
       {
         const lg = dataLeagueOf(), kind = dataKindOf();
-        ensureDataCacheSlice(lg + ':' + kind);
+        primeDataSliceFromBoot(lg, kind);
         if (softPatchDataBody(lg, kind)) {
           scheduleDataCenterRefresh(lg, kind, { urgent: !dataCacheRenderable(S.dataCache[lg + ':' + kind], kind) });
           return;
