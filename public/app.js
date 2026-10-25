@@ -3647,15 +3647,21 @@ function scheduleDayModel() {
   return { ms, rs, dates, mode, dayAll, classifiedDay, modeRows, gapInfo, counts };
 }
 
+/** 竞彩场次编号排序键：「周日026」→ 26（取末尾连续数字）。 */
+function matchNumSortKey(num) {
+  const m = String(num || '').match(/(\d+)$/);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
 function scheduleListRows(modeRows) {
   let rows = modeRows.filter(x => S.schLeague === '全部' || x.league === S.schLeague);
   rows.sort((a, b) => {
-    const rank = k => (k === 'live' ? 0 : k === 'ns' ? 1 : 2);
-    const d = rank(a._kind) - rank(b._kind);
+    const finRank = k => (k === 'ft' ? 1 : 0);
+    const d = finRank(a._kind) - finRank(b._kind);
     if (d) return d;
-    if (a._kind === 'live') return (b._minute || 0) - (a._minute || 0) || kickoff(a) - kickoff(b);
-    if (a._kind === 'ns') return kickoff(a) - kickoff(b);
-    return kickoff(b) - kickoff(a);
+    const nk = matchNumSortKey(a.num) - matchNumSortKey(b.num);
+    if (nk) return nk;
+    return String(a.num || '').localeCompare(String(b.num || ''), 'zh');
   });
   return rows;
 }
