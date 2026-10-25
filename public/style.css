@@ -583,12 +583,12 @@ body.me-drawer-on { overflow: hidden; }
   --ha-wrap-silver-2: 208, 214, 222;
   /* list-head (g=0) edge floor — still softer than g→1 ramp */
   --ha-edge-bg-fr: calc((1 - var(--ha-g)) * 0.2);
-  --ha-edge-border-soft: rgba(198, 190, 180, .82);
+  --ha-edge-border-soft: rgba(198, 190, 180, .84);
   --ha-edge-border-firm: rgba(220, 224, 230, .95);
-  --ha-edge-shadow-a0: .026;
-  --ha-edge-shadow-a1: .035;
-  --ha-edge-shadow-b0: .052;
-  --ha-edge-shadow-b1: .078;
+  --ha-edge-shadow-a0: .028;
+  --ha-edge-shadow-a1: .037;
+  --ha-edge-shadow-b0: .056;
+  --ha-edge-shadow-b1: .082;
   position: relative; isolation: isolate;
   display: block; width: 100%; text-align: left; font: inherit; color: inherit;
   border-radius: 14px;
@@ -613,12 +613,12 @@ body.me-drawer-on { overflow: hidden; }
 .ha-card::before {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
   border-radius: inherit;
-  opacity: calc(.44 + var(--ha-g) * .46);
+  opacity: calc(.47 + var(--ha-g) * .48);
   background:
     radial-gradient(
       ellipse calc(112% + var(--ha-g) * 34%) calc(86% + var(--ha-g) * 22%) at 7% 6%,
-      rgba(var(--ha-wrap-gold), calc(0.52 + (1 - var(--ha-g)) * 0.38)) 0%,
-      rgba(var(--ha-wrap-gold-2), calc(0.32 + (1 - var(--ha-g)) * 0.26)) 34%,
+      rgba(var(--ha-wrap-gold), calc(0.55 + (1 - var(--ha-g)) * 0.40)) 0%,
+      rgba(var(--ha-wrap-gold-2), calc(0.34 + (1 - var(--ha-g)) * 0.28)) 34%,
       transparent calc(52% + var(--ha-g) * 14%)
     ),
     radial-gradient(
@@ -634,7 +634,7 @@ body.me-drawer-on { overflow: hidden; }
     );
   will-change: opacity;
 }
-.ha-card > * { position: relative; z-index: 1; }
+.ha-card > * { position: relative; z-index: 2; transform: translateZ(0); }
 .ha-card:active { transform: scale(.995); }
 .ha-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .ha-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
