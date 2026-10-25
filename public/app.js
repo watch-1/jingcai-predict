@@ -2127,7 +2127,7 @@ async function fillHomePlatformAttitude() {
   }
 }
 let homeAttitudeScrollHooked = false;
-/** Scroll morph 图2→图3: g=0 at feed top (soft blend), g→1 as card sits lower in the feed. */
+/** Scroll morph 图2→图3: g=0 淡金融合, g→1 银灰边+白底独立卡（非区块蓝闪）。 */
 function homeAttitudeGlowEase(t) {
   const x = Math.min(1, Math.max(0, t));
   return x * x * (3 - 2 * x);

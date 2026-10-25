@@ -567,7 +567,7 @@ body.me-drawer-on { overflow: hidden; }
 .ha-sec-h .more.ha-kb { color: var(--pri, #1a62f0); font-weight: 700; }
 .home-attitude-wrap {
   position: relative; margin: 0 0 6px; padding: 6px 0 14px;
-  background: linear-gradient(180deg, #f6f8fc 0%, #eef2f8 100%);
+  background: linear-gradient(180deg, #f5f3ef 0%, #ebe8e4 100%);
 }
 .home-attitude-wrap .ha-feed {
   position: relative; z-index: 1;
@@ -576,11 +576,13 @@ body.me-drawer-on { overflow: hidden; }
 }
 .ha-card {
   --ha-g: var(--ha-card-glow, 0);
+  --ha-wrap-gold: rgba(255, 218, 168, 1);
+  --ha-wrap-silver: rgba(186, 194, 206, 1);
   position: relative; isolation: isolate;
   display: block; width: 100%; text-align: left; font: inherit; color: inherit;
   border-radius: 14px;
-  background: color-mix(in srgb, #eef2f8 calc((1 - var(--ha-g)) * 34%), #fff);
-  border: 1px solid color-mix(in srgb, rgba(238, 242, 248, .45) calc((1 - var(--ha-g)) * 100%), rgba(230, 235, 243, .95));
+  background: color-mix(in srgb, #f4efe6 calc((1 - var(--ha-g)) * 34%), #fff);
+  border: 1px solid color-mix(in srgb, rgba(244, 239, 230, .5) calc((1 - var(--ha-g)) * 100%), rgba(220, 224, 230, .95));
   box-shadow:
     0 1px 3px rgba(26, 35, 54, calc(.015 + var(--ha-g) * .02)),
     0 calc(1px + var(--ha-g) * 3px) calc(6px + var(--ha-g) * 12px) rgba(26, 35, 54, calc(.028 + var(--ha-g) * .05));
@@ -591,18 +593,24 @@ body.me-drawer-on { overflow: hidden; }
 .ha-card::before {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
   border-radius: inherit;
-  opacity: calc(.4 + var(--ha-g) * .56);
+  opacity: calc(.36 + var(--ha-g) * .5);
   background:
     radial-gradient(
-      ellipse calc(118% + var(--ha-g) * 42%) calc(88% + var(--ha-g) * 28%) at 9% 5%,
-      rgba(168, 206, 255, calc(.26 + var(--ha-g) * .4)) 0%,
-      rgba(210, 232, 255, calc(.16 + var(--ha-g) * .24)) 36%,
-      transparent calc(56% + var(--ha-g) * 12%)
+      ellipse calc(112% + var(--ha-g) * 34%) calc(86% + var(--ha-g) * 22%) at 7% 6%,
+      color-mix(in srgb, var(--ha-wrap-gold) calc(48% + (1 - var(--ha-g)) * 38%), transparent) 0%,
+      color-mix(in srgb, rgba(255, 232, 198, 1) calc(28% + (1 - var(--ha-g)) * 24%), transparent) 34%,
+      transparent calc(52% + var(--ha-g) * 14%)
     ),
     radial-gradient(
-      ellipse 92% 62% at 20% 16%,
-      rgba(255, 236, 210, calc(.1 + var(--ha-g) * .16)) 0%,
-      transparent 58%
+      ellipse calc(98% + var(--ha-g) * 40%) calc(72% + var(--ha-g) * 26%) at 94% 92%,
+      color-mix(in srgb, var(--ha-wrap-silver) calc(14% + var(--ha-g) * 34%), transparent) 0%,
+      color-mix(in srgb, rgba(208, 214, 222, 1) calc(10% + var(--ha-g) * 22%), transparent) 40%,
+      transparent 66%
+    ),
+    radial-gradient(
+      ellipse 86% 56% at 82% 10%,
+      color-mix(in srgb, var(--ha-wrap-silver) calc(6% + var(--ha-g) * 16%), transparent) 0%,
+      transparent 54%
     );
   will-change: opacity;
 }
