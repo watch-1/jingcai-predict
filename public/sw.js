@@ -1,5 +1,6 @@
 // 竞彩预测 service worker: offline app shell + last-known public match/data APIs. Account APIs are never cached.
-const VER = 'jc-v1.9.200';
+const VER = 'jc-v1.9.201';
+const CREST_CACHE = 'jc-crests-v1';
 const SHELL = ['./', './index.html', './style.css', './app.js', './config.js', './sample-data.js', './manifest.json',
   './data-center-boot.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/yun-duo.png',
@@ -10,7 +11,8 @@ const DC_API = /^\/api\/(standings|topscorers|topassists|club-values|player-valu
 const LOGO_API = /^\/api\/logo(\?|$)/;
 self.addEventListener('install', e => { e.waitUntil(caches.open(VER).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VER).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  // 1.9.201: keep durable crest cache across version bumps (logos are stable)
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VER && k !== CREST_CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 function staleWhileRevalidate(cache, req, fetchReq) {
   return caches.open(cache).then(async (c) => {
@@ -35,7 +37,7 @@ self.addEventListener('fetch', e => {
   if (url.pathname.includes('/api/')) {
     if (LOGO_API.test(url.pathname)) {
       const key = new Request(url.origin + url.pathname + url.search);
-      e.respondWith(staleWhileRevalidate(VER, key, req));
+      e.respondWith(staleWhileRevalidate(CREST_CACHE, key, req));
       return;
     }
     if (DC_API.test(url.pathname)) {
