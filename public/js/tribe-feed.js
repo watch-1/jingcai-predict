@@ -197,14 +197,14 @@
       <div class="tf-match-teams">
         ${badge(m.home, 'sm', m.homeLogo)}<span class="tf-vs">${esc(m.home)} vs ${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}
       </div>
-      <p class="tf-match-hint">本场态度（每人一票，可改选）</p>
+      <p class="tf-match-hint">本场态度（每人一票，投后不可改）</p>
       <div class="vote-bars tf-vote-bars">${['win', 'draw', 'loss'].map((k) => {
         const p = pct(k);
         return `<div class="vote-row ${mine === k ? 'mine' : ''}"><div class="vote-lab">${esc(v.labels[k])}</div>
           <div class="vote-track"><i class="${k === 'win' ? 'h' : k === 'draw' ? 'd' : 'a'}" style="width:${Math.max(p, total ? 2 : 0)}%"></i></div>
           <div class="vote-pct num">${p.toFixed(0)}%</div></div>`;
       }).join('')}</div>
-      <div class="vote-btns">${['win', 'draw', 'loss'].map((k) =>
+      <div class="vote-btns${mine ? ' vote-btns--locked' : ''}">${['win', 'draw', 'loss'].map((k) =>
         `<button type="button" class="vote-btn ${mine === k ? 'on' : ''}" data-act="tribeVote" data-post="${post.id}" data-mid="${esc(mid)}" data-choice="${k}">${esc(v.labels[k])}</button>`
       ).join('')}</div>
     </div>`;
@@ -930,9 +930,32 @@
     }
   }
 
+  function findVotePost(postId) {
+    const pid = String(postId);
+    const r = route();
+    const tid = r.name === 'tribe-club' ? String(r.arg || '') : '';
+    let post = tid && S.tribeFeedCache && (S.tribeFeedCache[tid] || []).find((p) => String(p.id) === pid);
+    if (!post && S.tribeFeedCache) {
+      for (const key of Object.keys(S.tribeFeedCache)) {
+        post = (S.tribeFeedCache[key] || []).find((p) => String(p.id) === pid);
+        if (post) break;
+      }
+    }
+    if (!post && S.tribeDetailPost && String(S.tribeDetailPost.id) === pid) post = S.tribeDetailPost;
+    return post;
+  }
+
   async function castVote(postId, choice, matchId) {
     if (!loggedIn()) { toast('请先登录后再投票'); return go('#/login'); }
     const pid = String(postId);
+    const post0 = findVotePost(pid);
+    if (post0 && post0.vote && post0.vote.myVote) {
+      toast('已投票，不可修改');
+      return;
+    }
+    const labels = (post0 && post0.vote && post0.vote.labels) || { win: '胜', draw: '平', loss: '负' };
+    const lab = labels[choice] || choice;
+    if (!(await appConfirm(`确定选择「${lab}」？投票后不可修改。`, { title: '确认投票', confirmText: '确认投票' }))) return;
     const r = route();
     let tribeId = r.name === 'tribe-club' ? String(r.arg || '') : '';
     try {

@@ -1334,6 +1334,8 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .vote-btn { height: 40px; border-radius: 10px; background: #f2f4f8; color: var(--t2); font-size: 15px; font-weight: 600; border: 1px solid #d5dbe6; }
 .vote-btn.on { background: var(--pri-l); color: var(--pri-d); border-color: var(--pri); }
 .vote-btn:active { filter: brightness(.96); }
+.vote-btns--locked .vote-btn:not(.on) { opacity: 0.55; }
+.vote-btns--locked .vote-btn.on { cursor: default; }
 
 
 /* ---------- 1.9.15 rolling process stats (近期过程数据) ---------- */
