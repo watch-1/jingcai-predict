@@ -526,7 +526,7 @@ function hydrateFromCache() {
 const HOME_SNAP_KEY = 'jc_home_snap_v1';
 const PRED_CACHE_KEY = 'jc_pred_cache_v1';
 const DATA_TAB_SNAP_KEY = 'jc_data_snap_v1';
-const HOME_ATT_CACHE_KEY = 'jc_home_att_v1';
+const HOME_ATT_CACHE_KEY = 'jc_home_att_v2';
 const KB_PACKS_CACHE_KEY = 'jc_kb_packs_v1';
 const KB_ITEM_BODY_CACHE_KEY = 'jc_kb_item_body_v1';
 /** Must match lib/home-snap-guard.js HOME_SNAP_VER (invalidates legacy offline-bar snaps). */
@@ -576,13 +576,25 @@ function homeSnapPersistBlocked(html) {
   if (html.indexOf('sk-line') >= 0 && html.indexOf('hc-item') < 0) return true;
   if (html.indexOf('ha-skel') >= 0) return true;
   if (html.indexOf('网络不可用') >= 0) return true;
+  const att = homeSnapAttitudeFeedChunk(html);
+  if (att && att.indexOf('ha-card') >= 0 && !homeAttitudeFeedHtmlValid(att)) return true;
   return false;
+}
+function homeSnapAttitudeFeedChunk(html) {
+  if (!html || html.indexOf('homeAttitudeFeed') < 0) return '';
+  const feedIdx = html.indexOf('id="homeAttitudeFeed"');
+  const openEnd = html.indexOf('>', feedIdx);
+  const hotIdx = html.indexOf('id="homeHotWrap"', openEnd);
+  if (openEnd < 0 || hotIdx < 0) return '';
+  return html.slice(openEnd + 1, hotIdx);
 }
 function rejectHomeSnapRecord(s) {
   if (!s || !s.html || s.html.length < 200) return true;
   if ((s.ver || 0) < HOME_SNAP_VER) return true;
   if (s.html.indexOf('网络不可用') >= 0) return true;
   if (s.html.indexOf('ha-skel') >= 0) return true;
+  const att = homeSnapAttitudeFeedChunk(s.html);
+  if (att && att.indexOf('ha-card') >= 0 && !homeAttitudeFeedHtmlValid(att)) return true;
   return false;
 }
 function stripLegacyHomeSnapWarn(html) {
@@ -611,17 +623,40 @@ function readHomeSnap() {
     return s;
   } catch (_) { return null; }
 }
+/** Each persisted 平台简报 card must ship header + teaser (not just match-bar/footer). */
+function homeAttitudeFeedHtmlValid(html) {
+  if (!html || html.length < 40 || html.indexOf('ha-skel') >= 0) return false;
+  const nCard = (html.match(/\bha-card\b/g) || []).length;
+  if (!nCard) return false;
+  const nHd = (html.match(/\bha-hd\b/g) || []).length;
+  const nName = (html.match(/\bha-name\b/g) || []).length;
+  const nTeaser = (html.match(/\bha-teaser\b/g) || []).length;
+  return nHd >= nCard && nName >= nCard && nTeaser >= nCard;
+}
+function homeAttitudeFeedDomValid(feedEl) {
+  if (!feedEl) return false;
+  const cards = feedEl.querySelectorAll('.ha-card:not(.ha-skel)');
+  if (!cards.length) return false;
+  for (const card of cards) {
+    if (!card.querySelector('.ha-hd') || !card.querySelector('.ha-name') || !card.querySelector('.ha-teaser')) return false;
+  }
+  return true;
+}
 function readHomeAttitudeCacheHtml() {
   try {
     const c = LS.get(HOME_ATT_CACHE_KEY, null);
     if (!c || !c.html || c.html.length < 40) return null;
     if (Date.now() - (c.at || 0) > HOME_ATT_CACHE_MAX_AGE) return null;
+    if (!homeAttitudeFeedHtmlValid(c.html)) {
+      try { LS.del(HOME_ATT_CACHE_KEY); } catch (_) {}
+      return null;
+    }
     return c.html;
   } catch (_) { return null; }
 }
 function persistHomeAttitudeCache(html) {
   try {
-    if (!html || html.length < 40 || html.indexOf('ha-skel') >= 0) return;
+    if (!homeAttitudeFeedHtmlValid(html)) return;
     LS.set(HOME_ATT_CACHE_KEY, { html, at: Date.now() });
   } catch (_) {}
 }
@@ -2105,18 +2140,18 @@ async function fillHomePlatformAttitude() {
   if (!feedEl || route().name !== 'home') return;
   const ms = S.matches;
   const cached = readHomeAttitudeCacheHtml();
-  if (cached && !feedEl.querySelector('.ha-card:not(.ha-skel)')) feedEl.innerHTML = cached;
+  if (cached && !homeAttitudeFeedDomValid(feedEl)) feedEl.innerHTML = cached;
   try {
     const j = await api('/column/feed?tab=attitude&author=platform&limit=12', { timeout: 14000 });
     if (!feedEl.isConnected) return;
     const posts = (j && j.posts) || [];
     if (paintHomeAttitudeFeed(feedEl, ms, posts)) {
-      persistHomeAttitudeCache(feedEl.innerHTML);
+      if (homeAttitudeFeedDomValid(feedEl)) persistHomeAttitudeCache(feedEl.innerHTML);
       syncHomeAttitudeScroll();
     }
   } catch (e) {
     if (!feedEl.isConnected) return;
-    if (feedEl.querySelector('.ha-card:not(.ha-skel)')) return;
+    if (homeAttitudeFeedDomValid(feedEl)) return;
     if (cached) { feedEl.innerHTML = cached; return; }
     if (ms) {
       const rows = homeAttitudeRows(ms);
