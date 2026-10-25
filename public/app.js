@@ -282,12 +282,33 @@ function issueWeek(m) {
 }
 const kickoff = m => new Date(`${m.date}T${m.time || '00:00'}:00+08:00`).getTime();
 const BADGE_COLORS = ['#e5484d', '#1a62f0', '#12a150', '#ff8a1f', '#7b4ce0', '#0aa5b8', '#c2185b', '#546e7a', '#d97706', '#0f766e'];
-/* ── Tribe crest durable cache (IndexedDB + mem) · 1.9.201 ── */
+/* ── Tribe crest: APK-bundled assets + optional IndexedDB overlay · 1.9.202 ── */
 const CREST_IDB_NAME = 'jc-crests-v1';
 const CREST_IDB_STORE = 'blobs';
+const BUNDLED_CREST_BASE = 'assets/crests/';
 let _crestDbP = null;
 const _crestMem = new Map();
 const _crestInflight = new Map();
+let _bundledCrestIds = null;
+try {
+  fetch(BUNDLED_CREST_BASE + 'manifest.json', { cache: 'force-cache' })
+    .then((r) => (r && r.ok ? r.json() : null))
+    .then((j) => {
+      _bundledCrestIds = new Set(
+        (j && Array.isArray(j.teamIds) ? j.teamIds : []).map((id) => String(id))
+      );
+    })
+    .catch(() => { _bundledCrestIds = new Set(); });
+} catch (_) { _bundledCrestIds = new Set(); }
+
+function bundledCrestPath(teamId) {
+  const tid = teamId != null && String(teamId) !== '' ? String(teamId) : '';
+  if (!tid) return '';
+  if (_bundledCrestIds === null || _bundledCrestIds.has(tid)) {
+    return BUNDLED_CREST_BASE + tid + '.png';
+  }
+  return '';
+}
 
 function crestCacheKey(logo, teamId) {
   const tid = teamId != null && String(teamId) !== '' ? String(teamId) : '';
@@ -404,7 +425,8 @@ async function warmCrestCacheForTeams(teams) {
   } catch (_) {}
 }
 
-async function hydrateTribeCrests(root) {
+function hydrateTribeCrests(root) {
+  // 1.9.202: never block paint — bundled src is already in DOM; IDB/remote overlay in background only
   try {
     const scope = root || document;
     const nodes = scope.querySelectorAll('.badge.crest[data-crest-key]');
@@ -416,6 +438,8 @@ async function hydrateTribeCrests(root) {
       const logo = wrap.getAttribute('data-crest-logo') || '';
       const tid = wrap.getAttribute('data-team-id') || '';
       if (!key || !logo) return;
+      const bundled = bundledCrestPath(tid);
+      if (bundled && img.getAttribute('src') === bundled && img.complete && img.naturalWidth > 0) return;
       jobs.push((async () => {
         try {
           let local = _crestMem.get(key);
@@ -423,16 +447,15 @@ async function hydrateTribeCrests(root) {
             const blob = await crestIdbGet(key);
             if (blob instanceof Blob && blob.size > 0) local = crestRemember(key, blob);
           }
-          if (local) {
-            if (img.getAttribute('src') !== local) img.setAttribute('src', local);
-            return;
+          if (local && img.getAttribute('src') !== local) img.setAttribute('src', local);
+          else if (!bundled || img.naturalWidth === 0) {
+            const saved = await crestCacheFromRemote(logo, tid);
+            if (saved && img.getAttribute('src') !== saved) img.setAttribute('src', saved);
           }
-          const saved = await crestCacheFromRemote(logo, tid);
-          if (saved && img.getAttribute('src') !== saved) img.setAttribute('src', saved);
         } catch (_) {}
       })());
     });
-    if (jobs.length) await Promise.all(jobs);
+    if (jobs.length) Promise.all(jobs).catch(() => {});
   } catch (_) {}
 }
 
@@ -444,15 +467,19 @@ function badge(name, cls = '', logo, opts) {
   if (!logo) return `<span class="badge ${cls}" style="background:${bg}">${letter}</span>`;
   const tid = opts && opts.teamId != null && opts.teamId !== '' ? String(opts.teamId) : '';
   const ckey = crestCacheKey(logo, tid);
-  // 1.9.201: prefer in-memory blob URL (warmed from IndexedDB) so reopen skips CDN wait
-  const srcUrl = _crestMem.has(ckey) ? _crestMem.get(ckey) : (API + '/api/logo?url=' + encodeURIComponent(logo));
+  const apiUrl = API + '/api/logo?url=' + encodeURIComponent(logo);
+  const bundled = bundledCrestPath(tid);
+  // 1.9.202: APK-bundled crest first (zero network), then mem/IDB blob, then /api/logo
+  let srcUrl = bundled || (_crestMem.has(ckey) ? _crestMem.get(ckey) : apiUrl);
   const src = esc(srcUrl);
+  const fbAttr = bundled && srcUrl === bundled ? ` data-fb="${esc(apiUrl)}"` : '';
   // Intrinsic 160≈3–4× of 40–42 CSS px crests; sources TSDB 512 / ESPN 500 (1.9.91 sharper).
   // Broken or missing crest (404) falls back to the letter badge. Do not invent a logo.
   // 1.9.200: tribe hub uses eager — Capacitor first-paint + loading=lazy left empty crest discs.
   const lazyAttr = (opts && opts.eager) ? '' : ' loading="lazy"';
   const dataAttrs = ` data-crest-key="${esc(ckey)}" data-crest-logo="${esc(logo)}"${tid ? ` data-team-id="${esc(tid)}"` : ''}`;
-  return `<span class="badge crest ${cls}" data-letter="${letter}"${dataAttrs}><img alt="" width="160" height="160" decoding="async"${lazyAttr} src="${src}" onerror="var p=this.parentNode;if(!p||p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter ${cls}';p.style.background='${bg}';p.textContent=p.dataset.letter||'';this.remove()"></span>`;
+  const onerr = "var img=this,p=img.parentNode;if(!p)return;var fb=img.getAttribute('data-fb');if(fb&&!img.dataset.triedFb){img.dataset.triedFb=1;img.src=fb;return;}if(p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter " + cls + "';p.style.background='" + bg + "';p.textContent=p.dataset.letter||'';img.remove()";
+  return `<span class="badge crest ${cls}" data-letter="${letter}"${dataAttrs}><img alt="" width="160" height="160" decoding="async"${lazyAttr}${fbAttr} src="${src}" onerror="${onerr}"></span>`;
 }
 const shortRk = s => (String(s || '').length <= 5 ? esc(s) : ''); // long group ranks like [亚运男足1] only shown on the detail page
 const lgTag = m => homeTheme() === 'pitch'
@@ -2624,10 +2651,8 @@ function rebuildTribeCatalogFromCache({ renderIfTribe } = {}) {
       } else render({ force: true });
     } catch (_) {}
   };
-  // Warm mem from IndexedDB first so tribe softPatch can paint blob URLs without CDN wait
-  try {
-    warmCrestCacheForTeams(cat.teams || []).then(paint).catch(paint);
-  } catch (_) { paint(); }
+  paint();
+  try { warmCrestCacheForTeams(cat.teams || []).catch(() => {}); } catch (_) {}
   return cat;
 }
 async function fetchTribeBootPackOnce({ timeoutMs, cache } = {}) {
@@ -2680,9 +2705,8 @@ function ensureTribeCatalog(opts) {
           }
         } catch (_) {}
       };
-      try {
-        warmCrestCacheForTeams(cat.teams || []).then(paint).catch(paint);
-      } catch (_) { paint(); }
+      paint();
+      try { warmCrestCacheForTeams(cat.teams || []).catch(() => {}); } catch (_) {}
       return S.tribeCat;
     };
     try {
