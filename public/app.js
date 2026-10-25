@@ -280,6 +280,47 @@ function issueWeek(m) {
   if (m.weekday) return m.weekday;
   return wd(issueDate(m));
 }
+/** 1.9.212: reference-style score column (red status + spaced score + HT line). */
+function formatScoreSpaced(full, homeScore, awayScore) {
+  if (homeScore != null && awayScore != null && !Number.isNaN(Number(homeScore)) && !Number.isNaN(Number(awayScore))) {
+    return `${homeScore} : ${awayScore}`;
+  }
+  if (!full) return '-';
+  const parts = String(full).split(/[:：]/);
+  if (parts.length >= 2) return `${String(parts[0]).trim()} : ${String(parts[1]).trim()}`;
+  return String(full);
+}
+function matchCardMeta(m, { favSize = 16 } = {}) {
+  const tail = [];
+  if (m.sample) tail.push('<span class="sample-tag">示例</span>');
+  if (isFav(m.id)) tail.push(`<span class="fav-on" style="width:${favSize}px;height:${favSize}px">${I.star}</span>`);
+  return `<div class="match-meta"><span class="match-meta-l">${esc(m.league || '')} · ${esc(m.num || '')}</span><span class="match-meta-r">${esc(m.time || '--:--')}</span>${tail.join('')}</div>`;
+}
+function matchScoreColumn(row) {
+  const kind = row._kind;
+  let statusHtml = '';
+  let scoreMain = '';
+  let footHtml = '';
+  if (kind === 'ft') {
+    statusHtml = '<div class="match-st red">完场</div>';
+    scoreMain = `<div class="score num">${esc(formatScoreSpaced(row._full, row._homeScore, row._awayScore))}</div>`;
+    if (row._half) footHtml = `<div class="match-ht">上半场 ${esc(row._half)}</div>`;
+  } else if (kind === 'live') {
+    statusHtml = `<div class="match-st red">${scoreMinuteLab(row)}</div>`;
+    scoreMain = row._homeScore != null
+      ? `<div class="score num">${esc(formatScoreSpaced(null, row._homeScore, row._awayScore))}</div>`
+      : '<div class="vs">VS</div>';
+    if (row._half) footHtml = `<div class="match-ht">上半场 ${esc(row._half)}</div>`;
+  } else {
+    scoreMain = '<div class="vs">VS</div>';
+    const sub = row._phaseZh;
+    if (sub && sub !== '未开赛' && sub !== 'Selling') footHtml = `<div class="match-ht">${esc(sub)}</div>`;
+  }
+  return `${statusHtml}${scoreMain}${footHtml}`;
+}
+function matchTeamsRow(m, row) {
+  return `<div class="mc-teams"><div class="t h">${badge(m.home, 'sm', m.homeLogo)}<span class="n" title="${esc(m.home)}">${esc(m.home)}</span></div><div class="mc-mid">${matchScoreColumn(row)}</div><div class="t a"><span class="n" title="${esc(m.away)}">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div></div>`;
+}
 const kickoff = m => new Date(`${m.date}T${m.time || '00:00'}:00+08:00`).getTime();
 const BADGE_COLORS = ['#e5484d', '#1a62f0', '#12a150', '#ff8a1f', '#7b4ce0', '#0aa5b8', '#c2185b', '#546e7a', '#d97706', '#0f766e'];
 /* ── Tribe crest: APK-bundled assets + optional IndexedDB overlay · 1.9.202 ── */
@@ -2319,22 +2360,9 @@ function oddsRow(m, pool) {
 function matchCard(m, { odds = true } = {}) {
   const pr = effectivePredict(m);
   const row = classifyScoreRow(m);
-  let mid, small;
-  if (row._kind === 'ft') {
-    mid = `<div class="score num">${esc(row._full || m.full || '-')}</div>`;
-    small = '完场';
-  } else if (row._kind === 'live') {
-    mid = row._homeScore != null
-      ? `<div class="score num">${esc(row._homeScore)}:${esc(row._awayScore)}</div>`
-      : `<div class="vs">VS</div>`;
-    small = esc(row._phaseZh || '进行中');
-  } else {
-    mid = `<div class="vs">VS</div>`;
-    small = esc(row._phaseZh || '未开赛');
-  }
   return `<div class="card mc" data-go="#/match/${encodeURIComponent(m.id)}">
-    <div class="mc-top">${lgTag(m)}<span>${esc(m.num)}</span><span class="sp">${esc(m.date.slice(5))} ${esc(m.time)}${row._kind !== 'ns' ? ' · ' + small : ''}</span>${m.sample ? '<span class="sample-tag">示例</span>' : ''}${isFav(m.id) ? `<span class="fav-on" style="width:16px;height:16px">${I.star}</span>` : ''}</div>
-    <div class="mc-teams"><div class="t h"><span class="n" title="${esc(m.home)}">${esc(m.home)}</span>${badge(m.home, 'sm', m.homeLogo)}</div><div class="mc-mid">${mid}<small>${small}</small></div><div class="t">${badge(m.away, 'sm', m.awayLogo)}<span class="n" title="${esc(m.away)}">${esc(m.away)}</span></div></div>
+    ${matchCardMeta(m)}
+    ${matchTeamsRow(m, row)}
     ${odds ? oddsRow(m, 'had') + oddsRow(m, 'hhad') : ''}
     ${pr ? `<div class="mc-pred"><span class="sp">预测 <b>${pr.text}</b> · 信心 ${pct(pr.conf)}</span><span class="lvl ${pr.lvl[0]}">${pr.lvl[1]}</span></div>` : ''}</div>`;
 }
@@ -2372,9 +2400,12 @@ function resultTags(r) {
   return `<div class="rs-tags">${bits.join('')}</div>`;
 }
 function resultCard(r) {
-  return `<div class="card mc" data-go="#/match/${encodeURIComponent(r.id)}">
-    <div class="mc-top">${lgTag(r)}<span>${esc(r.num)}</span><span class="sp">${esc(issueDate(r).slice(5))} · ${esc(r.status || '完场')}</span>${r.sample ? '<span class="sample-tag">示例</span>' : ''}${isFav(r.id) ? `<span class="fav-on" style="width:16px;height:16px">${I.star}</span>` : ''}</div>
-    <div class="mc-teams"><div class="t h"><span class="n">${esc(r.home)}</span>${badge(r.home, '', r.homeLogo)}</div><div class="mc-mid"><div class="score num">${esc(r.full || '-')}</div><small>半场 ${esc(r.half || '-')}</small></div><div class="t">${badge(r.away, '', r.awayLogo)}<span class="n">${esc(r.away)}</span></div></div>
+  const row = classifyScoreRow(r);
+  if (!row._half && r.half) row._half = r.half;
+  if (!row._full && r.full) row._full = r.full;
+  return `<div class="card mc mc-result" data-go="#/match/${encodeURIComponent(r.id)}">
+    ${matchCardMeta(r)}
+    ${matchTeamsRow(r, row)}
     ${resultTags(r)}</div>`;
 }
 
@@ -3546,25 +3577,8 @@ function scoreMinuteLab(row) {
 
 function scoreCard(row) {
   const kind = row._kind;
-  const mid = kind === 'live'
-    ? `<div class="ls-score live num"><b>${row._homeScore ?? '-'}</b><span>:</span><b>${row._awayScore ?? '-'}</b></div>`
-    : kind === 'ft'
-      ? `<div class="ls-score ft num"><b>${row._homeScore ?? '-'}</b><span>:</span><b>${row._awayScore ?? '-'}</b></div>`
-      : `<div class="ls-score ns"><span class="vs">VS</span></div>`;
   const statusCls = kind === 'live' ? 'live' : kind === 'ft' ? 'ft' : 'ns';
-  const statusInner = kind === 'live'
-    ? `<span class="ls-dot"></span><span>${esc(scoreMinuteLab(row))}</span>`
-    : `<span>${scoreMinuteLab(row)}</span>`;
-  let sub = '';
-  if (kind === 'ft' && row._half) sub = `<div class="ls-sub">半场 ${esc(row._half)}</div>`;
-  else if (kind === 'live' && row._half) sub = `<div class="ls-sub">半场 ${esc(row._half)}</div>`;
-  else if (kind === 'ns') {
-    const subLab = (row._phaseZh === '待开奖' || row._phaseZh === '即将开始')
-      ? row._phaseZh
-      : `${row.date ? row.date.slice(5) : ''} 开球`;
-    sub = `<div class="ls-sub">${esc(subLab)}</div>`;
-  }
-  // cards: only when real data present
+  const midInner = matchScoreColumn(row);
   let cards = '';
   if (row._cards && (row._cards.yellow || row._cards.red)) {
     const y = row._cards.yellow || {}, r = row._cards.red || {};
@@ -3574,13 +3588,11 @@ function scoreCard(row) {
     if (bits.length) cards = `<div class="ls-cards">${bits.join('')}</div>`;
   }
   return `<button type="button" class="ls-row ${statusCls}" data-go="#/match/${encodeURIComponent(row.id)}">
-    <div class="ls-top">${lgTag(row)}<span class="ls-num">${esc(row.num)}</span><span class="ls-st ${statusCls}">${statusInner}</span>${isFav(row.id) ? `<span class="fav-on" style="width:14px;height:14px">${I.star}</span>` : ''}${row.sample ? '<span class="sample-tag">示例</span>' : ''}</div>
+    ${matchCardMeta(row, { favSize: 14 })}
     <div class="ls-body">
-      ${badge(row.home, 'sm', row.homeLogo)}
-      <span class="nm home">${esc(row.home)}</span>
-      <div class="ls-mid">${mid}${sub}</div>
-      <span class="nm away">${esc(row.away)}</span>
-      ${badge(row.away, 'sm', row.awayLogo)}
+      <div class="ls-side h">${badge(row.home, 'sm', row.homeLogo)}<span class="nm">${esc(row.home)}</span></div>
+      <div class="ls-mid">${midInner}</div>
+      <div class="ls-side a"><span class="nm">${esc(row.away)}</span>${badge(row.away, 'sm', row.awayLogo)}</div>
     </div>
     ${cards}
   </button>`;
@@ -5230,8 +5242,8 @@ function resultsDayModel() {
   const dayRes = rs.filter(r => issueDate(r) === S.rsDate);
   const dayFix = sched.filter(m => issueDate(m) === S.rsDate && !dayRes.some(r => r.id === m.id));
   const day = [...dayRes, ...dayFix];
-  if (S.rsLeague !== '全部' && !day.some(x => x.league === S.rsLeague)) S.rsLeague = '全部';
-  const list = day.filter(r => S.rsLeague === '全部' || r.league === S.rsLeague).sort((a, b) => String(a.num).localeCompare(String(b.num), 'zh'));
+  S.rsLeague = '全部';
+  const list = day.sort((a, b) => String(a.num).localeCompare(String(b.num), 'zh'));
   return { dates, day, list, emptyAll: false };
 }
 
@@ -5269,7 +5281,7 @@ function resultsBodyHtml(list) {
   h += `<div class="list-meta"><span>${esc(S.rsDate)} ${wk} 开奖</span><span>${(list || []).length} 场</span></div>`;
   h += (list && list.length)
     ? `<div class="grid">${list.map(x => x.full ? resultCard(x) : matchCard(x)).join('')}</div>`
-    : empty('该日期或联赛筛选下暂无场次。', '', '暂无场次');
+    : empty('该日期暂无场次。', '', '暂无场次');
   return h;
 }
 
@@ -5279,8 +5291,7 @@ function pageResults() {
   const model = resultsDayModel();
   if (!model || model.emptyAll) return h + empty('官方开奖数据暂未同步，请稍后下拉刷新。', '', '暂无开奖') + foot();
   h += dateStrip(model.dates, S.rsDate, 'rdate');
-  h += leagueChips(model.day, S.rsLeague, 'rlg');
-  h += `<div id="rsBody" class="rs-body">${resultsBodyHtml(model.list)}</div>`;
+  h += `<div id="rsBody" class="rs-body rs-body--flush">${resultsBodyHtml(model.list)}</div>`;
   return h + foot();
 }
 
@@ -5300,18 +5311,11 @@ function softPatchResults() {
       const next = wrap.firstElementChild;
       if (next) ds.replaceWith(next);
     }
-    const chips = v.querySelector('.chips.league-chips, .chips');
-    if (chips) {
-      const wrap = document.createElement('div');
-      wrap.innerHTML = leagueChips(model.day, S.rsLeague, 'rlg');
-      const next = wrap.firstElementChild;
-      if (next) chips.replaceWith(next);
-    }
     let body = document.getElementById('rsBody');
     if (!body) {
       body = document.createElement('div');
       body.id = 'rsBody';
-      body.className = 'rs-body';
+      body.className = 'rs-body rs-body--flush';
       const footEl = v.querySelector('.foot');
       if (footEl) v.insertBefore(body, footEl);
       else v.appendChild(body);
@@ -10329,33 +10333,8 @@ function softPatchLiveScoreCards() {
       const row = classifyScoreRow(rowSrc);
       const mid = card.querySelector('.mc-mid');
       if (!mid) return;
-      let midHtml, small;
-      if (row._kind === 'ft') {
-        midHtml = `<div class="score num">${esc(row._full || rowSrc.full || '-')}</div>`;
-        small = '完场';
-      } else if (row._kind === 'live') {
-        midHtml = row._homeScore != null
-          ? `<div class="score num">${esc(row._homeScore)}:${esc(row._awayScore)}</div>`
-          : `<div class="vs">VS</div>`;
-        small = esc(row._phaseZh || '进行中');
-      } else {
-        midHtml = `<div class="vs">VS</div>`;
-        small = esc(row._phaseZh || '未开赛');
-      }
-      const next = midHtml + `<small>${small}</small>`;
+      const next = matchScoreColumn(row);
       if (mid.innerHTML !== next) { mid.innerHTML = next; n++; }
-      const sp = card.querySelector('.mc-top .sp');
-      if (sp && rowSrc.date && rowSrc.time) {
-        const base = `${esc(String(rowSrc.date).slice(5))} ${esc(rowSrc.time)}`;
-        const want = row._kind !== 'ns' ? `${base} · ${small}` : base;
-        // keep sample/fav siblings; only refresh the time/status span text if it looks like ours
-        if (sp.childNodes.length === 1 || !sp.querySelector) {
-          /* leave complex tops alone */
-        }
-        if (!sp.querySelector('span') && sp.textContent !== want && sp.textContent.indexOf(String(rowSrc.time)) >= 0) {
-          sp.innerHTML = want;
-        }
-      }
     });
     return n >= 0;
   } catch (_) { return false; }
@@ -10779,7 +10758,7 @@ document.addEventListener('click', async e => {
     if (e.target.closest('#tribe-feed-list')) JCTribeFeed.onFeedClick(e);
     if (e.target.closest('#homeHotFeed')) JCTribeFeed.onFeedClick(e);
   }
-  const el = e.target.closest('[data-act],[data-go],[data-key],[data-type],[data-mult],[data-sdate],[data-slg],[data-rdate],[data-rlg],[data-pf],[data-av]');
+  const el = e.target.closest('[data-act],[data-go],[data-key],[data-type],[data-mult],[data-sdate],[data-slg],[data-rdate],[data-pf],[data-av]');
   if (!el) {
     if (e.target.id === 'sheet' && Date.now() >= schSheetDismissGuardUntil) closeSheet();
     if (e.target.id === 'me-drawer-mask') closeMeDrawer();
@@ -10801,7 +10780,6 @@ document.addEventListener('click', async e => {
     return render({ force: true });
   }
   if (d.rdate) { S.rsDate = d.rdate; if (softPatchResults()) return; return render({ force: true }); }
-  if (d.rlg) { S.rsLeague = d.rlg; if (softPatchResults()) return; return render({ force: true }); }
   if (d.pf) { S.prFilter = d.pf; return render(); }
   if (d.av) { S.pendingAv = d.av; document.querySelectorAll('[data-av]').forEach(b => b.classList.toggle('on', b === el)); return; }
   if (d.go) {
