@@ -365,6 +365,7 @@ const S = {
   playerDbKey: (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('jc_player_db_key')) || null,
   playerDbCache: { overview: null, recent: null, outcomes: null, search: null, match: {}, player: {} },
   columnFeed: { attitude: null, interact: null }, columnAuthors: null, columnMe: null, columnTab: 'attitude', columnSearch: '',
+  homeMidTab: 'attitude', homeHotLoaded: false,
   columnCompose: { kind: 'match', topic: '分析', matchId: '', matchLabel: '', title: '', body: '', pick: '' },
   columnAuthorCache: {}, columnPostCache: {},
   meBackToDrawer: false,
@@ -2014,15 +2015,68 @@ function homeAttitudeCardFromPost(p, m) {
 function homeAttitudeCard({ m, pr }) {
   return homeAttitudeCardFromPost(null, m);
 }
+function homeMidTabOn(tab) {
+  return (S.homeMidTab || 'attitude') === tab ? ' on' : '';
+}
 function homeAttitudeSection(ms) {
-  let h = `<div class="ha-sec-h"><h2>比赛态度</h2></div>`;
+  const tab = S.homeMidTab || 'attitude';
+  const showAtt = tab === 'attitude';
+  let h = `<nav class="ha-sec-h ha-tabs" aria-label="首页信息流">
+    <button type="button" class="ha-tab${homeMidTabOn('attitude')}" data-act="homeMidTab" data-tab="attitude">比赛态度</button>
+    <button type="button" class="ha-tab${homeMidTabOn('hot')}" data-act="homeMidTab" data-tab="hot">圈子热议</button>
+  </nav>`;
   const attCached = readHomeAttitudeCacheHtml();
   const sk = `<div class="ha-feed" id="homeAttitudeFeed">${attCached || [1, 2, 3].map(() =>
     '<div class="ha-card ha-skel"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line" style="height:36px;margin-top:10px"></div><div class="sk sk-line" style="width:90%;margin-top:8px"></div></div>').join('')}</div>`;
-  h += `<div id="homeAttitudeWrap" class="home-attitude-wrap" style="--ha-p:0;--ha-diag:0%">`;
+  h += `<div id="homeAttitudeWrap" class="home-attitude-wrap${showAtt ? '' : ' hidden'}" style="--ha-p:0;--ha-diag:0%">`;
   h += '<div class="ha-pastel" aria-hidden="true"></div><div class="ha-shell" aria-hidden="true"></div>';
   h += sk + '</div>';
+  const hotSk = [1, 2, 3].map(() =>
+    '<div class="ha-card ha-skel" style="border-radius:14px"><div class="sk sk-line" style="width:40%"></div><div class="sk sk-line" style="height:48px;margin-top:10px"></div></div>').join('');
+  h += `<div id="homeHotWrap" class="home-hot-wrap${showAtt ? ' hidden' : ''}"><div id="homeHotFeed" class="tribe-feed-list ha-hot-feed">${showAtt ? '' : hotSk}</div></div>`;
   return h;
+}
+function syncHomeMidPanels() {
+  const tab = S.homeMidTab || 'attitude';
+  const att = document.getElementById('homeAttitudeWrap');
+  const hot = document.getElementById('homeHotWrap');
+  if (att) att.classList.toggle('hidden', tab !== 'attitude');
+  if (hot) hot.classList.toggle('hidden', tab !== 'hot');
+  document.querySelectorAll('[data-act="homeMidTab"]').forEach((b) => {
+    b.classList.toggle('on', b.dataset.tab === tab);
+  });
+}
+function homeHotPostCard(post) {
+  const t = tribeById(post.tribeId);
+  const label = (t && t.nameZh) || (post.tribeId || '').replace(/^[^-]+-/, '') || '部落';
+  if (typeof JCTribeFeed !== 'undefined' && JCTribeFeed.postCard) {
+    return JCTribeFeed.postCard(post, { tribeId: post.tribeId, tribeLabel: label, homeHot: true });
+  }
+  return '';
+}
+async function fillHomeTribeHot() {
+  const feedEl = document.getElementById('homeHotFeed');
+  if (!feedEl || route().name !== 'home') return;
+  if ((S.homeMidTab || 'attitude') !== 'hot') return;
+  try {
+    await ensureTribeCatalog();
+    const j = await api('/tribe/hot?limit=15', { timeout: 14000 });
+    if (!feedEl.isConnected || (S.homeMidTab || 'attitude') !== 'hot') return;
+    const posts = (j && j.posts) || [];
+    if (!posts.length) {
+      feedEl.innerHTML = empty('还没有圈子热议，去部落发帖互动吧。',
+        '<button type="button" class="btn ghost sm" data-go="#/tribe">逛部落</button>', '暂无热议');
+      S.homeHotLoaded = true;
+      return;
+    }
+    feedEl.innerHTML = posts.map(homeHotPostCard).join('');
+    S.homeHotLoaded = true;
+  } catch (e) {
+    if (!feedEl.isConnected) return;
+    if (feedEl.querySelector('.tf-card')) return;
+    feedEl.innerHTML = empty('加载失败，请稍后重试',
+      '<button type="button" class="btn ghost sm" data-act="homeMidTab" data-tab="hot">重试</button>', '暂无内容');
+  }
 }
 function paintHomeAttitudeFeed(feedEl, ms, posts) {
   if (!posts.length) {
@@ -2042,6 +2096,10 @@ function paintHomeAttitudeFeed(feedEl, ms, posts) {
     return homeAttitudeCardFromPost(p, m);
   }).join('');
   return true;
+}
+function refreshHomeMidFeed() {
+  if ((S.homeMidTab || 'attitude') === 'hot') fillHomeTribeHot();
+  else fillHomePlatformAttitude();
 }
 async function fillHomePlatformAttitude() {
   const feedEl = document.getElementById('homeAttitudeFeed');
@@ -2110,7 +2168,7 @@ function pageHome() {
   h += `<div class="sec-h"><h2>专栏作者</h2><button class="more" data-go="#/column">进入专栏 ${I.arr}</button></div>`;
   h += `<div id="home-column-authors" class="col-wall">${skeletonNews(1)}</div>`;
   setTimeout(() => {
-    fillHomeBanners(); fillHomeColumnAuthors(); fillHomePlatformAttitude();
+    fillHomeBanners(); fillHomeColumnAuthors(); refreshHomeMidFeed();
     // 1.9.123: warm live-scores without full home wipe (was blanking page under float-ball)
     const ids = (S.matches || []).slice(0, 40).map(m => String(m.id)).filter(Boolean);
     if (ids.length) {
@@ -5573,7 +5631,7 @@ async function prefetchPredictReports(ms, { concurrency = 3 } = {}) {
       render();
       if (r.name === 'home') {
         try { persistHomeSnap(document.getElementById('view')); } catch (_) {}
-        fillHomePlatformAttitude();
+        refreshHomeMidFeed();
       }
     }
   }
@@ -9719,6 +9777,7 @@ document.addEventListener('click', async e => {
   if (typeof JCTribeFeed !== 'undefined') {
     if (JCTribeFeed.onClick(e)) return;
     if (e.target.closest('#tribe-feed-list')) JCTribeFeed.onFeedClick(e);
+    if (e.target.closest('#homeHotFeed')) JCTribeFeed.onFeedClick(e);
   }
   const el = e.target.closest('[data-act],[data-go],[data-key],[data-type],[data-mult],[data-sdate],[data-slg],[data-rdate],[data-rlg],[data-pf],[data-av]');
   if (!el) {
@@ -10301,6 +10360,18 @@ document.addEventListener('click', async e => {
       loadColumnFeedUi();
       return;
     }
+    case 'homeMidTab': {
+      const next = el.dataset.tab === 'hot' ? 'hot' : 'attitude';
+      if (S.homeMidTab === next) return;
+      S.homeMidTab = next;
+      syncHomeMidPanels();
+      if (next === 'attitude') fillHomePlatformAttitude();
+      else {
+        S.homeHotLoaded = false;
+        fillHomeTribeHot();
+      }
+      return;
+    }
     case 'colToggleTag': {
       const wrap = document.getElementById('colTagPick');
       if (!wrap) return;
@@ -10693,7 +10764,7 @@ NAV.push(location.hash || '#/home');
       try {
         fillHomeNews();
         fillHomeColumnAuthors();
-        fillHomePlatformAttitude();
+        refreshHomeMidFeed();
         // Banner: only refresh if track looks stale/empty
         const track = document.getElementById('bnTrack');
         if (track && track.children.length < 2) fillHomeBanners();
