@@ -305,9 +305,11 @@ try {
     .catch(() => { _bundledCrestIds = new Set(); });
 } catch (_) { _bundledCrestIds = new Set(); }
 
-/* ── Data-center player photos: APK-bundled assets (1.9.204) ── */
+/* ── Data-center player photos: APK-bundled assets (1.9.204+) ── */
 const BUNDLED_PLAYER_BASE = 'assets/players/';
-let _bundledPlayerIds = null;
+let _bundledPlayerIds = (CFG.bundledPlayerIds && Array.isArray(CFG.bundledPlayerIds))
+  ? new Set(CFG.bundledPlayerIds.map((id) => String(id)))
+  : null;
 try {
   fetch(BUNDLED_PLAYER_BASE + 'manifest.json', { cache: 'force-cache' })
     .then((r) => (r && r.ok ? r.json() : null))
@@ -317,23 +319,37 @@ try {
       );
       try {
         const rn = route().name;
-        if (rn === 'data') render({ force: true });
+        if (rn === 'data') {
+          if (!softPatchDataBody(dataLeagueOf(), dataKindOf())) render({ force: true });
+        }
       } catch (_) {}
     })
-    .catch(() => { _bundledPlayerIds = new Set(); });
-} catch (_) { _bundledPlayerIds = new Set(); }
+    .catch(() => { if (_bundledPlayerIds === null) _bundledPlayerIds = new Set(); });
+} catch (_) { if (_bundledPlayerIds === null) _bundledPlayerIds = new Set(); }
 
+function playerIdForBundledPhoto(row) {
+  if (!row) return '';
+  if (row.playerId != null && String(row.playerId) !== '') return String(row.playerId);
+  const m = String(row.photo || '').match(/\/players\/(\d+)(?:\.|\/|$)/i);
+  return m ? m[1] : '';
+}
 function bundledPlayerPath(playerId) {
   const pid = playerId != null && String(playerId) !== '' ? String(playerId) : '';
   if (!pid) return '';
-  if (_bundledPlayerIds === null) return '';
-  if (_bundledPlayerIds.has(pid)) return BUNDLED_PLAYER_BASE + pid + '.png';
+  if (_bundledPlayerIds !== null) {
+    return _bundledPlayerIds.has(pid) ? BUNDLED_PLAYER_BASE + pid + '.png' : '';
+  }
+  if (IS_APP) return BUNDLED_PLAYER_BASE + pid + '.png';
   return '';
 }
 function dcPlayerPhotoSrc(row) {
-  const bundled = bundledPlayerPath(row && row.playerId);
+  const pid = playerIdForBundledPhoto(row);
+  const bundled = bundledPlayerPath(pid);
   if (bundled) return bundled;
   if (!row || !row.photo) return '';
+  if (/^https?:\/\//i.test(row.photo) && IS_APP && /media\.api-sports\.io\/football\/players\/\d+/i.test(row.photo)) {
+    return row.photo;
+  }
   return API + '/api/logo?url=' + encodeURIComponent(row.photo);
 }
 
@@ -1016,27 +1032,52 @@ function dataTabSnapBodyHtml(lg, kind) {
   if (!snap || snap.lg !== lg || snap.kind !== kind || snap.sec !== dataSectionOf()) return null;
   return snap.dcHtml;
 }
-/** Escape infinite skeleton when boot + API both stall (身价榜等). */
+function dcAbortInflightSlice(key) {
+  try {
+    const m = S._dcLoadMeta && S._dcLoadMeta[key];
+    if (m && m.abort) m.abort.abort();
+  } catch (_) {}
+  if (S._dataLoadInflight) delete S._dataLoadInflight[key];
+  if (S._dcRefreshQ) S._dcRefreshQ = S._dcRefreshQ.filter((j) => j.key !== key);
+}
+/** Escape infinite skeleton — prefer boot/local paint over empty timeout (1.9.205). */
 function scheduleDcBodyWatchdog(lg, kind) {
   const token = Date.now();
   S._dcWatchToken = token;
+  const bootKinds = new Set(['topscorers', 'topassists', 'topkeepers', 'playervalues', 'standings', 'clubvalues']);
+  const delayMs = bootKinds.has(kind) ? 12000 : 22000;
   setTimeout(() => {
-    try {
-      if (S._dcWatchToken !== token) return;
-      if (route().name !== 'data' || dataLeagueOf() !== lg || dataKindOf() !== kind) return;
-      const key = lg + ':' + kind;
-      const cached = ensureDataCacheSlice(key);
-      if (dataCacheRenderable(cached, kind)) {
-        softPatchDataBody(lg, kind);
-        return;
-      }
-      if (S._dataLoadInflight && S._dataLoadInflight[key]) return;
-      const box = document.getElementById('dcBody');
-      if (!box || !box.querySelector('.sk-card')) return;
-      scheduleDataCenterRefresh(lg, kind, { urgent: true });
-      box.innerHTML = empty('数据加载较慢或网络异常，请重试。', '<button class="btn ghost sm" data-act="dataRefresh">重新加载</button>', '加载超时');
-    } catch (_) {}
-  }, 22000);
+    (async () => {
+      try {
+        if (S._dcWatchToken !== token) return;
+        if (route().name !== 'data' || dataLeagueOf() !== lg || dataKindOf() !== kind) return;
+        const key = lg + ':' + kind;
+        let cached = ensureDataCacheSlice(key);
+        if (dataCacheRenderable(cached, kind)) {
+          softPatchDataBody(lg, kind);
+          return;
+        }
+        tryMergeBootPackSlice(lg, kind);
+        cached = ensureDataCacheSlice(key);
+        if (dataCacheRenderable(cached, kind)) {
+          softPatchDataBody(lg, kind);
+          return;
+        }
+        dcAbortInflightSlice(key);
+        await loadDataCenterBootPack({ force: true });
+        tryMergeBootPackSlice(lg, kind);
+        if (dataCacheRenderable(ensureDataCacheSlice(key), kind)) {
+          softPatchDataBody(lg, kind);
+          return;
+        }
+        if (S._dataLoadInflight && S._dataLoadInflight[key]) return;
+        const box = document.getElementById('dcBody');
+        if (!box || !box.querySelector('.sk-card')) return;
+        scheduleDataCenterRefresh(lg, kind, { urgent: true });
+        box.innerHTML = empty('数据加载较慢或网络异常，请重试。', '<button class="btn ghost sm" data-act="dataRefresh">重新加载</button>', '加载超时');
+      } catch (_) {}
+    })();
+  }, delayMs);
 }
 function bootShellEl() {
   return document.getElementById('boot-shell');
@@ -1321,6 +1362,38 @@ function warmDataCenterPrefetch(lg, kind) {
 /** 1.9.157: no cold-start DC storm — boot JSON + LS hydrate cover standings/scorers; 身价等按需拉取。 */
 function bootWarmAllDataCenter() { /* intentionally empty */ }
 let _bootPackInflight = null;
+let _bootPackOk = false;
+let _bootPackSlices = null;
+function tryMergeBootPackSlice(lg, kind) {
+  const key = lg + ':' + kind;
+  const payload = _bootPackSlices && _bootPackSlices[key];
+  if (payload) mergeBootPackSlice(key, payload);
+}
+function mergeDcRowsPreferIdentity(prev, next) {
+  if (!prev || !next || prev.ok === false || !Array.isArray(prev.rows) || !Array.isArray(next.rows)) return next;
+  const byKey = new Map();
+  for (const r of prev.rows) {
+    if (!r) continue;
+    const k = r.playerId != null && String(r.playerId) !== ''
+      ? 'id:' + String(r.playerId)
+      : 'n:' + String(r.player || '') + '|' + String(r.team || '');
+    byKey.set(k, r);
+  }
+  next.rows = next.rows.map((r) => {
+    if (!r) return r;
+    const k = r.playerId != null && String(r.playerId) !== ''
+      ? 'id:' + String(r.playerId)
+      : 'n:' + String(r.player || '') + '|' + String(r.team || '');
+    const p = byKey.get(k);
+    if (!p) return r;
+    const out = Object.assign({}, r);
+    if (!out.playerId && p.playerId) out.playerId = p.playerId;
+    if (!out.photo && p.photo) out.photo = p.photo;
+    if (!out.photoAlt && p.photoAlt) out.photoAlt = p.photoAlt;
+    return out;
+  });
+  return next;
+}
 function mergeBootPackSlice(key, payload) {
   if (!key || !payload || payload.ok === false) return;
   const kind = String(key).split(':')[1] || 'standings';
@@ -1364,15 +1437,23 @@ function afterBootPackMerged() {
     }
   } catch (_) {}
 }
-function loadDataCenterBootPack() {
-  if (_bootPackInflight) return _bootPackInflight;
+function loadDataCenterBootPack(opts) {
+  const force = !!(opts && opts.force);
+  if (_bootPackOk && !force) return Promise.resolve(true);
+  if (_bootPackInflight && !force) return _bootPackInflight;
   _bootPackInflight = (async () => {
     try {
       let ok = await fetchTribeBootPackOnce({ timeoutMs: 8000, cache: 'no-store' });
-      if (!ok) ok = await fetchTribeBootPackOnce({ timeoutMs: 6000, cache: 'force-cache' });
-      if (!ok) return;
-      afterBootPackMerged();
-    } catch (_) {}
+      if (!ok) ok = await fetchTribeBootPackOnce({ timeoutMs: 6000, cache: 'default' });
+      _bootPackOk = !!ok;
+      if (ok) afterBootPackMerged();
+      return ok;
+    } catch (_) {
+      _bootPackOk = false;
+      return false;
+    } finally {
+      if (!_bootPackOk) _bootPackInflight = null;
+    }
   })();
   return _bootPackInflight;
 }
@@ -2781,6 +2862,7 @@ async function fetchTribeBootPackOnce({ timeoutMs, cache } = {}) {
     if (!r.ok) return false;
     const j = await r.json();
     if (!j || !j.slices || typeof j.slices !== 'object') return false;
+    _bootPackSlices = j.slices;
     for (const [key, payload] of Object.entries(j.slices)) mergeBootPackSlice(key, payload);
     return true;
   } catch (_) {
@@ -4268,6 +4350,7 @@ function pageData() {
   ).join('')}</div>`;
 
   const cacheKey = lg + ':' + kind;
+  tryMergeBootPackSlice(lg, kind);
   const cached = ensureDataCacheSlice(cacheKey);
   if (!dataCacheRenderable(cached, kind)) {
     const snapBody = dataTabSnapBodyHtml(lg, kind);
@@ -4280,7 +4363,10 @@ function pageData() {
     }
     h += `<div class="dc-body" id="dcBody">${skeleton(3)}</div>`;
     h += foot();
-    loadDataCenterBootPack();
+    loadDataCenterBootPack().then(() => {
+      tryMergeBootPackSlice(lg, kind);
+      if (dataCacheRenderable(ensureDataCacheSlice(cacheKey), kind)) softPatchDataBody(lg, kind);
+    });
     scheduleDataCenterRefresh(lg, kind, { urgent: true });
     setTimeout(() => scheduleDcBodyWatchdog(lg, kind), 0);
     return h;
@@ -4335,7 +4421,7 @@ async function loadDataCenter(lg, kind, { soft, signal } = {}) {
         }
       } catch { /* ignore */ }
     }
-    const j = await api(path + '?league=' + encodeURIComponent(lg), { timeout: 20000, signal });
+    let j = await api(path + '?league=' + encodeURIComponent(lg), { timeout: 20000, signal });
     if (signal && signal.aborted) return;
     if (!j || j.ok === false) {
       if (!(soft && hadRenderable)) {
@@ -4349,6 +4435,9 @@ async function loadDataCenter(lg, kind, { soft, signal } = {}) {
       }
       if (kind === 'standings' && S.dataCache[key]) {
         j = mergeStandingsPreferTeamIds(S.dataCache[key], j);
+      }
+      if (S.dataCache[key] && (kind === 'topscorers' || kind === 'topassists' || kind === 'playervalues' || kind === 'topkeepers')) {
+        j = mergeDcRowsPreferIdentity(S.dataCache[key], j);
       }
       S.dataCache[key] = j;
       persistDataCacheSlice(key, j);

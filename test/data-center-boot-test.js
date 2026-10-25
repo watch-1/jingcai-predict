@@ -13,4 +13,5 @@ const eplSt = j.slices['epl:standings'];
 assert.ok(eplSt && eplSt.ok && eplSt.tables && eplSt.tables[0].rows.length, 'epl standings slice');
 const l1Sc = j.slices['ligue1:topscorers'];
 assert.ok(l1Sc && l1Sc.rows && l1Sc.rows.length, 'ligue1 topscorers slice');
+assert.ok(j.slices['laliga:playervalues'] && j.slices['laliga:playervalues'].rows.length >= 5, 'playervalues boot slice');
 console.log('data-center-boot-test ok', { slices: keys.length, generatedAt: j.generatedAt });

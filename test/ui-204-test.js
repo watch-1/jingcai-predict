@@ -23,17 +23,17 @@ assert.ok(csl.some((r) => r.teamZh === '大连英博'), 'Dalian Yingbo zh');
 assert.ok(csl.some((r) => r.teamZh === '深圳新鹏城'), 'Shenzhen zh');
 
 const manifest = JSON.parse(fs.readFileSync(path.join(playerDir, 'manifest.json'), 'utf8'));
-assert.ok(manifest.playerIds && manifest.playerIds.length >= 80, 'bundled player count');
+assert.ok(manifest.playerIds && manifest.playerIds.length >= 115, 'bundled player count');
 for (const id of manifest.playerIds.slice(0, 5)) {
   assert.ok(fs.existsSync(path.join(playerDir, id + '.png')), 'player png ' + id);
 }
 
-assert.ok(/jc-v1\.9\.204/.test(swJs), 'SW VER 1.9.204');
+assert.ok(/jc-v1\.9\.205/.test(swJs), 'SW VER 1.9.205');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.204');
+assert.strictEqual(pkg.version, '1.9.205');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.204/.test(ver));
-assert.ok(/VERSION_CODE=241/.test(ver));
+assert.ok(/VERSION=1\.9\.205/.test(ver));
+assert.ok(/VERSION_CODE=242/.test(ver));
 assert.ok(fs.existsSync(path.join(root, 'tools/sync-bundled-players.js')));
 
 console.log('ui-204-test OK', { players: manifest.playerIds.length });

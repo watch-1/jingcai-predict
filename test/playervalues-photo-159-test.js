@@ -17,12 +17,14 @@ const payload = {
       {
         rank: 1,
         player: 'Erling Haaland',
+        playerId: '1',
         team: 'Manchester City',
         photo: 'https://r2.thesportsdb.com/images/media/player/cutout/test.png',
       },
       {
         rank: 2,
         player: 'Declan Rice',
+        playerId: '2',
         team: 'Arsenal',
         photo: 'https://r2.thesportsdb.com/images/media/player/cutout/rice.png',
       },
@@ -39,6 +41,7 @@ const rows = [
 
 const { leaders } = et.enrichPlayervaluePhotos(rows, 'epl');
 assert.ok(rows[0].photo && rows[0].photo.includes('thesportsdb'), 'Haaland photo from leader disk');
+assert.strictEqual(rows[0].playerId, '1', 'Haaland playerId from leader disk');
 assert.ok(rows[1].photo, 'Rice photo from leader disk');
 assert.ok(rows[2].photo && rows[2].photo.includes('transfermarkt'), 'tmId fallback portrait URL');
 assert.ok(leaders >= 3, 'leader merge count');

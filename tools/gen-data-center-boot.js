@@ -23,6 +23,14 @@ function slimRow(kind, row) {
       points: row.points, form: row.form,
     };
   }
+  if (kind === 'playervalues') {
+    return {
+      rank: row.rank, player: row.player, playerZh: row.playerZh, playerId: row.playerId,
+      tmId: row.tmId, photo: '', photoAlt: row.photoAlt,
+      team: row.team, teamZh: row.teamZh, teamId: row.teamId, teamLogo: row.teamLogo,
+      labelZh: row.labelZh, text: row.text, marketValueEur: row.marketValueEur,
+    };
+  }
   return {
     rank: row.rank, player: row.player, playerZh: row.playerZh, playerId: row.playerId,
     photo: row.photo, photoAlt: row.photoAlt, team: row.team, teamZh: row.teamZh,
@@ -51,7 +59,8 @@ function slimPayload(kind, r, lgKey) {
       rows: (t.rows || []).slice(0, lgKey === 'ucl' ? 40 : 20).map((row) => slimRow(kind, row)),
     }));
   } else if (r.rows) {
-    slim.rows = r.rows.slice(0, 25).map((row) => slimRow(kind, row));
+    const cap = kind === 'playervalues' ? 20 : 25;
+    slim.rows = r.rows.slice(0, cap).map((row) => slimRow(kind, row));
   }
   return slim;
 }
@@ -63,7 +72,7 @@ function slimPayload(kind, r, lgKey) {
       const fn = FN[kind];
       if (!fn) continue;
       try {
-        const r = await fn({ league: lg });
+        const r = await fn({ league: lg, refresh: kind === 'playervalues' });
         if (!r || r.ok === false) continue;
         slices[`${lg}:${kind}`] = slimPayload(kind, r, lg);
       } catch (e) {
