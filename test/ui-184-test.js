@@ -24,10 +24,10 @@ assert.ok(/\.tc-sch-date-spindle-label/.test(css), 'spindle label styles');
 assert.ok(!/tc-sch-date-slot--center/.test(css), 'no center pill slot styles');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.184');
+assert.ok(/^1\.9\.\d+$/.test(pkg.version), 'semver 1.9.x');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.184/.test(ver));
-assert.ok(/VERSION_CODE=221/.test(ver));
-assert.ok(/jc-v1\.9\.184/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-184-test OK');

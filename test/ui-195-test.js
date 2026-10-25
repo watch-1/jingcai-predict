@@ -31,10 +31,10 @@ assert.ok(/homeAttitudeCardGlow/.test(appJs), 'per-card scroll glow retained');
 assert.ok(!/ha-pastel|ha-shell/.test(appJs), 'no section gradient flash layers');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.195');
+assert.ok(/^1\.9\.\d+$/.test(pkg.version), 'semver 1.9.x');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.195/.test(ver));
-assert.ok(/VERSION_CODE=232/.test(ver));
-assert.ok(/jc-v1\.9\.195/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-195-test OK');

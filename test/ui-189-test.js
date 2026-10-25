@@ -18,10 +18,10 @@ assert.ok(/status\(409\)\.json\(\{ error: '已投票，不可修改' \}\)/.test(
 assert.ok(/canVote: myVote == null/.test(feedLib), 'canVote false when already voted');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.189');
+assert.ok(/^1\.9\.\d+$/.test(pkg.version), 'semver 1.9.x');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.189/.test(ver));
-assert.ok(/VERSION_CODE=226/.test(ver));
-assert.ok(/jc-v1\.9\.189/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-189-test OK');

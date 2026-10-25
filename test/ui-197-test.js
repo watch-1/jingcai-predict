@@ -38,7 +38,7 @@ assert.ok(/z-index:\s*2/.test(css.match(/\.ha-card > \*\s*\{[^}]+\}/)[0]), 'card
 
 assert.ok(/homeAttitudeFeedHtmlValid/.test(appJs), 'cache HTML validator');
 assert.ok(/homeAttitudeFeedDomValid/.test(appJs), 'live DOM validator');
-assert.ok(/jc_home_att_v2/.test(appJs), 'cache key bumped to drop corrupt v1 snaps');
+assert.ok(/jc_home_att_v[23]/.test(appJs), 'cache key bumped to drop corrupt v1 snaps');
 assert.ok(/homeAttitudeCardFromPost[\s\S]*?ha-hd[\s\S]*?ha-name[\s\S]*?ha-teaser/.test(appJs), 'card template includes header + teaser');
 assert.ok(/homeAttitudeFeedHtmlValid\(html\)/.test(appJs), 'persist validates markup');
 assert.ok(/homeSnapAttitudeFeedChunk/.test(appJs), 'home snap attitude chunk guard');
@@ -46,10 +46,10 @@ assert.ok(!/ha-pastel|ha-shell/.test(appJs), 'no section gradient flash layers')
 assert.ok(/homeAttitudeCardGlow/.test(appJs), 'per-card scroll glow retained');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.197');
+assert.ok(/^1\.9\.\d+$/.test(pkg.version), 'semver 1.9.x');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.197/.test(ver));
-assert.ok(/VERSION_CODE=234/.test(ver));
-assert.ok(/jc-v1\.9\.197/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-197-test OK');

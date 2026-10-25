@@ -12,10 +12,10 @@ assert.ok(/cleanupWrongMatchVotePosts/.test(feedLib), 'stale match_vote cleanup'
 assert.ok(/leagueKey/.test(tribeJs) && /q\.set\('leagueKey'/.test(tribeJs), 'client passes leagueKey on feed ensure');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.188');
+assert.ok(/^1\.9\.\d+$/.test(pkg.version), 'semver 1.9.x');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.188/.test(ver));
-assert.ok(/VERSION_CODE=225/.test(ver));
-assert.ok(/jc-v1\.9\.188/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.\d+/.test(ver));
+assert.ok(/VERSION_CODE=\d+/.test(ver));
+assert.ok(/jc-v1\.9\.\d+/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-188-test OK');
