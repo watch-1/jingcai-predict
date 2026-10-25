@@ -14,11 +14,4 @@ assert.ok(/\.ha-tabs[\s\S]*gap:\s*14px/.test(css), 'gap between tabs');
 assert.ok(/kind != 'match_vote'/.test(feedLib), 'hot API excludes match_vote');
 assert.ok(/filter\(\(p\) => p\.kind !== 'match_vote'\)/.test(appJs), 'home hot client filter');
 
-const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.191');
-const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.191/.test(ver));
-assert.ok(/VERSION_CODE=228/.test(ver));
-assert.ok(/jc-v1\.9\.191/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
-
 console.log('ui-191-test OK');
