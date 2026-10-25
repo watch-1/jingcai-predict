@@ -2127,13 +2127,19 @@ async function fillHomePlatformAttitude() {
   }
 }
 let homeAttitudeScrollHooked = false;
+/** Scroll morph 图2→图3: g=0 at feed top (soft blend), g→1 as card sits lower in the feed. */
+function homeAttitudeGlowEase(t) {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
+}
 function homeAttitudeCardGlow(card, anchorY) {
   const rect = card.getBoundingClientRect();
-  const range = Math.max(rect.height * 0.82, 96);
+  const range = Math.max(rect.height * 0.9, 108);
   const offset = rect.top - anchorY;
-  let g = 1 - Math.max(0, offset) / range;
-  if (offset < 0) g = Math.max(0, 1 + offset / (range * 0.45));
-  return Math.min(1, Math.max(0, g));
+  let t;
+  if (offset < 0) t = Math.max(0, 1 + offset / (range * 0.55));
+  else t = Math.min(1, offset / range);
+  return homeAttitudeGlowEase(t);
 }
 function syncHomeAttitudeScroll() {
   const wrap = document.getElementById('homeAttitudeWrap');

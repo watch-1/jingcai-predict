@@ -575,22 +575,35 @@ body.me-drawer-on { overflow: hidden; }
   margin: 0 12px;
 }
 .ha-card {
-  --ha-card-glow: 0;
+  --ha-g: var(--ha-card-glow, 0);
   position: relative; isolation: isolate;
   display: block; width: 100%; text-align: left; font: inherit; color: inherit;
-  background: #fff; border-radius: 14px; border: 1px solid rgba(230, 235, 243, .95);
-  box-shadow: 0 2px 10px rgba(26, 35, 54, .06);
+  border-radius: 14px;
+  background: color-mix(in srgb, #eef2f8 calc((1 - var(--ha-g)) * 34%), #fff);
+  border: 1px solid color-mix(in srgb, rgba(238, 242, 248, .45) calc((1 - var(--ha-g)) * 100%), rgba(230, 235, 243, .95));
+  box-shadow:
+    0 1px 3px rgba(26, 35, 54, calc(.015 + var(--ha-g) * .02)),
+    0 calc(1px + var(--ha-g) * 3px) calc(6px + var(--ha-g) * 12px) rgba(26, 35, 54, calc(.028 + var(--ha-g) * .05));
   padding: 12px 13px 11px; cursor: pointer;
   overflow: hidden;
+  will-change: box-shadow, background-color;
 }
 .ha-card::before {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
   border-radius: inherit;
-  opacity: calc(var(--ha-card-glow) * .98);
+  opacity: calc(.4 + var(--ha-g) * .56);
   background:
-    radial-gradient(ellipse 130% 95% at 10% 6%, rgba(168, 206, 255, .62) 0%, rgba(210, 232, 255, .32) 38%, transparent 64%),
-    radial-gradient(ellipse 80% 55% at 22% 18%, rgba(255, 236, 210, .22) 0%, transparent 55%);
-  transition: opacity .14s ease-out;
+    radial-gradient(
+      ellipse calc(118% + var(--ha-g) * 42%) calc(88% + var(--ha-g) * 28%) at 9% 5%,
+      rgba(168, 206, 255, calc(.26 + var(--ha-g) * .4)) 0%,
+      rgba(210, 232, 255, calc(.16 + var(--ha-g) * .24)) 36%,
+      transparent calc(56% + var(--ha-g) * 12%)
+    ),
+    radial-gradient(
+      ellipse 92% 62% at 20% 16%,
+      rgba(255, 236, 210, calc(.1 + var(--ha-g) * .16)) 0%,
+      transparent 58%
+    );
   will-change: opacity;
 }
 .ha-card > * { position: relative; z-index: 1; }
