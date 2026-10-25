@@ -6380,6 +6380,7 @@ html[data-edge="1"] .auth-hd {
 .tf-huitie-like.tf-pop-like { display: inline-flex; transform: translateZ(0); will-change: transform; }
 .tf-stat { display: flex; align-items: center; gap: 14px; }
 .tf-stat-i { font-size: 12px; color: #8b95a5; }
+button.tf-stat-i.tf-like { border: 0; background: transparent; padding: 0; font: inherit; color: inherit; cursor: pointer; }
 .tf-match-card {
   margin: 6px 0 8px; padding: 10px 10px 8px; border-radius: 10px;
   background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
