@@ -2062,7 +2062,7 @@ async function fillHomeTribeHot() {
     await ensureTribeCatalog();
     const j = await api('/tribe/hot?limit=15', { timeout: 14000 });
     if (!feedEl.isConnected || (S.homeMidTab || 'attitude') !== 'hot') return;
-    const posts = (j && j.posts) || [];
+    const posts = ((j && j.posts) || []).filter((p) => p.kind !== 'match_vote');
     if (!posts.length) {
       feedEl.innerHTML = empty('还没有圈子热议，去部落发帖互动吧。',
         '<button type="button" class="btn ghost sm" data-go="#/tribe">逛部落</button>', '暂无热议');

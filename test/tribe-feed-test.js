@@ -24,6 +24,7 @@ async function call(method, path, body, token) {
     ok(r.s === 200 && Array.isArray(r.j.posts), 'feed list');
     r = await call('GET', '/tribe/hot?limit=5', undefined, tok);
     ok(r.s === 200 && Array.isArray(r.j.posts) && typeof r.j.hasMore === 'boolean', 'hot posts across tribes');
+    ok(!(r.j.posts || []).some((p) => p.kind === 'match_vote'), 'hot feed excludes match_vote');
     r = await call('POST', '/tribe/' + tribeId + '/posts', { body: '测试圈内发帖 ' + Date.now() }, tok);
     ok(r.s === 201 && r.j.post && r.j.post.id, 'create text post');
     const postId = r.j.post.id;
@@ -61,6 +62,8 @@ async function call(method, path, body, token) {
     r = await call('GET', '/tribe/' + tribeId + '/feed?ensure=1&teamId=382&teamName=' + encodeURIComponent('曼城'), undefined, tok);
     const mv = (r.j.posts || []).filter((p) => p.kind === 'match_vote');
     ok(mv.length <= 1, 'at most one match_vote post per ensure');
+    r = await call('GET', '/tribe/hot?limit=20', undefined, tok);
+    ok(r.s === 200 && !(r.j.posts || []).some((p) => p.kind === 'match_vote'), 'hot still excludes match_vote after ensure');
     if (mv[0]) {
       const vr = await call('POST', '/tribe/posts/' + mv[0].id + '/vote', { choice: 'win' }, tok);
       ok(vr.s === 200 && vr.j.vote && vr.j.vote.myVote === 'win' && vr.j.vote.canVote === false, 'tribe perspective vote');
