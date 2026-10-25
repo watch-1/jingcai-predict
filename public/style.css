@@ -576,10 +576,13 @@ body.me-drawer-on { overflow: hidden; }
 }
 .ha-card {
   --ha-g: var(--ha-card-glow, 0);
-  --ha-wrap-gold: rgba(255, 218, 168, 1);
-  --ha-wrap-silver: rgba(186, 194, 206, 1);
-  /* 1.9.195: list-head (g=0) edge floor — still softer than g→1 ramp */
-  --ha-edge-bg-blend: 20%;
+  /* 1.9.196: comma RGB tokens — rgba() stops paint on older Android WebViews */
+  --ha-wrap-gold: 255, 218, 168;
+  --ha-wrap-gold-2: 255, 232, 198;
+  --ha-wrap-silver: 186, 194, 206;
+  --ha-wrap-silver-2: 208, 214, 222;
+  /* list-head (g=0) edge floor — still softer than g→1 ramp */
+  --ha-edge-bg-fr: calc((1 - var(--ha-g)) * 0.2);
   --ha-edge-border-soft: rgba(198, 190, 180, .82);
   --ha-edge-border-firm: rgba(220, 224, 230, .95);
   --ha-edge-shadow-a0: .026;
@@ -589,8 +592,17 @@ body.me-drawer-on { overflow: hidden; }
   position: relative; isolation: isolate;
   display: block; width: 100%; text-align: left; font: inherit; color: inherit;
   border-radius: 14px;
-  background: color-mix(in srgb, #f4efe6 calc((1 - var(--ha-g)) * var(--ha-edge-bg-blend)), #fff);
-  border: 1px solid color-mix(in srgb, var(--ha-edge-border-soft) calc((1 - var(--ha-g)) * 100%), var(--ha-edge-border-firm));
+  background-color: rgb(
+    calc(255 - 11 * var(--ha-edge-bg-fr)),
+    calc(255 - 16 * var(--ha-edge-bg-fr)),
+    calc(255 - 25 * var(--ha-edge-bg-fr))
+  );
+  border: 1px solid rgba(
+    calc(198 + 22 * var(--ha-g)),
+    calc(190 + 34 * var(--ha-g)),
+    calc(180 + 50 * var(--ha-g)),
+    calc(0.82 + 0.13 * var(--ha-g))
+  );
   box-shadow:
     0 1px 3px rgba(26, 35, 54, calc(var(--ha-edge-shadow-a0) + var(--ha-g) * (var(--ha-edge-shadow-a1) - var(--ha-edge-shadow-a0)))),
     0 calc(1px + var(--ha-g) * 3px) calc(6px + var(--ha-g) * 12px) rgba(26, 35, 54, calc(var(--ha-edge-shadow-b0) + var(--ha-g) * (var(--ha-edge-shadow-b1) - var(--ha-edge-shadow-b0))));
@@ -601,23 +613,23 @@ body.me-drawer-on { overflow: hidden; }
 .ha-card::before {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
   border-radius: inherit;
-  opacity: calc(.36 + var(--ha-g) * .5);
+  opacity: calc(.44 + var(--ha-g) * .46);
   background:
     radial-gradient(
       ellipse calc(112% + var(--ha-g) * 34%) calc(86% + var(--ha-g) * 22%) at 7% 6%,
-      color-mix(in srgb, var(--ha-wrap-gold) calc(48% + (1 - var(--ha-g)) * 38%), transparent) 0%,
-      color-mix(in srgb, rgba(255, 232, 198, 1) calc(28% + (1 - var(--ha-g)) * 24%), transparent) 34%,
+      rgba(var(--ha-wrap-gold), calc(0.52 + (1 - var(--ha-g)) * 0.38)) 0%,
+      rgba(var(--ha-wrap-gold-2), calc(0.32 + (1 - var(--ha-g)) * 0.26)) 34%,
       transparent calc(52% + var(--ha-g) * 14%)
     ),
     radial-gradient(
       ellipse calc(98% + var(--ha-g) * 40%) calc(72% + var(--ha-g) * 26%) at 94% 92%,
-      color-mix(in srgb, var(--ha-wrap-silver) calc(14% + var(--ha-g) * 34%), transparent) 0%,
-      color-mix(in srgb, rgba(208, 214, 222, 1) calc(10% + var(--ha-g) * 22%), transparent) 40%,
+      rgba(var(--ha-wrap-silver), calc(0.16 + var(--ha-g) * 0.34)) 0%,
+      rgba(var(--ha-wrap-silver-2), calc(0.12 + var(--ha-g) * 0.22)) 40%,
       transparent 66%
     ),
     radial-gradient(
       ellipse 86% 56% at 82% 10%,
-      color-mix(in srgb, var(--ha-wrap-silver) calc(6% + var(--ha-g) * 16%), transparent) 0%,
+      rgba(var(--ha-wrap-silver), calc(0.08 + var(--ha-g) * 0.16)) 0%,
       transparent 54%
     );
   will-change: opacity;
@@ -629,8 +641,8 @@ body.me-drawer-on { overflow: hidden; }
 .ha-av {
   width: 40px; height: 40px; flex: none; border-radius: 50%;
   display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--pri-l), #fff);
-  color: var(--pri); box-shadow: 0 2px 8px rgba(47, 111, 237, .15);
+  background: linear-gradient(135deg, #faf4e8, #fff);
+  color: var(--pri); box-shadow: 0 2px 8px rgba(188, 152, 96, .24);
 }
 .ha-av svg { width: 22px; height: 22px; display: block; }
 .ha-id { min-width: 0; }
