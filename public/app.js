@@ -5330,7 +5330,7 @@ function votePanelHtml(matchId) {
       `<button type="button" class="vote-btn ${mine === k ? 'on' : ''}" data-act="vote" data-id="${esc(matchId)}" data-choice="${k}">${labels[k]}</button>`
     ).join('')}</div>
     <p class="note" style="margin:10px 0 0">${loggedIn()
-      ? (mine ? '你已投票，可点其他选项修改（每场每人一票）。' : '登录用户每场可投一票，结果实时汇总。')
+      ? (mine ? '你已投票，投后不可修改（每场每人一票）。' : '登录用户每场可投一票，投后不可修改，结果实时汇总。')
       : '登录后可投票表达态度。<a href="#/login">去登录</a> · 投票。'}</p>
   </div>`;
 }
@@ -10198,11 +10198,15 @@ document.addEventListener('click', async e => {
     case 'vote': {
       const id = el.dataset.id, choice = el.dataset.choice;
       if (!loggedIn()) { toast('请先登录后再投票'); return go('#/login'); }
+      const prev = S.voteCache && S.voteCache[id];
+      if (prev && prev.myVote) { toast('已投票，不可修改'); return; }
+      const lab = ({ h: '胜', d: '平', a: '负' }[choice] || choice);
+      if (!(await confirmDlg('确认投票', `确定选择「${lab}」？投票后不可修改。`, '确认投票'))) return;
       try {
         const j = await api('/match-vote', { method: 'POST', body: { matchId: id, choice } });
         S.voteCache = S.voteCache || {}; S.voteCache[id] = j;
         renderVoteBox(id);
-        toast('已投票：' + ({ h: '胜', d: '平', a: '负' }[choice] || choice));
+        toast('已投票：' + lab);
       } catch (er) { toast(er.message || '投票失败'); }
       return;
     }

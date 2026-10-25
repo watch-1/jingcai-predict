@@ -61,7 +61,9 @@ async function call(method, path, body, token) {
     ok(mv.length <= 1, 'at most one match_vote post per ensure');
     if (mv[0]) {
       const vr = await call('POST', '/tribe/posts/' + mv[0].id + '/vote', { choice: 'win' }, tok);
-      ok(vr.s === 200 && vr.j.vote && vr.j.vote.myVote === 'win', 'tribe perspective vote');
+      ok(vr.s === 200 && vr.j.vote && vr.j.vote.myVote === 'win' && vr.j.vote.canVote === false, 'tribe perspective vote');
+      const vr2 = await call('POST', '/tribe/posts/' + mv[0].id + '/vote', { choice: 'draw' }, tok);
+      ok(vr2.s === 409, 'tribe vote locked after first cast');
     }
     const phone2 = '199' + String(Math.floor(Math.random() * 1e8)).padStart(8, '0');
     const r2 = await call('POST', '/auth/register', { phone: phone2, password: pw, nickname: '路人', agree: true });

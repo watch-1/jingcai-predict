@@ -1,1 +1,1 @@
-window.APP_CONFIG={apiBase:"",platform:"web",version:"1.9.188"};
+window.APP_CONFIG={apiBase:"",platform:"web",version:"1.9.189"};
