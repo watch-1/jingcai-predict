@@ -305,6 +305,38 @@ try {
     .catch(() => { _bundledCrestIds = new Set(); });
 } catch (_) { _bundledCrestIds = new Set(); }
 
+/* ── Data-center player photos: APK-bundled assets (1.9.204) ── */
+const BUNDLED_PLAYER_BASE = 'assets/players/';
+let _bundledPlayerIds = null;
+try {
+  fetch(BUNDLED_PLAYER_BASE + 'manifest.json', { cache: 'force-cache' })
+    .then((r) => (r && r.ok ? r.json() : null))
+    .then((j) => {
+      _bundledPlayerIds = new Set(
+        (j && Array.isArray(j.playerIds) ? j.playerIds : []).map((id) => String(id))
+      );
+      try {
+        const rn = route().name;
+        if (rn === 'data') render({ force: true });
+      } catch (_) {}
+    })
+    .catch(() => { _bundledPlayerIds = new Set(); });
+} catch (_) { _bundledPlayerIds = new Set(); }
+
+function bundledPlayerPath(playerId) {
+  const pid = playerId != null && String(playerId) !== '' ? String(playerId) : '';
+  if (!pid) return '';
+  if (_bundledPlayerIds === null) return '';
+  if (_bundledPlayerIds.has(pid)) return BUNDLED_PLAYER_BASE + pid + '.png';
+  return '';
+}
+function dcPlayerPhotoSrc(row) {
+  const bundled = bundledPlayerPath(row && row.playerId);
+  if (bundled) return bundled;
+  if (!row || !row.photo) return '';
+  return API + '/api/logo?url=' + encodeURIComponent(row.photo);
+}
+
 function bundledCrestPath(teamId) {
   const tid = teamId != null && String(teamId) !== '' ? String(teamId) : '';
   if (!tid) return '';
@@ -984,6 +1016,28 @@ function dataTabSnapBodyHtml(lg, kind) {
   if (!snap || snap.lg !== lg || snap.kind !== kind || snap.sec !== dataSectionOf()) return null;
   return snap.dcHtml;
 }
+/** Escape infinite skeleton when boot + API both stall (身价榜等). */
+function scheduleDcBodyWatchdog(lg, kind) {
+  const token = Date.now();
+  S._dcWatchToken = token;
+  setTimeout(() => {
+    try {
+      if (S._dcWatchToken !== token) return;
+      if (route().name !== 'data' || dataLeagueOf() !== lg || dataKindOf() !== kind) return;
+      const key = lg + ':' + kind;
+      const cached = ensureDataCacheSlice(key);
+      if (dataCacheRenderable(cached, kind)) {
+        softPatchDataBody(lg, kind);
+        return;
+      }
+      if (S._dataLoadInflight && S._dataLoadInflight[key]) return;
+      const box = document.getElementById('dcBody');
+      if (!box || !box.querySelector('.sk-card')) return;
+      scheduleDataCenterRefresh(lg, kind, { urgent: true });
+      box.innerHTML = empty('数据加载较慢或网络异常，请重试。', '<button class="btn ghost sm" data-act="dataRefresh">重新加载</button>', '加载超时');
+    } catch (_) {}
+  }, 22000);
+}
 function bootShellEl() {
   return document.getElementById('boot-shell');
 }
@@ -1039,6 +1093,45 @@ function standingsSliceHasTeamIds(cached) {
     }
   }
   return false;
+}
+function standingsTeamIdCount(cached) {
+  let n = 0;
+  if (!cached || !cached.tables) return 0;
+  for (const tb of cached.tables) {
+    for (const r of tb.rows || []) {
+      if (r && r.teamId) n++;
+    }
+  }
+  return n;
+}
+/** Keep ESPN teamId on standings when a refresh returns name-only rows (tribe 法甲 empty). */
+function mergeStandingsPreferTeamIds(prev, next) {
+  if (!next || next.ok === false) return next;
+  if (!prev || prev.ok === false || !prev.tables) return next;
+  const pn = standingsTeamIdCount(prev);
+  const nn = standingsTeamIdCount(next);
+  if (pn <= 0 || nn >= pn) return next;
+  const byTeam = new Map();
+  for (const tb of prev.tables || []) {
+    for (const r of tb.rows || []) {
+      if (!r || !r.teamId) continue;
+      const k = String(r.team || '').trim().toLowerCase();
+      if (k) byTeam.set(k, String(r.teamId));
+    }
+  }
+  const tables = (next.tables || []).map((tb) => ({
+    ...tb,
+    rows: (tb.rows || []).map((r) => {
+      if (!r || r.teamId) return r;
+      const tid = byTeam.get(String(r.team || '').trim().toLowerCase());
+      return tid ? Object.assign({}, r, { teamId: tid }) : r;
+    }),
+  }));
+  const merged = Object.assign({}, next, { tables });
+  if (standingsTeamIdCount(merged) === 0 && pn > 0) {
+    merged.tables = prev.tables;
+  }
+  return merged;
 }
 /** Standings usable for tribe catalog need at least one teamId (legacy LS rows often lack it). */
 function dataCacheRenderable(cached, kind) {
@@ -1233,10 +1326,15 @@ function mergeBootPackSlice(key, payload) {
   const kind = String(key).split(':')[1] || 'standings';
   const existing = ensureDataCacheSlice(key);
   if (kind === 'standings') {
-    // Prefer boot/API rows that carry teamId so tribe「当前热门」can build.
-    if (dataCacheTribeReady(existing) && dataCacheTribeReady(payload)) return;
+    const exN = standingsTeamIdCount(existing);
+    const payN = standingsTeamIdCount(payload);
+    if (exN > 0 && payN > 0 && payN < exN) return;
+    if (dataCacheTribeReady(existing) && dataCacheTribeReady(payload) && payN <= exN) return;
     if (dataCacheTribeReady(existing) && !dataCacheTribeReady(payload)) return;
     if (!dataCacheRenderable(payload, kind)) return;
+    if (existing && existing.ok !== false && exN > payN) {
+      payload = mergeStandingsPreferTeamIds(existing, payload);
+    }
   } else {
     if (dataCacheRenderable(existing, kind)) return;
     if (!dataCacheRenderable(payload, kind)) return;
@@ -1246,30 +1344,34 @@ function mergeBootPackSlice(key, payload) {
   S.dataCache[key] = row;
   persistDataCacheSlice(key, row);
 }
+function afterBootPackMerged() {
+  try {
+    if (route().name === 'data') {
+      const lg = dataLeagueOf(), kind = dataKindOf();
+      if (dataCacheRenderable(ensureDataCacheSlice(lg + ':' + kind), kind)) {
+        if (!softPatchDataBody(lg, kind)) render({ force: true });
+      }
+    }
+  } catch (_) {}
+  try {
+    if ((route().name === 'tribe' || route().name === 'tribe-club') && tribeCatalogNeedsRebuildFromCache()) {
+      rebuildTribeCatalogFromCache({ renderIfTribe: true });
+    } else if (route().name === 'tribe' && S.tribeCat && S.tribeCat._settled) {
+      const side = tribeSideOf();
+      if (TRIBE_LEAGUES.some((l) => l.key === side) && !tribeTeamsForSide(side).length) {
+        rebuildTribeCatalogFromCache({ renderIfTribe: true });
+      }
+    }
+  } catch (_) {}
+}
 function loadDataCenterBootPack() {
   if (_bootPackInflight) return _bootPackInflight;
   _bootPackInflight = (async () => {
     try {
-      const base = (typeof CFG !== 'undefined' && CFG.apiBase) ? CFG.apiBase : '';
-      const r = await fetch(base + '/data-center-boot.json', { cache: 'force-cache' });
-      if (!r.ok) return;
-      const j = await r.json();
-      if (!j || !j.slices || typeof j.slices !== 'object') return;
-      for (const [key, payload] of Object.entries(j.slices)) mergeBootPackSlice(key, payload);
-      try {
-        if (route().name === 'data') {
-          const lg = dataLeagueOf(), kind = dataKindOf();
-          if (dataCacheRenderable(ensureDataCacheSlice(lg + ':' + kind), kind)) {
-            if (!softPatchDataBody(lg, kind)) render({ force: true });
-          }
-        }
-      } catch (_) {}
-      // 1.9.200: boot pack may arrive after ensureTribeCatalog settled empty/partial — re-render tribe.
-      try {
-        if ((route().name === 'tribe' || route().name === 'tribe-club') && tribeCatalogNeedsRebuildFromCache()) {
-          rebuildTribeCatalogFromCache({ renderIfTribe: true });
-        }
-      } catch (_) {}
+      let ok = await fetchTribeBootPackOnce({ timeoutMs: 8000, cache: 'no-store' });
+      if (!ok) ok = await fetchTribeBootPackOnce({ timeoutMs: 6000, cache: 'force-cache' });
+      if (!ok) return;
+      afterBootPackMerged();
     } catch (_) {}
   })();
   return _bootPackInflight;
@@ -2731,6 +2833,8 @@ function ensureTribeCatalog(opts) {
         await fetchTribeBootPackOnce({ timeoutMs: 8000, cache: 'no-store' });
         cat = buildTribeCatalogFromSlices(tribeStandingsSlicesFromCache());
       }
+      const richer = buildTribeCatalogFromSlices(tribeStandingsSlicesFromCache());
+      if (Object.keys(richer.byId || {}).length > Object.keys(cat.byId || {}).length) cat = richer;
       if (!Object.keys(cat.byId || {}).length) {
         try {
           for (const lg of TRIBE_LEAGUES) {
@@ -4089,8 +4193,9 @@ function renderScorersList(payload, kind) {
     const initial = esc([...(r.playerZh || r.player || '?')][0] || '?');
     const altPhoto = r.photoAlt || '';
     const lazyAttr = i >= 6 ? ' loading="lazy"' : '';
-    const photo = r.photo
-      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><img alt="" width="88" height="88" decoding="async"${lazyAttr} src="${esc(API + '/api/logo?url=' + encodeURIComponent(r.photo))}" onerror="var p=this.parentNode;if(!p)return;if(p.dataset.alt&&!p.dataset.retried){p.dataset.retried=1;this.src='${esc(API)}/api/logo?url='+encodeURIComponent(p.dataset.alt);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');p.textContent=p.dataset.letter||'?';this.remove();"></span>`
+    const phSrc = dcPlayerPhotoSrc(r);
+    const photo = phSrc
+      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><img alt="" width="88" height="88" decoding="async"${lazyAttr} src="${esc(phSrc)}" onerror="var p=this.parentNode,img=this;if(!p)return;var fb=p.dataset.alt;if(fb&&!img.dataset.retried){img.dataset.retried=1;img.src='${esc(API)}/api/logo?url='+encodeURIComponent(fb);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');p.textContent=p.dataset.letter||'?';img.remove();"></span>`
       : `<span class="dc-avatar letter">${initial}</span>`;
     const teamCrestOpts = r.teamId ? { teamId: r.teamId, eager: i < 8 } : null;
     const teamLogo = r.teamLogo ? badge(r.teamZh || r.team, 'sm', r.teamLogo, teamCrestOpts) : badge(r.teamZh || r.team, 'sm');
@@ -4175,7 +4280,9 @@ function pageData() {
     }
     h += `<div class="dc-body" id="dcBody">${skeleton(3)}</div>`;
     h += foot();
+    loadDataCenterBootPack();
     scheduleDataCenterRefresh(lg, kind, { urgent: true });
+    setTimeout(() => scheduleDcBodyWatchdog(lg, kind), 0);
     return h;
   }
   if (cached.ok === false) {
@@ -4239,6 +4346,9 @@ async function loadDataCenter(lg, kind, { soft, signal } = {}) {
       if (soft && hadRenderable && S.dataCache[key]) {
         j.refreshing = false;
         if (!j.updatedAt && S.dataCache[key].updatedAt) j.updatedAt = S.dataCache[key].updatedAt;
+      }
+      if (kind === 'standings' && S.dataCache[key]) {
+        j = mergeStandingsPreferTeamIds(S.dataCache[key], j);
       }
       S.dataCache[key] = j;
       persistDataCacheSlice(key, j);
@@ -10395,8 +10505,23 @@ document.addEventListener('click', async e => {
       return render({ force: true });
     }
     case 'tribeSide': {
-      setTribeSide(el.dataset.side || '__hot__');
+      const side = el.dataset.side || '__hot__';
+      setTribeSide(side);
       invalidateTabKeep('tribe');
+      if (TRIBE_LEAGUES.some((l) => l.key === side) && !tribeTeamsForSide(side).length) {
+        purgeStandingsWithoutTeamIds();
+        loadDataCenterBootPack();
+        const slice = ensureDataCacheSlice(side + ':standings');
+        if (dataCacheTribeReady(slice)) {
+          rebuildTribeCatalogFromCache({ renderIfTribe: true });
+        } else {
+          scheduleDataCenterRefresh(side, 'standings', { urgent: true });
+          if (S.tribeCat && S.tribeCat._settled) {
+            S.tribeCat._settled = false;
+            ensureTribeCatalog({ force: true });
+          }
+        }
+      }
       return render({ force: true });
     }
     case 'tribeFollow': return toggleTribeFollow(el.dataset.id);
