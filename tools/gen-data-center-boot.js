@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const lt = require('../lib/league-tables');
+const { listHotTribePosts } = require('../lib/tribe-feed');
 
 const LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'csl', 'ucl'];
 const VALUE_ESPN_BY_TM = (() => {
@@ -119,7 +120,7 @@ function slimPayload(kind, r, lgKey) {
       rows: (t.rows || []).slice(0, lgKey === 'ucl' ? 40 : 20).map((row) => slimRow(kind, row)),
     }));
   } else if (r.rows) {
-    const cap = kind === 'playervalues' ? 20 : 25;
+    const cap = kind === 'playervalues' ? 25 : 30;
     slim.rows = r.rows.slice(0, cap).map((row) => slimRow(kind, row));
   }
   if (kind === 'topkeepers') {
@@ -138,6 +139,7 @@ function slimPayload(kind, r, lgKey) {
       try {
         const r = await fn({ league: lg, refresh: kind === 'playervalues' });
         if (!r || r.ok === false) continue;
+        if (kind === 'topkeepers' && r.preparing && !(r.rows && r.rows.length)) continue;
         slices[`${lg}:${kind}`] = slimPayload(kind, r, lg);
       } catch (e) {
         console.warn('[boot]', lg, kind, e.message);
@@ -145,7 +147,34 @@ function slimPayload(kind, r, lgKey) {
     }
   }
   enrichPlayervalueIdsInSlices(slices);
+  try {
+    const { posts } = listHotTribePosts(null, 15, 0);
+    const hot = (posts || []).filter((p) => p.kind !== 'match_vote').map((p) => ({
+      id: p.id,
+      tribeId: p.tribeId,
+      kind: p.kind,
+      body: p.body,
+      replyCount: p.replyCount,
+      createdAt: p.createdAt,
+      author: p.author ? { nickname: p.author.nickname, avatar: p.author.avatar } : null,
+      reactions: p.reactions,
+    }));
+    slices['global:tribeHot'] = {
+      ok: true,
+      bootPack: true,
+      fetchedAt: new Date().toISOString(),
+      posts: hot,
+    };
+  } catch (e) {
+    console.warn('[boot] global:tribeHot', e.message);
+  }
   const outPath = path.join(__dirname, '..', 'public', 'data-center-boot.json');
+  try {
+    const prev = JSON.parse(fs.readFileSync(outPath, 'utf8'));
+    for (const [k, v] of Object.entries(prev.slices || {})) {
+      if (k.endsWith(':playervalues') && v && v.rows && v.rows.length && !slices[k]) slices[k] = v;
+    }
+  } catch (_) { /* first run */ }
   const out = { ver: 1, generatedAt: new Date().toISOString(), slices };
   fs.writeFileSync(outPath, JSON.stringify(out));
   const inlinePath = path.join(__dirname, '..', 'public', 'data-center-boot-slices.js');

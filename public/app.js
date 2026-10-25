@@ -1542,6 +1542,7 @@ function mergeBootPackSlice(key, payload) {
       payload = mergeStandingsPreferTeamIds(existing, payload);
     }
   } else {
+    if (kind === 'topkeepers' && payload.preparing && !(payload.rows && payload.rows.length)) return;
     if (dataCacheRenderable(existing, kind)) return;
     if (!dataCacheRenderable(payload, kind)) return;
   }
