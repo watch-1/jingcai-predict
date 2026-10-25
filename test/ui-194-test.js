@@ -20,11 +20,4 @@ assert.ok(/186,\s*194,\s*206/.test(block), 'silver-gray stop present');
 assert.ok(/homeAttitudeCardGlow/.test(appJs), 'per-card scroll glow retained');
 assert.ok(!/ha-pastel|ha-shell/.test(appJs), 'no section gradient flash layers');
 
-const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.194');
-const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.194/.test(ver));
-assert.ok(/VERSION_CODE=231/.test(ver));
-assert.ok(/jc-v1\.9\.194/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
-
 console.log('ui-194-test OK');

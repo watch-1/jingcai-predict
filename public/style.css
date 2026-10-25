@@ -578,14 +578,22 @@ body.me-drawer-on { overflow: hidden; }
   --ha-g: var(--ha-card-glow, 0);
   --ha-wrap-gold: rgba(255, 218, 168, 1);
   --ha-wrap-silver: rgba(186, 194, 206, 1);
+  /* 1.9.195: list-head (g=0) edge floor — still softer than g→1 ramp */
+  --ha-edge-bg-blend: 20%;
+  --ha-edge-border-soft: rgba(198, 190, 180, .82);
+  --ha-edge-border-firm: rgba(220, 224, 230, .95);
+  --ha-edge-shadow-a0: .026;
+  --ha-edge-shadow-a1: .035;
+  --ha-edge-shadow-b0: .052;
+  --ha-edge-shadow-b1: .078;
   position: relative; isolation: isolate;
   display: block; width: 100%; text-align: left; font: inherit; color: inherit;
   border-radius: 14px;
-  background: color-mix(in srgb, #f4efe6 calc((1 - var(--ha-g)) * 34%), #fff);
-  border: 1px solid color-mix(in srgb, rgba(244, 239, 230, .5) calc((1 - var(--ha-g)) * 100%), rgba(220, 224, 230, .95));
+  background: color-mix(in srgb, #f4efe6 calc((1 - var(--ha-g)) * var(--ha-edge-bg-blend)), #fff);
+  border: 1px solid color-mix(in srgb, var(--ha-edge-border-soft) calc((1 - var(--ha-g)) * 100%), var(--ha-edge-border-firm));
   box-shadow:
-    0 1px 3px rgba(26, 35, 54, calc(.015 + var(--ha-g) * .02)),
-    0 calc(1px + var(--ha-g) * 3px) calc(6px + var(--ha-g) * 12px) rgba(26, 35, 54, calc(.028 + var(--ha-g) * .05));
+    0 1px 3px rgba(26, 35, 54, calc(var(--ha-edge-shadow-a0) + var(--ha-g) * (var(--ha-edge-shadow-a1) - var(--ha-edge-shadow-a0)))),
+    0 calc(1px + var(--ha-g) * 3px) calc(6px + var(--ha-g) * 12px) rgba(26, 35, 54, calc(var(--ha-edge-shadow-b0) + var(--ha-g) * (var(--ha-edge-shadow-b1) - var(--ha-edge-shadow-b0))));
   padding: 12px 13px 11px; cursor: pointer;
   overflow: hidden;
   will-change: box-shadow, background-color;
