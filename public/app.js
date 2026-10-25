@@ -333,6 +333,19 @@ function playerIdForBundledPhoto(row) {
   const m = String(row.photo || '').match(/\/players\/(\d+)(?:\.|\/|$)/i);
   return m ? m[1] : '';
 }
+/** API-Football CDN placeholder when URL uses ESPN athlete id (not AF player id). */
+function isAfEspnIdPhotoUrl(url, espnPlayerId) {
+  if (!url || espnPlayerId == null || String(espnPlayerId) === '') return false;
+  const m = String(url).match(/media\.api-sports\.io\/football\/players\/(\d+)\./i);
+  return m && m[1] === String(espnPlayerId);
+}
+function pickDcNetworkPhoto(row) {
+  if (!row) return '';
+  const pid = playerIdForBundledPhoto(row);
+  const alt = row.photoAlt && !isAfEspnIdPhotoUrl(row.photoAlt, pid) ? row.photoAlt : '';
+  const main = row.photo && !isAfEspnIdPhotoUrl(row.photo, pid) ? row.photo : '';
+  return main || alt || '';
+}
 function bundledPlayerPath(playerId) {
   const pid = playerId != null && String(playerId) !== '' ? String(playerId) : '';
   if (!pid) return '';
@@ -346,11 +359,12 @@ function dcPlayerPhotoSrc(row) {
   const pid = playerIdForBundledPhoto(row);
   const bundled = bundledPlayerPath(pid);
   if (bundled) return bundled;
-  if (!row || !row.photo) return '';
-  if (/^https?:\/\//i.test(row.photo) && IS_APP && /media\.api-sports\.io\/football\/players\/\d+/i.test(row.photo)) {
-    return row.photo;
+  const net = pickDcNetworkPhoto(row);
+  if (!net) return '';
+  if (/^https?:\/\//i.test(net) && IS_APP && /media\.api-sports\.io\/football\/players\/\d+/i.test(net)) {
+    return net;
   }
-  return API + '/api/logo?url=' + encodeURIComponent(row.photo);
+  return API + '/api/logo?url=' + encodeURIComponent(net);
 }
 
 function bundledCrestPath(teamId) {
@@ -4273,7 +4287,7 @@ function renderScorersList(payload, kind) {
   let h = `<div class="dc-scorers">`;
   rows.forEach((r, i) => {
     const initial = esc([...(r.playerZh || r.player || '?')][0] || '?');
-    const altPhoto = r.photoAlt || '';
+    const altPhoto = (r.photoAlt && !isAfEspnIdPhotoUrl(r.photoAlt, r.playerId)) ? r.photoAlt : '';
     const lazyAttr = i >= 6 ? ' loading="lazy"' : '';
     const phSrc = dcPlayerPhotoSrc(r);
     const photo = phSrc

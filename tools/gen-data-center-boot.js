@@ -6,13 +6,14 @@ const path = require('path');
 const lt = require('../lib/league-tables');
 
 const LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'csl', 'ucl'];
-const KINDS = ['standings', 'topscorers', 'topassists', 'clubvalues', 'playervalues'];
+const KINDS = ['standings', 'topscorers', 'topassists', 'clubvalues', 'playervalues', 'topkeepers'];
 const FN = {
   standings: lt.getStandings,
   topscorers: lt.getTopScorers,
   topassists: lt.getTopAssists,
   clubvalues: lt.getClubMarketValues,
   playervalues: lt.getPlayerMarketValues,
+  topkeepers: lt.getTopKeepers,
 };
 
 function slimRow(kind, row) {
@@ -29,6 +30,14 @@ function slimRow(kind, row) {
       tmId: row.tmId, photo: '', photoAlt: row.photoAlt,
       team: row.team, teamZh: row.teamZh, teamId: row.teamId, teamLogo: row.teamLogo,
       labelZh: row.labelZh, text: row.text, marketValueEur: row.marketValueEur,
+    };
+  }
+  if (kind === 'topkeepers') {
+    return {
+      rank: row.rank, player: row.player, playerZh: row.playerZh, playerId: row.playerId,
+      photo: row.photo, photoAlt: row.photoAlt, team: row.team, teamZh: row.teamZh,
+      teamId: row.teamId, teamLogo: row.teamLogo, cleanSheets: row.cleanSheets,
+      saves: row.saves, goalsConceded: row.goalsConceded,
     };
   }
   return {
