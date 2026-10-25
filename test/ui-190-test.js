@@ -20,7 +20,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 
 assert.strictEqual(pkg.version, '1.9.190');
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
 assert.ok(/VERSION=1\.9\.190/.test(ver));
-assert.ok(/VERSION_CODE=226/.test(ver));
+assert.ok(/VERSION_CODE=227/.test(ver));
 assert.ok(/jc-v1\.9\.190/.test(fs.readFileSync(path.join(__dirname, '../public/sw.js'), 'utf8')));
 
 console.log('ui-190-test OK');
