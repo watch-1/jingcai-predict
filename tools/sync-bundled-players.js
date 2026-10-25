@@ -23,6 +23,20 @@ try { sharp = require('sharp'); } catch (_) { sharp = null; }
 const root = path.join(__dirname, '..');
 const bootPath = path.join(root, 'public/data-center-boot.json');
 const outDir = path.join(root, 'public/assets/players');
+const VALUE_ESPN_BY_TM = (() => {
+  try {
+    return require('../data/value-board-espn-overrides.json').byTmId || {};
+  } catch (_) {
+    return {};
+  }
+})();
+const FAMOUS_PHOTO_BY_ESPN = (() => {
+  try {
+    return require('../data/famous-player-photo-urls.json').byEspnId || {};
+  } catch (_) {
+    return {};
+  }
+})();
 
 const LEAGUES = ['epl', 'laliga', 'seriea', 'bundesliga', 'ligue1', 'csl', 'ucl'];
 const SLICE_LIMITS = {
@@ -77,8 +91,19 @@ function expandPhotoUrls(raw) {
   return [u];
 }
 
+function resolveEspnIdForRow(row, leaderPhotos) {
+  if (!row) return '';
+  if (row.playerId != null && String(row.playerId) !== '') return String(row.playerId);
+  const tm = row.tmId != null && String(row.tmId) !== '' ? String(row.tmId) : '';
+  if (tm && VALUE_ESPN_BY_TM[tm]) return String(VALUE_ESPN_BY_TM[tm]);
+  const nn = String(row.player || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const tt = String(row.team || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return '';
+}
+
 function photoCandidatesForRow(row, leaderPhotos) {
-  const id = row && row.playerId != null ? String(row.playerId) : '';
+  let id = row && row.playerId != null ? String(row.playerId) : '';
+  if (!id) id = resolveEspnIdForRow(row, leaderPhotos);
   const urls = [];
   const push = (raw) => {
     for (const u of expandPhotoUrls(raw)) {
@@ -87,6 +112,10 @@ function photoCandidatesForRow(row, leaderPhotos) {
       if (!urls.includes(u)) urls.push(u);
     }
   };
+  if (id) {
+    push(`https://a.espncdn.com/i/headshots/soccer/players/full/${id}.png`);
+    if (FAMOUS_PHOTO_BY_ESPN[id]) push(FAMOUS_PHOTO_BY_ESPN[id]);
+  }
   push(row && row.photo);
   push(row && row.photoAlt);
   if (id && leaderPhotos && leaderPhotos.byId.has(id)) push(leaderPhotos.byId.get(id));
@@ -126,9 +155,10 @@ function collectFromBoot() {
   const leaderPhotos = buildLeaderPhotoMaps(boot);
   const map = new Map();
   const ingest = (row) => {
-    if (!row || row.playerId == null || String(row.playerId) === '') return;
-    const id = String(row.playerId);
-    const urls = photoCandidatesForRow(row, leaderPhotos);
+    if (!row) return;
+    const id = resolveEspnIdForRow(row, leaderPhotos);
+    if (!id) return;
+    const urls = photoCandidatesForRow(Object.assign({}, row, { playerId: id }), leaderPhotos);
     if (!map.has(id)) map.set(id, { id, urls, player: row.player, team: row.team });
     else {
       const e = map.get(id);
@@ -162,11 +192,38 @@ async function collectFromLiveKeepers() {
   return rows;
 }
 
+async function fetchEspnRosterPhotoMap(slug, teamId) {
+  const out = new Map();
+  if (!slug || !teamId) return out;
+  try {
+    const j = await new Promise((resolve, reject) => {
+      const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/${slug}/teams/${teamId}/roster`;
+      https.get(url, { headers: { 'User-Agent': 'jingcai-player-sync/1.9.209' } }, (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); } catch (e) { reject(e); }
+        });
+      }).on('error', reject);
+    });
+    for (const a of j.athletes || []) {
+      const id = a.id != null ? String(a.id) : '';
+      const head = a.headshot;
+      const photo = (head && typeof head === 'object' ? head.href : head) || '';
+      if (id) out.set(id, photo);
+    }
+  } catch (e) {
+    console.warn('[sync-players] roster', slug, teamId, e.message);
+  }
+  return out;
+}
+
 function mergePlayers(map, list, leaderPhotos) {
   for (const row of list || []) {
-    if (!row || row.playerId == null || String(row.playerId) === '') continue;
-    const id = String(row.playerId);
-    const urls = photoCandidatesForRow(row, leaderPhotos);
+    if (!row) continue;
+    const id = resolveEspnIdForRow(row, leaderPhotos);
+    if (!id) continue;
+    const urls = photoCandidatesForRow(Object.assign({}, row, { playerId: id }), leaderPhotos);
     if (!map.has(id)) map.set(id, { id, urls, player: row.player, team: row.team });
     else {
       const e = map.get(id);
@@ -205,7 +262,7 @@ async function fetchEspnLeaderPhotoMap(slug) {
   return out;
 }
 
-async function expandFromEspnCaches(map, leaderPhotos, live) {
+async function expandFromEspnCaches(map, leaderPhotos, live, boot) {
   const et = require('../lib/espn-tables');
   const { DATA_DIR } = require('../lib/db');
   const dir = path.join(DATA_DIR, 'live-stats', 'espn', 'tables');
@@ -236,6 +293,29 @@ async function expandFromEspnCaches(map, leaderPhotos, live) {
     }
   }
   if (live) {
+    const rosterTeams = new Set();
+    for (const lg of LEAGUES) {
+      const slug = et.SLUG[lg];
+      if (!slug) continue;
+      const pv = boot.slices && boot.slices[lg + ':playervalues'];
+      for (const r of (pv && pv.rows) || []) {
+        if (!r || !r.teamId) continue;
+        rosterTeams.add(slug + '|' + String(r.teamId));
+      }
+    }
+    for (const key of rosterTeams) {
+      const [slug, tid] = key.split('|');
+      const photos = await fetchEspnRosterPhotoMap(slug, tid);
+      for (const entry of map.values()) {
+        const ph = photos.get(entry.id);
+        if (ph) {
+          for (const u of expandPhotoUrls(ph)) {
+            if (!entry.urls.includes(u)) entry.urls.push(u);
+          }
+        }
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
     for (const lg of LEAGUES) {
       const slug = et.SLUG[lg];
       if (!slug) continue;
@@ -355,9 +435,9 @@ async function downloadOne(entry) {
 async function main() {
   const live = process.argv.includes('--live');
   fs.mkdirSync(outDir, { recursive: true });
-  const { players: bootPlayers, leaderPhotos } = collectFromBoot();
+  const { players: bootPlayers, leaderPhotos, boot } = collectFromBoot();
   const map = new Map(bootPlayers.map((p) => [p.id, p]));
-  await expandFromEspnCaches(map, leaderPhotos, live);
+  await expandFromEspnCaches(map, leaderPhotos, live, boot);
   if (live) {
     const keeperRows = await collectFromLiveKeepers();
     mergePlayers(map, keeperRows, leaderPhotos);

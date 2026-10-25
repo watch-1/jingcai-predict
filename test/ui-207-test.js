@@ -25,15 +25,15 @@ assert.ok(boot.slices['epl:topassists'] && boot.slices['epl:topassists'].rows.le
 assert.ok(boot.slices['ligue1:playervalues'] && boot.slices['ligue1:playervalues'].rows.length >= 5, 'ligue1 playervalues boot');
 assert.ok(boot.slices['epl:topkeepers'] && boot.slices['epl:topkeepers'].preparing, 'epl topkeepers preparing boot');
 
-assert.ok(/jc-v1\.9\.207/.test(swJs), 'SW VER 1.9.207');
+assert.ok(/jc-v1\.9\.209/.test(swJs), 'SW VER 1.9.209');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.207');
+assert.strictEqual(pkg.version, '1.9.209');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.207/.test(ver));
-assert.ok(/VERSION_CODE=244/.test(ver));
+assert.ok(/VERSION=1\.9\.209/.test(ver));
+assert.ok(/VERSION_CODE=246/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.strictEqual(cfg.version, '1.9.207');
-assert.strictEqual(cfg.bundledPlayerIds.length, 255, '255 bundled players from 1.9.206 pack');
+assert.strictEqual(cfg.version, '1.9.209');
+assert.ok(cfg.bundledPlayerIds.length >= 270, 'expanded bundled player pack');
 
 console.log('ui-207-test OK');

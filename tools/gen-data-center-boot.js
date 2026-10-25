@@ -6,6 +6,48 @@ const path = require('path');
 const lt = require('../lib/league-tables');
 
 const LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'csl', 'ucl'];
+const VALUE_ESPN_BY_TM = (() => {
+  try {
+    return require('../data/value-board-espn-overrides.json').byTmId || {};
+  } catch (_) {
+    return {};
+  }
+})();
+
+function pnorm(s) {
+  return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Cross-league topscorers/assists → playervalues playerId (身价榜 boot 行常缺 ESPN id). */
+function enrichPlayervalueIdsInSlices(slices) {
+  const byClub = new Map();
+  const byName = new Map();
+  for (const [key, slice] of Object.entries(slices)) {
+    if (!slice || !slice.rows) continue;
+    if (!/:topscorers$|:topassists$/.test(key)) continue;
+    for (const r of slice.rows) {
+      const pid = r.playerId != null && String(r.playerId) !== '' ? String(r.playerId) : '';
+      if (!pid) continue;
+      const nn = pnorm(r.player);
+      const tt = pnorm(r.team);
+      if (nn && tt) byClub.set(nn + '|' + tt, pid);
+      if (nn && !byName.has(nn)) byName.set(nn, pid);
+    }
+  }
+  for (const [key, slice] of Object.entries(slices)) {
+    if (!key.endsWith(':playervalues') || !slice || !slice.rows) continue;
+    for (const r of slice.rows) {
+      if (!r) continue;
+      if (r.playerId != null && String(r.playerId) !== '') continue;
+      const nn = pnorm(r.player);
+      const tt = pnorm(r.team);
+      let pid = (nn && tt && byClub.get(nn + '|' + tt)) || (nn && byName.get(nn)) || '';
+      const tm = r.tmId != null && String(r.tmId) !== '' ? String(r.tmId) : '';
+      if (!pid && tm && VALUE_ESPN_BY_TM[tm]) pid = String(VALUE_ESPN_BY_TM[tm]);
+      if (pid) r.playerId = pid;
+    }
+  }
+}
 const KINDS = ['standings', 'topscorers', 'topassists', 'topkeepers', 'clubvalues', 'playervalues'];
 const FN = {
   standings: lt.getStandings,
@@ -102,11 +144,16 @@ function slimPayload(kind, r, lgKey) {
       }
     }
   }
+  enrichPlayervalueIdsInSlices(slices);
   const outPath = path.join(__dirname, '..', 'public', 'data-center-boot.json');
   const out = { ver: 1, generatedAt: new Date().toISOString(), slices };
   fs.writeFileSync(outPath, JSON.stringify(out));
+  const inlinePath = path.join(__dirname, '..', 'public', 'data-center-boot-slices.js');
+  fs.writeFileSync(inlinePath, 'window.__JC_DC_BOOT__=' + JSON.stringify(out) + ';\n');
   const st = fs.statSync(outPath);
+  const stInline = fs.statSync(inlinePath);
   console.log('wrote', outPath, st.size, 'bytes', Object.keys(slices).length, 'slices');
+  console.log('wrote', inlinePath, stInline.size, 'bytes (sync APK first paint)');
 })().catch((e) => {
   console.error(e);
   process.exit(1);

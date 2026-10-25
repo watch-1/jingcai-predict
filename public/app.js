@@ -327,11 +327,74 @@ try {
     .catch(() => { if (_bundledPlayerIds === null) _bundledPlayerIds = new Set(); });
 } catch (_) { if (_bundledPlayerIds === null) _bundledPlayerIds = new Set(); }
 
-function playerIdForBundledPhoto(row) {
+const VALUE_ESPN_BY_TM = (CFG.valueBoardEspnByTmId && typeof CFG.valueBoardEspnByTmId === 'object')
+  ? CFG.valueBoardEspnByTmId
+  : {
+    '683840': '250465', '502670': '274745', '670681': '355061', '487469': '288897',
+    '580195': '303821', '495666': '277385', '398073': '240233', '371998': '252107',
+    '581678': '291281', '566723': '286831',
+  };
+function dcNormPlayerKey(s) {
+  return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+let _dcLeaderEspnByClub = null;
+let _dcLeaderEspnByName = null;
+function rebuildDcLeaderEspnMaps() {
+  const byClub = new Map();
+  const byName = new Map();
+  const sources = [];
+  if (_bootPackSlices && typeof _bootPackSlices === 'object') sources.push(_bootPackSlices);
+  try {
+    if (S.dataCache && typeof S.dataCache === 'object') {
+      for (const [k, v] of Object.entries(S.dataCache)) {
+        if (v) sources.push({ [k]: v });
+      }
+    }
+  } catch (_) {}
+  for (const bag of sources) {
+    for (const [key, slice] of Object.entries(bag)) {
+      if (!slice || !slice.rows || !/:topscorers$|:topassists$|:playervalues$/.test(key)) continue;
+      for (const r of slice.rows) {
+        if (!r) continue;
+        const pid = resolveDcPlayerEspnId(r, true);
+        if (!pid) continue;
+        const nn = dcNormPlayerKey(r.player);
+        const tt = dcNormPlayerKey(r.team);
+        if (nn && tt) byClub.set(nn + '|' + tt, pid);
+        if (nn && !byName.has(nn)) byName.set(nn, pid);
+      }
+    }
+  }
+  _dcLeaderEspnByClub = byClub;
+  _dcLeaderEspnByName = byName;
+}
+function resolveDcPlayerEspnId(row, skipLeaderLookup) {
   if (!row) return '';
   if (row.playerId != null && String(row.playerId) !== '') return String(row.playerId);
-  const m = String(row.photo || '').match(/\/players\/(\d+)(?:\.|\/|$)/i);
+  const tm = row.tmId != null && String(row.tmId) !== '' ? String(row.tmId) : '';
+  if (tm && VALUE_ESPN_BY_TM[tm]) return String(VALUE_ESPN_BY_TM[tm]);
+  if (!skipLeaderLookup) {
+    if (!_dcLeaderEspnByClub) rebuildDcLeaderEspnMaps();
+    const nn = dcNormPlayerKey(row.player);
+    const tt = dcNormPlayerKey(row.team);
+    if (nn && tt && _dcLeaderEspnByClub.has(nn + '|' + tt)) return _dcLeaderEspnByClub.get(nn + '|' + tt);
+    if (nn && _dcLeaderEspnByName && _dcLeaderEspnByName.has(nn)) return _dcLeaderEspnByName.get(nn);
+  }
+  const m = String(row.photo || row.photoAlt || '').match(/\/players\/(\d+)(?:\.|\/|$)/i);
   return m ? m[1] : '';
+}
+function playerIdForBundledPhoto(row) {
+  return resolveDcPlayerEspnId(row);
+}
+function espnSoccerHeadshotUrl(espnId) {
+  const id = espnId != null && String(espnId) !== '' ? String(espnId) : '';
+  if (!id) return '';
+  return 'https://a.espncdn.com/i/headshots/soccer/players/full/' + id + '.png';
+}
+function tmPortraitUrl(tmId) {
+  const id = tmId != null && String(tmId) !== '' ? String(tmId) : '';
+  if (!id) return '';
+  return 'https://img.a.transfermarkt.technology/portrait/header/' + id + '.jpg';
 }
 /** API-Football CDN placeholder when URL uses ESPN athlete id (not AF player id). */
 function isAfEspnIdPhotoUrl(url, espnPlayerId) {
@@ -360,11 +423,45 @@ function dcPlayerPhotoSrc(row) {
   const bundled = bundledPlayerPath(pid);
   if (bundled) return bundled;
   const net = pickDcNetworkPhoto(row);
-  if (!net) return '';
-  if (/^https?:\/\//i.test(net) && IS_APP && /media\.api-sports\.io\/football\/players\/\d+/i.test(net)) {
-    return net;
+  if (net) {
+    if (/^https?:\/\//i.test(net) && IS_APP && /media\.api-sports\.io\/football\/players\/\d+/i.test(net)) {
+      return net;
+    }
+    return API + '/api/logo?url=' + encodeURIComponent(net);
   }
-  return API + '/api/logo?url=' + encodeURIComponent(net);
+  const espn = pid ? espnSoccerHeadshotUrl(pid) : '';
+  if (espn) return API + '/api/logo?url=' + encodeURIComponent(espn);
+  const tm = row && row.tmId != null && String(row.tmId) !== '' ? tmPortraitUrl(row.tmId) : '';
+  if (tm) return API + '/api/logo?url=' + encodeURIComponent(tm);
+  return '';
+}
+function dcAvatarImgError(img) {
+  try {
+    const p = img && img.parentNode;
+    if (!p || p.dataset.fell) return;
+    const fb = p.dataset.alt;
+    const pid = p.dataset.pid || '';
+    const tmid = p.dataset.tmid || '';
+    if (fb && !img.dataset.retriedAlt) {
+      img.dataset.retriedAlt = '1';
+      img.src = API + '/api/logo?url=' + encodeURIComponent(fb);
+      return;
+    }
+    if (pid && !img.dataset.retriedEspn) {
+      img.dataset.retriedEspn = '1';
+      img.src = API + '/api/logo?url=' + encodeURIComponent(espnSoccerHeadshotUrl(pid));
+      return;
+    }
+    if (tmid && !img.dataset.retriedTm) {
+      img.dataset.retriedTm = '1';
+      img.src = API + '/api/logo?url=' + encodeURIComponent(tmPortraitUrl(tmid));
+      return;
+    }
+    p.dataset.fell = '1';
+    p.classList.add('letter');
+    p.textContent = p.dataset.letter || '?';
+    img.remove();
+  } catch (_) {}
 }
 
 function bundledCrestPath(teamId) {
@@ -1378,6 +1475,21 @@ function bootWarmAllDataCenter() { /* intentionally empty */ }
 let _bootPackInflight = null;
 let _bootPackOk = false;
 let _bootPackSlices = null;
+/** 1.9.209: sync-parse boot slices shipped in APK (no fetch wait for 德甲/法甲射手). */
+function seedBootPackFromInline() {
+  try {
+    const j = typeof window !== 'undefined' ? window.__JC_DC_BOOT__ : null;
+    if (!j || !j.slices || typeof j.slices !== 'object') return false;
+    if (_bootPackSlices === j.slices && _bootPackOk) return true;
+    _bootPackSlices = j.slices;
+    _bootPackOk = true;
+    for (const [key, payload] of Object.entries(j.slices)) mergeBootPackSlice(key, payload);
+    rebuildDcLeaderEspnMaps();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 function tryMergeBootPackSlice(lg, kind) {
   const key = lg + ':' + kind;
   const payload = _bootPackSlices && _bootPackSlices[key];
@@ -1385,6 +1497,7 @@ function tryMergeBootPackSlice(lg, kind) {
 }
 /** Sync merge boot slice before deciding skeleton (1.9.207). */
 function primeDataSliceFromBoot(lg, kind) {
+  seedBootPackFromInline();
   tryMergeBootPackSlice(lg, kind);
   if (!_bootPackOk && !_bootPackInflight) loadDataCenterBootPack();
   return ensureDataCacheSlice(lg + ':' + kind);
@@ -1436,6 +1549,7 @@ function mergeBootPackSlice(key, payload) {
   S.dataCache = S.dataCache || {};
   S.dataCache[key] = row;
   persistDataCacheSlice(key, row);
+  try { rebuildDcLeaderEspnMaps(); } catch (_) {}
 }
 function afterBootPackMerged() {
   try {
@@ -1459,6 +1573,7 @@ function afterBootPackMerged() {
 }
 function loadDataCenterBootPack(opts) {
   const force = !!(opts && opts.force);
+  seedBootPackFromInline();
   if (_bootPackOk && !force) return Promise.resolve(true);
   if (_bootPackInflight && !force) return _bootPackInflight;
   _bootPackInflight = (async () => {
@@ -4311,10 +4426,13 @@ function renderScorersList(payload, kind) {
     const initial = esc([...(r.playerZh || r.player || '?')][0] || '?');
     const altPhoto = (r.photoAlt && !isAfEspnIdPhotoUrl(r.photoAlt, r.playerId)) ? r.photoAlt : '';
     const lazyAttr = i >= 6 ? ' loading="lazy"' : '';
+    const resolvedPid = resolveDcPlayerEspnId(r);
+    const tmAttr = (r.tmId != null && String(r.tmId) !== '') ? ` data-tmid="${esc(String(r.tmId))}"` : '';
+    const pidAttr = resolvedPid ? ` data-pid="${esc(resolvedPid)}"` : '';
     const phSrc = dcPlayerPhotoSrc(r);
     const photo = phSrc
-      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"><img alt="" width="88" height="88" decoding="async"${lazyAttr} src="${esc(phSrc)}" onerror="var p=this.parentNode,img=this;if(!p)return;var fb=p.dataset.alt;if(fb&&!img.dataset.retried){img.dataset.retried=1;img.src='${esc(API)}/api/logo?url='+encodeURIComponent(fb);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');p.textContent=p.dataset.letter||'?';img.remove();"></span>`
-      : `<span class="dc-avatar letter">${initial}</span>`;
+      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"${pidAttr}${tmAttr}><img alt="" width="88" height="88" decoding="async"${lazyAttr} src="${esc(phSrc)}" onerror="dcAvatarImgError(this)"></span>`
+      : `<span class="dc-avatar letter"${pidAttr}${tmAttr} data-letter="${initial}">${initial}</span>`;
     const teamCrestOpts = r.teamId ? { teamId: r.teamId, eager: i < 8 } : null;
     const teamLogo = r.teamLogo ? badge(r.teamZh || r.team, 'sm', r.teamLogo, teamCrestOpts) : badge(r.teamZh || r.team, 'sm');
     const primary = isMv
@@ -11624,6 +11742,7 @@ hydrateFromCache(); // 1.9.124: JSON lists
 hydrateKbPacksCache(); // 1.9.158: KB list before first /kb paint
 if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.161: idle KB warm; DC queue yields while #/kb or KB in-flight
 hydratePredictCache(); // 1.9.125: predict reports so home sig matches snap
+seedBootPackFromInline(); // 1.9.209: sync APK boot before any fetch
 loadDataCenterBootPack(); // 1.9.156: bundled slices for first install / empty LS
 ensurePartnerWatermark();
 try { document.documentElement.setAttribute('data-boot', '1'); } catch (_) {}
