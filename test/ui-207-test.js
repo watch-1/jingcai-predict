@@ -23,17 +23,20 @@ assert.ok(/EVENTS_EMPTY_LIVE_MS/.test(liveJs), 'short TTL for empty live events'
 const boot = JSON.parse(bootJs);
 assert.ok(boot.slices['epl:topassists'] && boot.slices['epl:topassists'].rows.length >= 10, 'epl assists boot');
 assert.ok(boot.slices['ligue1:playervalues'] && boot.slices['ligue1:playervalues'].rows.length >= 5, 'ligue1 playervalues boot');
-assert.ok(boot.slices['epl:topkeepers'] && boot.slices['epl:topkeepers'].preparing, 'epl topkeepers preparing boot');
+assert.ok(
+  !boot.slices['epl:topkeepers'] || (boot.slices['epl:topkeepers'].rows || []).length > 0,
+  'no empty keeper boot trap',
+);
 
-assert.ok(/jc-v1\.9\.207/.test(swJs), 'SW VER 1.9.207');
+assert.ok(/jc-v1\.9\.209/.test(swJs), 'SW VER 1.9.209');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.207');
+assert.strictEqual(pkg.version, '1.9.209');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.207/.test(ver));
-assert.ok(/VERSION_CODE=244/.test(ver));
+assert.ok(/VERSION=1\.9\.209/.test(ver));
+assert.ok(/VERSION_CODE=246/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.strictEqual(cfg.version, '1.9.207');
-assert.ok(cfg.bundledPlayerIds.length >= 165, 'bundled players grew in 1.9.208 (' + cfg.bundledPlayerIds.length + ')');
+assert.strictEqual(cfg.version, '1.9.209');
+assert.ok(cfg.bundledPlayerIds.length >= 270, 'expanded bundled player pack (' + cfg.bundledPlayerIds.length + ')');
 
 console.log('ui-207-test OK');

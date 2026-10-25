@@ -327,11 +327,74 @@ try {
     .catch(() => { if (_bundledPlayerIds === null) _bundledPlayerIds = new Set(); });
 } catch (_) { if (_bundledPlayerIds === null) _bundledPlayerIds = new Set(); }
 
-function playerIdForBundledPhoto(row) {
+const VALUE_ESPN_BY_TM = (CFG.valueBoardEspnByTmId && typeof CFG.valueBoardEspnByTmId === 'object')
+  ? CFG.valueBoardEspnByTmId
+  : {
+    '683840': '250465', '502670': '274745', '670681': '355061', '487469': '288897',
+    '580195': '303821', '495666': '277385', '398073': '240233', '371998': '252107',
+    '581678': '291281', '566723': '286831',
+  };
+function dcNormPlayerKey(s) {
+  return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+let _dcLeaderEspnByClub = null;
+let _dcLeaderEspnByName = null;
+function rebuildDcLeaderEspnMaps() {
+  const byClub = new Map();
+  const byName = new Map();
+  const sources = [];
+  if (_bootPackSlices && typeof _bootPackSlices === 'object') sources.push(_bootPackSlices);
+  try {
+    if (S.dataCache && typeof S.dataCache === 'object') {
+      for (const [k, v] of Object.entries(S.dataCache)) {
+        if (v) sources.push({ [k]: v });
+      }
+    }
+  } catch (_) {}
+  for (const bag of sources) {
+    for (const [key, slice] of Object.entries(bag)) {
+      if (!slice || !slice.rows || !/:topscorers$|:topassists$|:playervalues$/.test(key)) continue;
+      for (const r of slice.rows) {
+        if (!r) continue;
+        const pid = resolveDcPlayerEspnId(r, true);
+        if (!pid) continue;
+        const nn = dcNormPlayerKey(r.player);
+        const tt = dcNormPlayerKey(r.team);
+        if (nn && tt) byClub.set(nn + '|' + tt, pid);
+        if (nn && !byName.has(nn)) byName.set(nn, pid);
+      }
+    }
+  }
+  _dcLeaderEspnByClub = byClub;
+  _dcLeaderEspnByName = byName;
+}
+function resolveDcPlayerEspnId(row, skipLeaderLookup) {
   if (!row) return '';
   if (row.playerId != null && String(row.playerId) !== '') return String(row.playerId);
-  const m = String(row.photo || '').match(/\/players\/(\d+)(?:\.|\/|$)/i);
+  const tm = row.tmId != null && String(row.tmId) !== '' ? String(row.tmId) : '';
+  if (tm && VALUE_ESPN_BY_TM[tm]) return String(VALUE_ESPN_BY_TM[tm]);
+  if (!skipLeaderLookup) {
+    if (!_dcLeaderEspnByClub) rebuildDcLeaderEspnMaps();
+    const nn = dcNormPlayerKey(row.player);
+    const tt = dcNormPlayerKey(row.team);
+    if (nn && tt && _dcLeaderEspnByClub.has(nn + '|' + tt)) return _dcLeaderEspnByClub.get(nn + '|' + tt);
+    if (nn && _dcLeaderEspnByName && _dcLeaderEspnByName.has(nn)) return _dcLeaderEspnByName.get(nn);
+  }
+  const m = String(row.photo || row.photoAlt || '').match(/\/players\/(\d+)(?:\.|\/|$)/i);
   return m ? m[1] : '';
+}
+function playerIdForBundledPhoto(row) {
+  return resolveDcPlayerEspnId(row);
+}
+function espnSoccerHeadshotUrl(espnId) {
+  const id = espnId != null && String(espnId) !== '' ? String(espnId) : '';
+  if (!id) return '';
+  return 'https://a.espncdn.com/i/headshots/soccer/players/full/' + id + '.png';
+}
+function tmPortraitUrl(tmId) {
+  const id = tmId != null && String(tmId) !== '' ? String(tmId) : '';
+  if (!id) return '';
+  return 'https://img.a.transfermarkt.technology/portrait/header/' + id + '.jpg';
 }
 /** API-Football CDN placeholder when URL uses ESPN athlete id (not AF player id). */
 function isAfEspnIdPhotoUrl(url, espnPlayerId) {
@@ -339,25 +402,12 @@ function isAfEspnIdPhotoUrl(url, espnPlayerId) {
   const m = String(url).match(/media\.api-sports\.io\/football\/players\/(\d+)\./i);
   return m && m[1] === String(espnPlayerId);
 }
-function tmPortraitUrl(row) {
-  if (!row || row.tmId == null || String(row.tmId) === '') return '';
-  return `https://img.a.transfermarkt.technology/portrait/header/${String(row.tmId)}.jpg`;
-}
 function pickDcNetworkPhoto(row) {
   if (!row) return '';
   const pid = playerIdForBundledPhoto(row);
   const alt = row.photoAlt && !isAfEspnIdPhotoUrl(row.photoAlt, pid) ? row.photoAlt : '';
   const main = row.photo && !isAfEspnIdPhotoUrl(row.photo, pid) ? row.photo : '';
-  const tm = tmPortraitUrl(row);
-  if (main || alt || tm) return main || alt || tm;
-  if (pid && /^\d+$/.test(pid)) {
-    return `https://a.espncdn.com/i/headshots/soccer/players/full/${pid}.png`;
-  }
-  return '';
-}
-function dcPhotoProxyUrl(net) {
-  if (!net || !/^https?:\/\//i.test(net)) return '';
-  return API + '/api/logo?url=' + encodeURIComponent(net);
+  return main || alt || '';
 }
 function bundledPlayerPath(playerId) {
   const pid = playerId != null && String(playerId) !== '' ? String(playerId) : '';
@@ -373,11 +423,45 @@ function dcPlayerPhotoSrc(row) {
   const bundled = bundledPlayerPath(pid);
   if (bundled) return bundled;
   const net = pickDcNetworkPhoto(row);
-  if (!net) return '';
-  if (/^https?:\/\//i.test(net) && IS_APP && /media\.api-sports\.io\/football\/players\/\d+/i.test(net)) {
-    return net;
+  if (net) {
+    if (/^https?:\/\//i.test(net) && IS_APP && /media\.api-sports\.io\/football\/players\/\d+/i.test(net)) {
+      return net;
+    }
+    return API + '/api/logo?url=' + encodeURIComponent(net);
   }
-  return API + '/api/logo?url=' + encodeURIComponent(net);
+  const espn = pid ? espnSoccerHeadshotUrl(pid) : '';
+  if (espn) return API + '/api/logo?url=' + encodeURIComponent(espn);
+  const tm = row && row.tmId != null && String(row.tmId) !== '' ? tmPortraitUrl(row.tmId) : '';
+  if (tm) return API + '/api/logo?url=' + encodeURIComponent(tm);
+  return '';
+}
+function dcAvatarImgError(img) {
+  try {
+    const p = img && img.parentNode;
+    if (!p || p.dataset.fell) return;
+    const fb = p.dataset.alt;
+    const pid = p.dataset.pid || '';
+    const tmid = p.dataset.tmid || '';
+    if (fb && !img.dataset.retriedAlt) {
+      img.dataset.retriedAlt = '1';
+      img.src = API + '/api/logo?url=' + encodeURIComponent(fb);
+      return;
+    }
+    if (pid && !img.dataset.retriedEspn) {
+      img.dataset.retriedEspn = '1';
+      img.src = API + '/api/logo?url=' + encodeURIComponent(espnSoccerHeadshotUrl(pid));
+      return;
+    }
+    if (tmid && !img.dataset.retriedTm) {
+      img.dataset.retriedTm = '1';
+      img.src = API + '/api/logo?url=' + encodeURIComponent(tmPortraitUrl(tmid));
+      return;
+    }
+    p.dataset.fell = '1';
+    p.classList.add('letter');
+    p.textContent = p.dataset.letter || '?';
+    img.remove();
+  } catch (_) {}
 }
 
 function bundledCrestPath(teamId) {
@@ -773,12 +857,6 @@ function rememberLeanFeedback(matchId, fb) {
   };
 }
 const reloadData = force => Promise.all([loadData('matches', force), loadData('schedule', force), loadData('results', force), loadBaseline(), loadUsefulness()]);
-let _reloadInflight = null;
-function startReloadData(force) {
-  if (_reloadInflight && !force) return _reloadInflight;
-  _reloadInflight = reloadData(!!force).finally(() => { _reloadInflight = null; });
-  return _reloadInflight;
-}
 
 /** 1.9.124: sync-hydrate matches/schedule/results (+ data center) from LS before first paint */
 function hydrateFromCache() {
@@ -806,8 +884,6 @@ const HOME_SNAP_KEY = 'jc_home_snap_v1';
 const PRED_CACHE_KEY = 'jc_pred_cache_v1';
 const DATA_TAB_SNAP_KEY = 'jc_data_snap_v1';
 const HOME_ATT_CACHE_KEY = 'jc_home_att_v3';
-const HOME_HOT_CACHE_KEY = 'jc_home_hot_v1';
-const HOME_HOT_CACHE_MAX_AGE = 6 * 3600e3;
 const KB_PACKS_CACHE_KEY = 'jc_kb_packs_v1';
 const KB_ITEM_BODY_CACHE_KEY = 'jc_kb_item_body_v1';
 /** Must match lib/home-snap-guard.js HOME_SNAP_VER (invalidates legacy offline-bar snaps). */
@@ -970,79 +1046,6 @@ function persistHomeAttitudeCache(html) {
     if (!homeAttitudeFeedHtmlValid(html)) return;
     LS.set(HOME_ATT_CACHE_KEY, { html, at: Date.now() });
   } catch (_) {}
-}
-function appColdHomeFeedSession() {
-  try {
-    if (!IS_APP) return false;
-    return !localStorage.getItem('jc_home_feed_warm_v1');
-  } catch (_) { return false; }
-}
-function markHomeFeedWarmed() {
-  try { localStorage.setItem('jc_home_feed_warm_v1', '1'); } catch (_) {}
-}
-async function waitForHomeFeedNetworkReady() {
-  try {
-    await Promise.race([
-      (window.__partnerGateReady || Promise.resolve(true)),
-      new Promise((r) => setTimeout(r, 3200)),
-    ]);
-  } catch (_) {}
-  if (appColdHomeFeedSession()) await new Promise((r) => setTimeout(r, 320));
-}
-function bootTribeHotPosts() {
-  try {
-    const p = _bootPackSlices && _bootPackSlices['global:tribeHot'];
-    return (p && Array.isArray(p.posts) && p.posts.length) ? p.posts : null;
-  } catch (_) { return null; }
-}
-function readHomeTribeHotCache() {
-  try {
-    const c = LS.get(HOME_HOT_CACHE_KEY, null);
-    if (!c || !Array.isArray(c.posts) || !c.posts.length) return null;
-    if (Date.now() - (c.at || 0) > HOME_HOT_CACHE_MAX_AGE) return null;
-    return c.posts;
-  } catch (_) { return null; }
-}
-function persistHomeTribeHotCache(posts) {
-  try {
-    if (!posts || !posts.length) return;
-    LS.set(HOME_HOT_CACHE_KEY, { posts, at: Date.now() });
-  } catch (_) {}
-}
-function paintHomeTribeHotPosts(feedEl, posts) {
-  if (!feedEl || !posts || !posts.length) return false;
-  const filtered = posts.filter((p) => p && p.kind !== 'match_vote');
-  if (!filtered.length) return false;
-  feedEl.innerHTML = filtered.map(homeHotPostCard).join('');
-  return true;
-}
-function scheduleHomeTribeHotRecover() {
-  S._homeHotRetry = S._homeHotRetry || { n: 0, timer: null };
-  const st = S._homeHotRetry;
-  if (st.timer) return;
-  if (st.n >= 14) return;
-  const cold = appColdHomeFeedSession();
-  const delay = cold && st.n < 6
-    ? [400, 900, 1600, 2800, 4500, 6500][st.n]
-    : Math.min(32000, 2500 + st.n * 2200);
-  st.timer = setTimeout(() => {
-    st.timer = null;
-    st.n += 1;
-    fillHomeTribeHot({ recover: true });
-  }, delay);
-}
-function clearHomeTribeHotRecover() {
-  try {
-    const st = S._homeHotRetry;
-    if (st && st.timer) clearTimeout(st.timer);
-    S._homeHotRetry = { n: 0, timer: null };
-  } catch (_) {}
-}
-let _homeHotPrefetchBusy = false;
-function prefetchHomeTribeHot() {
-  if (_homeHotPrefetchBusy) return;
-  _homeHotPrefetchBusy = true;
-  fillHomeTribeHot({ prefetch: true }).finally(() => { _homeHotPrefetchBusy = false; });
 }
 function kbCacheUserKey() {
   const u = S.user && S.user.id;
@@ -1285,7 +1288,7 @@ function mergeStandingsPreferTeamIds(prev, next) {
 /** Standings usable for tribe catalog need at least one teamId (legacy LS rows often lack it). */
 function dataCacheRenderable(cached, kind) {
   if (!cached || cached.ok === false) return false;
-  if (kind === 'topkeepers') return !!(cached.rows && cached.rows.length);
+  if (kind === 'topkeepers') return !!(cached.preparing || (cached.rows && cached.rows.length));
   if (kind === 'standings') {
     if (!(cached.tables && cached.tables.some(t => (t.rows || []).length))) return false;
     return true;
@@ -1472,6 +1475,21 @@ function bootWarmAllDataCenter() { /* intentionally empty */ }
 let _bootPackInflight = null;
 let _bootPackOk = false;
 let _bootPackSlices = null;
+/** 1.9.209: sync-parse boot slices shipped in APK (no fetch wait for 德甲/法甲射手). */
+function seedBootPackFromInline() {
+  try {
+    const j = typeof window !== 'undefined' ? window.__JC_DC_BOOT__ : null;
+    if (!j || !j.slices || typeof j.slices !== 'object') return false;
+    if (_bootPackSlices === j.slices && _bootPackOk) return true;
+    _bootPackSlices = j.slices;
+    _bootPackOk = true;
+    for (const [key, payload] of Object.entries(j.slices)) mergeBootPackSlice(key, payload);
+    rebuildDcLeaderEspnMaps();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 function tryMergeBootPackSlice(lg, kind) {
   const key = lg + ':' + kind;
   const payload = _bootPackSlices && _bootPackSlices[key];
@@ -1479,6 +1497,7 @@ function tryMergeBootPackSlice(lg, kind) {
 }
 /** Sync merge boot slice before deciding skeleton (1.9.207). */
 function primeDataSliceFromBoot(lg, kind) {
+  seedBootPackFromInline();
   tryMergeBootPackSlice(lg, kind);
   if (!_bootPackOk && !_bootPackInflight) loadDataCenterBootPack();
   return ensureDataCacheSlice(lg + ':' + kind);
@@ -1531,6 +1550,7 @@ function mergeBootPackSlice(key, payload) {
   S.dataCache = S.dataCache || {};
   S.dataCache[key] = row;
   persistDataCacheSlice(key, row);
+  try { rebuildDcLeaderEspnMaps(); } catch (_) {}
 }
 function afterBootPackMerged() {
   try {
@@ -1550,21 +1570,11 @@ function afterBootPackMerged() {
         rebuildTribeCatalogFromCache({ renderIfTribe: true });
       }
     }
-    try {
-      if (route().name === 'home') {
-        if ((S.homeMidTab || 'attitude') === 'hot') fillHomeTribeHot({ recover: true });
-        else prefetchHomeTribeHot();
-      }
-      if (tribeCatalogNeedsRebuildFromCache()) {
-        rebuildTribeCatalogFromCache({ renderIfTribe: route().name === 'tribe' || route().name === 'tribe-club' });
-      } else if (S.tribeCat && S.tribeCat._settled && !Object.keys(S.tribeCat.byId || {}).length) {
-        rebuildTribeCatalogFromCache({ renderIfTribe: false });
-      }
-    } catch (_) {}
   } catch (_) {}
 }
 function loadDataCenterBootPack(opts) {
   const force = !!(opts && opts.force);
+  seedBootPackFromInline();
   if (_bootPackOk && !force) return Promise.resolve(true);
   if (_bootPackInflight && !force) return _bootPackInflight;
   _bootPackInflight = (async () => {
@@ -2689,15 +2699,9 @@ function homeAttitudeSection(ms) {
     '<div class="ha-card ha-skel"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line" style="height:36px;margin-top:10px"></div><div class="sk sk-line" style="width:90%;margin-top:8px"></div></div>').join('')}</div>`;
   h += `<div id="homeAttitudeWrap" class="home-attitude-wrap${showAtt ? '' : ' hidden'}">`;
   h += sk + '</div>';
-  const hotCached = readHomeTribeHotCache() || bootTribeHotPosts();
   const hotSk = [1, 2, 3].map(() =>
     '<div class="ha-card ha-skel" style="border-radius:14px"><div class="sk sk-line" style="width:40%"></div><div class="sk sk-line" style="height:48px;margin-top:10px"></div></div>').join('');
-  let hotInner = showAtt ? '' : hotSk;
-  if (!showAtt && hotCached && hotCached.length) {
-    const filtered = hotCached.filter((p) => p && p.kind !== 'match_vote');
-    if (filtered.length) hotInner = filtered.map(homeHotPostCard).join('');
-  }
-  h += `<div id="homeHotWrap" class="home-hot-wrap${showAtt ? ' hidden' : ''}"><div id="homeHotFeed" class="tribe-feed-list ha-hot-feed">${hotInner}</div></div>`;
+  h += `<div id="homeHotWrap" class="home-hot-wrap${showAtt ? ' hidden' : ''}"><div id="homeHotFeed" class="tribe-feed-list ha-hot-feed">${showAtt ? '' : hotSk}</div></div>`;
   return h;
 }
 function syncHomeMidPanels() {
@@ -2718,60 +2722,28 @@ function homeHotPostCard(post) {
   }
   return '';
 }
-async function fillHomeTribeHot(opts) {
-  opts = opts || {};
-  const prefetch = !!opts.prefetch;
-  const onHome = route().name === 'home';
-  if (!onHome) return;
-  const tabHot = (S.homeMidTab || 'attitude') === 'hot';
-  if (!prefetch && !tabHot) return;
+async function fillHomeTribeHot() {
   const feedEl = document.getElementById('homeHotFeed');
-  const hasCards = feedEl && feedEl.querySelector('.tf-card');
-  if (tabHot && feedEl && !hasCards && !opts.recover) {
-    const seed = readHomeTribeHotCache() || bootTribeHotPosts();
-    if (seed && paintHomeTribeHotPosts(feedEl, seed)) S.homeHotLoaded = true;
-  }
-  ensureTribeCatalog().catch(() => {});
+  if (!feedEl || route().name !== 'home') return;
+  if ((S.homeMidTab || 'attitude') !== 'hot') return;
   try {
-    if (!opts.recover && appColdHomeFeedSession()) await waitForHomeFeedNetworkReady();
-    const j = await api('/tribe/hot?limit=15', { timeout: opts.recover ? 16000 : 14000 });
-    if (!onHome || route().name !== 'home') return;
+    await ensureTribeCatalog();
+    const j = await api('/tribe/hot?limit=15', { timeout: 14000 });
+    if (!feedEl.isConnected || (S.homeMidTab || 'attitude') !== 'hot') return;
     const posts = ((j && j.posts) || []).filter((p) => p.kind !== 'match_vote');
-    if (posts.length) {
-      persistHomeTribeHotCache(posts);
-      markHomeFeedWarmed();
-      clearHomeTribeHotRecover();
-      if (tabHot && feedEl && feedEl.isConnected) {
-        paintHomeTribeHotPosts(feedEl, posts);
-      }
+    if (!posts.length) {
+      feedEl.innerHTML = empty('还没有圈子热议，去部落发帖互动吧。',
+        '<button type="button" class="btn ghost sm" data-go="#/tribe">逛部落</button>', '暂无热议');
       S.homeHotLoaded = true;
       return;
     }
-    if (prefetch) return;
-    if (!feedEl || !feedEl.isConnected || !tabHot) return;
-    if (feedEl.querySelector('.tf-card')) {
-      S.homeHotLoaded = true;
-      return;
-    }
-    feedEl.innerHTML = empty('还没有圈子热议，去部落发帖互动吧。',
-      '<button type="button" class="btn ghost sm" data-go="#/tribe">逛部落</button>', '暂无热议');
+    feedEl.innerHTML = posts.map(homeHotPostCard).join('');
     S.homeHotLoaded = true;
   } catch (e) {
-    if (prefetch) {
-      scheduleHomeTribeHotRecover();
-      return;
-    }
-    if (!feedEl || !feedEl.isConnected || !tabHot) {
-      scheduleHomeTribeHotRecover();
-      return;
-    }
-    if (feedEl.querySelector('.tf-card')) {
-      scheduleHomeTribeHotRecover();
-      return;
-    }
-    feedEl.innerHTML = empty('热议加载中…',
-      '<button type="button" class="btn ghost sm" data-act="homeMidTab" data-tab="hot">重试</button>', '加载中');
-    scheduleHomeTribeHotRecover();
+    if (!feedEl.isConnected) return;
+    if (feedEl.querySelector('.tf-card')) return;
+    feedEl.innerHTML = empty('加载失败，请稍后重试',
+      '<button type="button" class="btn ghost sm" data-act="homeMidTab" data-tab="hot">重试</button>', '暂无内容');
   }
 }
 function paintHomeAttitudeFeed(feedEl, ms, posts) {
@@ -2795,10 +2767,7 @@ function paintHomeAttitudeFeed(feedEl, ms, posts) {
 }
 function refreshHomeMidFeed() {
   if ((S.homeMidTab || 'attitude') === 'hot') fillHomeTribeHot();
-  else {
-    fillHomePlatformAttitude();
-    prefetchHomeTribeHot();
-  }
+  else fillHomePlatformAttitude();
 }
 let _homeAttFillBusy = false;
 let _homeAttRepairOnce = false;
@@ -3046,10 +3015,7 @@ async function fetchTribeBootPackOnce({ timeoutMs, cache } = {}) {
     const j = await r.json();
     if (!j || !j.slices || typeof j.slices !== 'object') return false;
     _bootPackSlices = j.slices;
-    for (const [key, payload] of Object.entries(j.slices)) {
-      if (key === 'global:tribeHot') continue;
-      mergeBootPackSlice(key, payload);
-    }
+    for (const [key, payload] of Object.entries(j.slices)) mergeBootPackSlice(key, payload);
     return true;
   } catch (_) {
     return false;
@@ -3073,8 +3039,7 @@ function ensureTribeCatalog(opts) {
   S._tribeCatWait = (async () => {
     const finish = (cat) => {
       cat = cat || { teams: [], byId: {} };
-      const hasTeams = Object.keys(cat.byId || {}).length > 0;
-      cat._settled = hasTeams || !!_bootPackOk;
+      cat._settled = true;
       S.tribeCat = cat;
       S.tribeCatBusy = false;
       const paint = () => {
@@ -3093,15 +3058,13 @@ function ensureTribeCatalog(opts) {
     try {
       // Drop legacy standings that paint OK but lack teamId (blocks tribe catalog).
       purgeStandingsWithoutTeamIds();
+      // Prefer timed no-store boot after purge — force-cache can hang forever on some WebViews.
       _bootPackInflight = null;
-      await fetchTribeBootPackOnce({ timeoutMs: 2500, cache: 'force-cache' });
+      await fetchTribeBootPackOnce({ timeoutMs: 8000, cache: 'no-store' });
       let cat = buildTribeCatalogFromSlices(tribeStandingsSlicesFromCache());
       if (!Object.keys(cat.byId || {}).length) {
+        // One more timed attempt (still no-store); then soft-fill via DC queue.
         await fetchTribeBootPackOnce({ timeoutMs: 8000, cache: 'no-store' });
-        cat = buildTribeCatalogFromSlices(tribeStandingsSlicesFromCache());
-      }
-      if (!Object.keys(cat.byId || {}).length) {
-        await fetchTribeBootPackOnce({ timeoutMs: 6000, cache: 'default' });
         cat = buildTribeCatalogFromSlices(tribeStandingsSlicesFromCache());
       }
       const richer = buildTribeCatalogFromSlices(tribeStandingsSlicesFromCache());
@@ -4462,13 +4425,15 @@ function renderScorersList(payload, kind) {
   let h = `<div class="dc-scorers">`;
   rows.forEach((r, i) => {
     const initial = esc([...(r.playerZh || r.player || '?')][0] || '?');
-    const netPhoto = pickDcNetworkPhoto(r);
-    const altPhoto = netPhoto || ((r.photoAlt && !isAfEspnIdPhotoUrl(r.photoAlt, r.playerId)) ? r.photoAlt : '');
+    const altPhoto = (r.photoAlt && !isAfEspnIdPhotoUrl(r.photoAlt, r.playerId)) ? r.photoAlt : '';
     const lazyAttr = i >= 6 ? ' loading="lazy"' : '';
+    const resolvedPid = resolveDcPlayerEspnId(r);
+    const tmAttr = (r.tmId != null && String(r.tmId) !== '') ? ` data-tmid="${esc(String(r.tmId))}"` : '';
+    const pidAttr = resolvedPid ? ` data-pid="${esc(resolvedPid)}"` : '';
     const phSrc = dcPlayerPhotoSrc(r);
     const photo = phSrc
-      ? `<span class="dc-avatar" data-letter="${initial}" data-net="${esc(netPhoto)}"><img alt="" width="88" height="88" decoding="async"${lazyAttr} src="${esc(phSrc)}" onerror="var p=this.parentNode,img=this;if(!p)return;var fb=p.dataset.net||p.dataset.alt;if(fb&&!img.dataset.retried){img.dataset.retried=1;img.src='${esc(API)}/api/logo?url='+encodeURIComponent(fb);return;}if(p.dataset.fell)return;p.dataset.fell=1;p.classList.add('letter');p.textContent=p.dataset.letter||'?';img.remove();"></span>`
-      : `<span class="dc-avatar letter">${initial}</span>`;
+      ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"${pidAttr}${tmAttr}><img alt="" width="88" height="88" decoding="async"${lazyAttr} src="${esc(phSrc)}" onerror="dcAvatarImgError(this)"></span>`
+      : `<span class="dc-avatar letter"${pidAttr}${tmAttr} data-letter="${initial}">${initial}</span>`;
     const teamCrestOpts = r.teamId ? { teamId: r.teamId, eager: i < 8 } : null;
     const teamLogo = r.teamLogo ? badge(r.teamZh || r.team, 'sm', r.teamLogo, teamCrestOpts) : badge(r.teamZh || r.team, 'sm');
     const primary = isMv
@@ -11778,24 +11743,10 @@ hydrateFromCache(); // 1.9.124: JSON lists
 hydrateKbPacksCache(); // 1.9.158: KB list before first /kb paint
 if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.161: idle KB warm; DC queue yields while #/kb or KB in-flight
 hydratePredictCache(); // 1.9.125: predict reports so home sig matches snap
+seedBootPackFromInline(); // 1.9.209: sync APK boot before any fetch
 loadDataCenterBootPack(); // 1.9.156: bundled slices for first install / empty LS
 ensurePartnerWatermark();
 try { document.documentElement.setAttribute('data-boot', '1'); } catch (_) {}
-function kickColdNetworkRefresh() {
-  if (!appColdHomeFeedSession() && S.matches && S.matches.length) return;
-  startReloadData(false).then(() => {
-    try {
-      const r = route();
-      tickClock();
-      if (r.name === 'home') refreshHomeMidFeed();
-      if (r.name === 'home' && bootShellHeld() && !(window.__homeSnapRestored)) {
-        render({ force: true });
-        waitAboveFoldReady(document.getElementById('view'), 460).then(() => revealBootShell());
-      }
-    } catch (_) {}
-  }).catch(() => {});
-}
-kickColdNetworkRefresh();
 window.__partnerGateReady = checkPartnerGate().then((ok) => {
   if (!ok) { window.__partnerKilled = true; return false; }
   return true;
@@ -11854,8 +11805,8 @@ NAV.push(location.hash || '#/home');
 window.__partnerGateReady.then((ok) => {
   if (!ok) return;
   // Soft: render() no-ops when content signature unchanged after network reload
-  loadDataCenterBootPack({ force: true });
-  startReloadData(true).then(() => {
+  loadDataCenterBootPack();
+  reloadData().then(() => {
     const r = route();
     if (r.name === 'home' && bootShellHeld() && !(S.matches && S.matches.length) && !window.__homeSnapRestored) {
       render({ force: true });
@@ -11877,7 +11828,7 @@ if (IS_PARTNER) {
 }
 setInterval(() => {
   if (document.hidden) return;
-  startReloadData(true).then(() => {
+  reloadData().then(() => {
     tickClock();
     if (!['login', 'register', 'profile', 'password', 'delete'].includes(route().name) && $('#sheet').classList.contains('hidden') && $('#dialog').classList.contains('hidden')) render();
   });

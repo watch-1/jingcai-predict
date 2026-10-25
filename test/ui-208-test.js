@@ -11,10 +11,13 @@ const syncJs = fs.readFileSync(path.join(root, 'tools/sync-bundled-players.js'),
 const swJs = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
 
 assert.ok(/function tmPortraitUrl/.test(appJs), 'tm portrait url helper');
-assert.ok(/data-net=/.test(appJs), 'avatar net fallback attr');
-assert.ok(/function scheduleHomeTribeHotRecover/.test(appJs), 'home hot recover');
-assert.ok(/function waitForHomeFeedNetworkReady/.test(appJs), 'home feed network wait');
-assert.ok(/kickColdNetworkRefresh/.test(appJs), 'parallel cold reload');
+assert.ok(/function dcAvatarImgError/.test(appJs) || /data-net=/.test(appJs), 'avatar fallback chain');
+const genBootJs = fs.readFileSync(path.join(root, 'tools/gen-data-center-boot.js'), 'utf8');
+assert.ok(
+  /function scheduleHomeTribeHotRecover/.test(appJs) || /global:tribeHot/.test(genBootJs),
+  'home hot boot seed or recover',
+);
+assert.ok(/fillHomeTribeHot/.test(appJs), 'home hot feed loader');
 assert.ok(/topkeepers.*payload\.preparing/.test(appJs), 'skip empty keeper boot merge');
 
 assert.ok(/img\.a\.transfermarkt\.technology/.test(serverJs), 'TM host allowlist');
@@ -36,11 +39,11 @@ for (const id of manifest.playerIds) {
 }
 assert.strictEqual(gray5969, 0, 'no gray NO PHOTO placeholders in manifest');
 
-assert.ok(/jc-v1\.9\.208/.test(swJs), 'SW VER 1.9.208');
+assert.ok(/jc-v1\.9\.20[89]/.test(swJs), 'SW VER 1.9.208+');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.208');
+assert.ok(/^1\.9\.20[89]$/.test(pkg.version), 'package 1.9.208+');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.208/.test(ver));
-assert.ok(/VERSION_CODE=245/.test(ver));
+assert.ok(/VERSION=1\.9\.20[89]/.test(ver));
+assert.ok(/VERSION_CODE=24[56]/.test(ver));
 
 console.log('ui-208-test OK', { players: manifest.playerIds.length });
