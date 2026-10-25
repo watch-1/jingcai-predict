@@ -22,6 +22,8 @@ async function call(method, path, body, token) {
     ok(r.s === 201, 'register'); tok = r.j.token;
     r = await call('GET', '/tribe/' + tribeId + '/feed?ensure=1&teamId=382&teamName=' + encodeURIComponent('曼城'), undefined, tok);
     ok(r.s === 200 && Array.isArray(r.j.posts), 'feed list');
+    r = await call('GET', '/tribe/hot?limit=5', undefined, tok);
+    ok(r.s === 200 && Array.isArray(r.j.posts) && typeof r.j.hasMore === 'boolean', 'hot posts across tribes');
     r = await call('POST', '/tribe/' + tribeId + '/posts', { body: '测试圈内发帖 ' + Date.now() }, tok);
     ok(r.s === 201 && r.j.post && r.j.post.id, 'create text post');
     const postId = r.j.post.id;

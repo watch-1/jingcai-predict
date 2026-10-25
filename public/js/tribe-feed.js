@@ -237,7 +237,7 @@
     return `<p class="tf-body">${esc(short)}… <button type="button" class="tf-fulltxt" data-act="tribePostOpen" data-post="${post.id}">全文</button></p>`;
   }
 
-  function postCard(post, { detail, tribeId } = {}) {
+  function postCard(post, { detail, tribeId, tribeLabel, homeHot } = {}) {
     const tid = tribeId || post.tribeId || '';
     const essence = (post.pinned || post.kind === 'match_vote')
       ? '<span class="tf-essence">精华</span>' : '';
@@ -257,14 +257,20 @@
         <span class="tf-stat-i tf-like">${likeLab}</span>
       </div>
     </div>`;
-    const follow = detail ? '' : followPill(post.author);
-    const delBtn = detail ? '' : ownPostMoreBtn(post);
+    const follow = (detail || homeHot) ? '' : followPill(post.author);
+    const delBtn = (detail || homeHot) ? '' : ownPostMoreBtn(post);
     const time = fmtTime(post.createdAt);
-    return `<article class="tf-card ${kind}" data-post="${post.id}">
+    const tribePill = tribeLabel && tid
+      ? `<button type="button" class="tf-tribe-pill" data-go="#/tribe-club/${encodeURIComponent(tid)}">${esc(tribeLabel)}</button>`
+      : '';
+    const tribeRow = tribePill ? `<div class="tf-tribe-row">${tribePill}</div>` : '';
+    const cardCls = homeHot ? ' tf-card--home-hot' : '';
+    return `<article class="tf-card ${kind}${cardCls}" data-post="${post.id}"${tid ? ` data-tribe="${esc(tid)}"` : ''}>
       <div class="tf-card-hd">
         ${authorRow(post.author, time)}
         <div class="tf-card-hd-r">${delBtn}${follow}</div>
       </div>
+      ${tribeRow}
       ${titleLine || (essence && post.kind !== 'match_vote' ? `<div class="tf-essence-row">${essence}</div>` : '')}
       ${vote}
       ${textBody}
