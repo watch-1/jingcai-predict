@@ -11,6 +11,7 @@ assert(api.teamLogo('', '581').startsWith('https://r2.thesportsdb.com/images/med
 assert.strictEqual(api.safeLogoTarget('https://evil.example/a.png'), null);
 assert.strictEqual(api.safeLogoTarget('https://r2.thesportsdb.com/images/media/team/fanart/x.png'), null);
 assert(api.safeLogoTarget('https://r2.thesportsdb.com/images/media/team/badge/j8xk9g1679447486.png'));
+assert(api.safeLogoTarget('https://img.a.transfermarkt.technology/portrait/header/418560.jpg'));
 
 // Results parser against a real getUniformMatchResultV1 payload (2026-09-27..30), incl. in-progress + 无效场次 rows
 const { normalizeResults } = require('../server.js');
