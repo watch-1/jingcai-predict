@@ -282,18 +282,177 @@ function issueWeek(m) {
 }
 const kickoff = m => new Date(`${m.date}T${m.time || '00:00'}:00+08:00`).getTime();
 const BADGE_COLORS = ['#e5484d', '#1a62f0', '#12a150', '#ff8a1f', '#7b4ce0', '#0aa5b8', '#c2185b', '#546e7a', '#d97706', '#0f766e'];
+/* ── Tribe crest durable cache (IndexedDB + mem) · 1.9.201 ── */
+const CREST_IDB_NAME = 'jc-crests-v1';
+const CREST_IDB_STORE = 'blobs';
+let _crestDbP = null;
+const _crestMem = new Map();
+const _crestInflight = new Map();
+
+function crestCacheKey(logo, teamId) {
+  const tid = teamId != null && String(teamId) !== '' ? String(teamId) : '';
+  if (tid) return 'tid:' + tid;
+  return 'url:' + String(logo || '');
+}
+
+function openCrestDb() {
+  if (_crestDbP) return _crestDbP;
+  if (typeof indexedDB === 'undefined') {
+    _crestDbP = Promise.resolve(null);
+    return _crestDbP;
+  }
+  _crestDbP = new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(CREST_IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(CREST_IDB_STORE)) db.createObjectStore(CREST_IDB_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (_) { resolve(null); }
+  });
+  return _crestDbP;
+}
+
+function crestIdbGet(key) {
+  return openCrestDb().then((db) => new Promise((resolve) => {
+    if (!db) return resolve(null);
+    try {
+      const tx = db.transaction(CREST_IDB_STORE, 'readonly');
+      const r = tx.objectStore(CREST_IDB_STORE).get(key);
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => resolve(null);
+    } catch (_) { resolve(null); }
+  }));
+}
+
+function crestIdbPut(key, blob) {
+  return openCrestDb().then((db) => new Promise((resolve) => {
+    if (!db || !blob) return resolve(false);
+    try {
+      const tx = db.transaction(CREST_IDB_STORE, 'readwrite');
+      tx.objectStore(CREST_IDB_STORE).put(blob, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    } catch (_) { resolve(false); }
+  }));
+}
+
+function crestIdbClear() {
+  return openCrestDb().then((db) => new Promise((resolve) => {
+    if (!db) return resolve();
+    try {
+      const tx = db.transaction(CREST_IDB_STORE, 'readwrite');
+      tx.objectStore(CREST_IDB_STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    } catch (_) { resolve(); }
+  })).then(() => {
+    for (const u of _crestMem.values()) {
+      try { URL.revokeObjectURL(u); } catch (_) {}
+    }
+    _crestMem.clear();
+  });
+}
+
+function crestRemember(key, blob) {
+  if (!key || !blob) return '';
+  const prev = _crestMem.get(key);
+  if (prev) {
+    try { URL.revokeObjectURL(prev); } catch (_) {}
+  }
+  const u = URL.createObjectURL(blob);
+  _crestMem.set(key, u);
+  return u;
+}
+
+async function crestCacheFromRemote(logo, teamId) {
+  const key = crestCacheKey(logo, teamId);
+  if (!logo || !key) return null;
+  if (_crestMem.has(key)) return _crestMem.get(key);
+  if (_crestInflight.has(key)) return _crestInflight.get(key);
+  const job = (async () => {
+    try {
+      const hit = await crestIdbGet(key);
+      if (hit instanceof Blob && hit.size > 0) return crestRemember(key, hit);
+      const url = API + '/api/logo?url=' + encodeURIComponent(logo);
+      const res = await fetch(url, { credentials: 'omit', cache: 'force-cache' });
+      if (!res || !res.ok) return null;
+      const blob = await res.blob();
+      if (!blob || !blob.size) return null;
+      try { await crestIdbPut(key, blob); } catch (_) {}
+      return crestRemember(key, blob);
+    } catch (_) { return null; }
+  })();
+  _crestInflight.set(key, job);
+  try { return await job; } finally { _crestInflight.delete(key); }
+}
+
+async function warmCrestCacheForTeams(teams) {
+  try {
+    if (!Array.isArray(teams) || !teams.length) return;
+    const slice = teams.filter((t) => t && t.logo).slice(0, 120);
+    await Promise.all(slice.map(async (t) => {
+      const key = crestCacheKey(t.logo, t.teamId);
+      if (!key || _crestMem.has(key)) return;
+      try {
+        const blob = await crestIdbGet(key);
+        if (blob instanceof Blob && blob.size > 0) crestRemember(key, blob);
+      } catch (_) {}
+    }));
+  } catch (_) {}
+}
+
+async function hydrateTribeCrests(root) {
+  try {
+    const scope = root || document;
+    const nodes = scope.querySelectorAll('.badge.crest[data-crest-key]');
+    const jobs = [];
+    nodes.forEach((wrap) => {
+      const img = wrap.querySelector('img');
+      if (!img) return;
+      const key = wrap.getAttribute('data-crest-key') || '';
+      const logo = wrap.getAttribute('data-crest-logo') || '';
+      const tid = wrap.getAttribute('data-team-id') || '';
+      if (!key || !logo) return;
+      jobs.push((async () => {
+        try {
+          let local = _crestMem.get(key);
+          if (!local) {
+            const blob = await crestIdbGet(key);
+            if (blob instanceof Blob && blob.size > 0) local = crestRemember(key, blob);
+          }
+          if (local) {
+            if (img.getAttribute('src') !== local) img.setAttribute('src', local);
+            return;
+          }
+          const saved = await crestCacheFromRemote(logo, tid);
+          if (saved && img.getAttribute('src') !== saved) img.setAttribute('src', saved);
+        } catch (_) {}
+      })());
+    });
+    if (jobs.length) await Promise.all(jobs);
+  } catch (_) {}
+}
+
 function badge(name, cls = '', logo, opts) {
   let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const c1 = BADGE_COLORS[h % BADGE_COLORS.length];
   const letter = esc([...String(name)][0] || '?');
   const bg = `linear-gradient(145deg,${c1}cc,${c1})`;
   if (!logo) return `<span class="badge ${cls}" style="background:${bg}">${letter}</span>`;
-  const src = esc(API + '/api/logo?url=' + encodeURIComponent(logo));
+  const tid = opts && opts.teamId != null && opts.teamId !== '' ? String(opts.teamId) : '';
+  const ckey = crestCacheKey(logo, tid);
+  // 1.9.201: prefer in-memory blob URL (warmed from IndexedDB) so reopen skips CDN wait
+  const srcUrl = _crestMem.has(ckey) ? _crestMem.get(ckey) : (API + '/api/logo?url=' + encodeURIComponent(logo));
+  const src = esc(srcUrl);
   // Intrinsic 160≈3–4× of 40–42 CSS px crests; sources TSDB 512 / ESPN 500 (1.9.91 sharper).
   // Broken or missing crest (404) falls back to the letter badge. Do not invent a logo.
   // 1.9.200: tribe hub uses eager — Capacitor first-paint + loading=lazy left empty crest discs.
   const lazyAttr = (opts && opts.eager) ? '' : ' loading="lazy"';
-  return `<span class="badge crest ${cls}" data-letter="${letter}"><img alt="" width="160" height="160" decoding="async"${lazyAttr} src="${src}" onerror="var p=this.parentNode;if(!p||p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter ${cls}';p.style.background='${bg}';p.textContent=p.dataset.letter||'';this.remove()"></span>`;
+  const dataAttrs = ` data-crest-key="${esc(ckey)}" data-crest-logo="${esc(logo)}"${tid ? ` data-team-id="${esc(tid)}"` : ''}`;
+  return `<span class="badge crest ${cls}" data-letter="${letter}"${dataAttrs}><img alt="" width="160" height="160" decoding="async"${lazyAttr} src="${src}" onerror="var p=this.parentNode;if(!p||p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter ${cls}';p.style.background='${bg}';p.textContent=p.dataset.letter||'';this.remove()"></span>`;
 }
 const shortRk = s => (String(s || '').length <= 5 ? esc(s) : ''); // long group ranks like [亚运男足1] only shown on the detail page
 const lgTag = m => homeTheme() === 'pitch'
@@ -2456,13 +2615,19 @@ function rebuildTribeCatalogFromCache({ renderIfTribe } = {}) {
   const cat = buildTribeCatalogFromSlices(tribeStandingsSlicesFromCache());
   cat._settled = true;
   S.tribeCat = cat;
-  if (renderIfTribe && (route().name === 'tribe' || route().name === 'tribe-club')) {
+  const paint = () => {
+    if (!renderIfTribe) return;
+    if (route().name !== 'tribe' && route().name !== 'tribe-club') return;
     try {
       if (route().name === 'tribe') {
         if (!softPatchTribeHub()) render({ force: true });
       } else render({ force: true });
     } catch (_) {}
-  }
+  };
+  // Warm mem from IndexedDB first so tribe softPatch can paint blob URLs without CDN wait
+  try {
+    warmCrestCacheForTeams(cat.teams || []).then(paint).catch(paint);
+  } catch (_) { paint(); }
   return cat;
 }
 async function fetchTribeBootPackOnce({ timeoutMs, cache } = {}) {
@@ -2506,13 +2671,18 @@ function ensureTribeCatalog(opts) {
       cat._settled = true;
       S.tribeCat = cat;
       S.tribeCatBusy = false;
+      const paint = () => {
+        try {
+          if (route().name === 'tribe') {
+            if (!softPatchTribeHub()) render({ force: true });
+          } else if (route().name === 'tribe-club') {
+            render({ force: true });
+          }
+        } catch (_) {}
+      };
       try {
-        if (route().name === 'tribe') {
-          if (!softPatchTribeHub()) render({ force: true });
-        } else if (route().name === 'tribe-club') {
-          render({ force: true });
-        }
-      } catch (_) {}
+        warmCrestCacheForTeams(cat.teams || []).then(paint).catch(paint);
+      } catch (_) { paint(); }
       return S.tribeCat;
     };
     try {
@@ -2654,7 +2824,7 @@ function tribeGridHtml(teams, title, opts) {
   }
   const head = title ? `<div class="tribe-sec-hd">${esc(title)}<small>${teams.length}个</small></div>` : '';
   const cells = teams.map(t => {
-    const crest = badge(t.nameZh, 'tribe', t.logo, { eager: true });
+    const crest = badge(t.nameZh, 'tribe', t.logo, { eager: true, teamId: t.teamId || '' });
     const heat = t.heat > 0 ? `<span class="tribe-heat num">🔥 ${t.heat}</span>` : '';
     const fol = isTribeFollow(t.tribeId) ? '<span class="tribe-fol-dot" aria-hidden="true"></span>' : '';
     return `<button type="button" class="tribe-cell" data-go="#/tribe-club/${encodeURIComponent(t.tribeId)}" aria-label="${esc(t.nameZh)}">
@@ -2703,6 +2873,7 @@ function softPatchTribeHub() {
   if (!main) return false;
   main.innerHTML = tribeMainInnerHtml();
   try { hardenTribeCrestImgs(main); } catch (_) {}
+  try { hydrateTribeCrests(main); } catch (_) {}
   return true;
 }
 function pageTribe() {
@@ -2737,7 +2908,7 @@ function pageTribeClub(id) {
   const folOn = isTribeFollow(t.tribeId);
   const folBtn = tribeJoinBtnHtml(t, folOn);
   const accent = tribeHeroAccent(t.leagueKey);
-  const crest = badge(t.nameZh, 'lg tribe-club-crest', t.logo);
+  const crest = badge(t.nameZh, 'lg tribe-club-crest', t.logo, { eager: true, teamId: t.teamId || (String(t.tribeId || '').includes('-') ? String(t.tribeId).split('-').slice(1).join('-') : '') });
   const sub = [t.leagueZh, t.points > 0 ? `积分榜 ${t.points} 分` : ''].filter(Boolean).join(' · ');
   const logoRaw = t.logo ? String(t.logo) : '';
   const heroCls = 'tribe-club-hero hero hero--edge' + (logoRaw ? ' has-logo' : '');
@@ -10065,6 +10236,15 @@ function render(opts) {
       }
     }, 0);
   }
+  if (r.name === 'tribe' || r.name === 'tribe-club') {
+    setTimeout(() => {
+      try {
+        const root = document.getElementById('view') || document;
+        hardenTribeCrestImgs(root);
+        hydrateTribeCrests(root);
+      } catch (_) {}
+    }, 0);
+  }
   tickClock();
 }
 
@@ -10874,6 +11054,7 @@ document.addEventListener('click', async e => {
       if (!(await confirmDlg('清除缓存', '将清除本机缓存的赛事/开奖数据与离线资源（不会退出登录，也不会删除你的方案与关注）。', '清除'))) return;
       LS.del('jc_cache_matches'); LS.del('jc_cache_results'); LS.del('jc_cache_schedule'); LS.del('jc_data_cache_v1'); clearHomeSnap(); invalidateTabKeep();
       try { if (window.caches) for (const k of await caches.keys()) await caches.delete(k); } catch { }
+      try { await crestIdbClear(); } catch { }
       S.matches = S.schedule = S.results = null; S.liveScores = null; S.liveScoresAt = 0; await reloadData(true); render(); return toast('缓存已清除，数据已刷新');
     }
   }
