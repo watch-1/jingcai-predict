@@ -39,11 +39,11 @@ for (const id of manifest.playerIds) {
 }
 assert.strictEqual(gray5969, 0, 'no gray NO PHOTO placeholders in manifest');
 
-assert.ok(/jc-v1\.9\.20[89]/.test(swJs), 'SW VER 1.9.208+');
+assert.ok(/jc-v1\.9\.21\d/.test(swJs), 'SW VER 1.9.21x');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.ok(/^1\.9\.20[89]$/.test(pkg.version), 'package 1.9.208+');
+assert.ok(/^1\.9\.21\d$/.test(pkg.version), 'package 1.9.21x');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.20[89]/.test(ver));
-assert.ok(/VERSION_CODE=24[56]/.test(ver));
+assert.ok(/VERSION=1\.9\.21\d/.test(ver));
+assert.ok(/VERSION_CODE=24[789]/.test(ver));
 
 console.log('ui-208-test OK', { players: manifest.playerIds.length });

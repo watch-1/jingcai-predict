@@ -28,15 +28,15 @@ assert.ok(
   'no empty keeper boot trap',
 );
 
-assert.ok(/jc-v1\.9\.209/.test(swJs), 'SW VER 1.9.209');
+assert.ok(/jc-v1\.9\.21\d/.test(swJs), 'SW VER 1.9.21x');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.209');
+assert.ok(/^1\.9\.21\d$/.test(pkg.version), 'package 1.9.21x');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.209/.test(ver));
-assert.ok(/VERSION_CODE=246/.test(ver));
+assert.ok(/VERSION=1\.9\.21\d/.test(ver));
+assert.ok(/VERSION_CODE=24[67]/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.strictEqual(cfg.version, '1.9.209');
+assert.ok(/^1\.9\.21\d$/.test(cfg.version), 'config 1.9.21x');
 assert.ok(cfg.bundledPlayerIds.length >= 270, 'expanded bundled player pack (' + cfg.bundledPlayerIds.length + ')');
 
 console.log('ui-207-test OK');
