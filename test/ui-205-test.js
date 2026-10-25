@@ -29,7 +29,7 @@ assert.ok(manifest.playerIds.includes('362150'), 'Yamal photo bundled');
 assert.ok(manifest.playerIds.includes('252107'), 'Vini photo bundled');
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.205/.test(ver));
-assert.ok(/VERSION_CODE=242/.test(ver));
+assert.ok(/VERSION=1\.9\.207/.test(ver));
+assert.ok(/VERSION_CODE=244/.test(ver));
 
 console.log('ui-205-test OK', { players: manifest.playerIds.length, bootKb: Math.round(bootJs.length / 1024) });
