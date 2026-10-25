@@ -567,36 +567,7 @@ body.me-drawer-on { overflow: hidden; }
 .ha-sec-h .more.ha-kb { color: var(--pri, #1a62f0); font-weight: 700; }
 .home-attitude-wrap {
   position: relative; margin: 0 0 6px; padding: 6px 0 14px;
-  --ha-p: 0; --ha-diag: 0%;
-}
-.home-attitude-wrap .ha-pastel {
-  position: absolute; inset: 0; z-index: 0; pointer-events: none;
-  background:
-    radial-gradient(120% 80% at 8% -5%, rgba(255, 200, 140, .45) 0%, transparent 52%),
-    radial-gradient(95% 65% at 96% 8%, rgba(180, 210, 255, .38) 0%, transparent 48%),
-    radial-gradient(85% 55% at 50% 100%, rgba(160, 230, 190, .28) 0%, transparent 55%),
-    linear-gradient(180deg, rgba(255, 248, 240, .9) 0%, rgba(245, 247, 251, .4) 100%);
-  opacity: calc(1 - var(--ha-p) * .55);
-  transition: opacity .12s linear;
-}
-.home-attitude-wrap .ha-shell {
-  position: absolute; inset: -4px 0 0; z-index: 0; pointer-events: none;
-  background: var(--wrap-navy, #1B2A4A);
-  border-radius: 0 0 18px 18px;
-  opacity: calc(var(--ha-p) * .98);
-  -webkit-mask-image: linear-gradient(
-    to bottom right,
-    #000 0%,
-    #000 calc(var(--ha-diag, 0%) * 1.35),
-    transparent calc(var(--ha-diag, 0%) * 1.35 + 22%)
-  );
-  mask-image: linear-gradient(
-    to bottom right,
-    #000 0%,
-    #000 calc(var(--ha-diag, 0%) * 1.35),
-    transparent calc(var(--ha-diag, 0%) * 1.35 + 22%)
-  );
-  will-change: opacity, mask-image;
+  background: linear-gradient(180deg, #f6f8fc 0%, #eef2f8 100%);
 }
 .home-attitude-wrap .ha-feed {
   position: relative; z-index: 1;
@@ -604,11 +575,25 @@ body.me-drawer-on { overflow: hidden; }
   margin: 0 12px;
 }
 .ha-card {
+  --ha-card-glow: 0;
+  position: relative; isolation: isolate;
   display: block; width: 100%; text-align: left; font: inherit; color: inherit;
   background: #fff; border-radius: 14px; border: 1px solid rgba(230, 235, 243, .95);
   box-shadow: 0 2px 10px rgba(26, 35, 54, .06);
   padding: 12px 13px 11px; cursor: pointer;
+  overflow: hidden;
 }
+.ha-card::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  border-radius: inherit;
+  opacity: calc(var(--ha-card-glow) * .98);
+  background:
+    radial-gradient(ellipse 130% 95% at 10% 6%, rgba(168, 206, 255, .62) 0%, rgba(210, 232, 255, .32) 38%, transparent 64%),
+    radial-gradient(ellipse 80% 55% at 22% 18%, rgba(255, 236, 210, .22) 0%, transparent 55%);
+  transition: opacity .14s ease-out;
+  will-change: opacity;
+}
+.ha-card > * { position: relative; z-index: 1; }
 .ha-card:active { transform: scale(.995); }
 .ha-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .ha-brand { display: flex; align-items: center; gap: 8px; min-width: 0; }

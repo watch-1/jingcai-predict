@@ -2028,8 +2028,7 @@ function homeAttitudeSection(ms) {
   const attCached = readHomeAttitudeCacheHtml();
   const sk = `<div class="ha-feed" id="homeAttitudeFeed">${attCached || [1, 2, 3].map(() =>
     '<div class="ha-card ha-skel"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line" style="height:36px;margin-top:10px"></div><div class="sk sk-line" style="width:90%;margin-top:8px"></div></div>').join('')}</div>`;
-  h += `<div id="homeAttitudeWrap" class="home-attitude-wrap${showAtt ? '' : ' hidden'}" style="--ha-p:0;--ha-diag:0%">`;
-  h += '<div class="ha-pastel" aria-hidden="true"></div><div class="ha-shell" aria-hidden="true"></div>';
+  h += `<div id="homeAttitudeWrap" class="home-attitude-wrap${showAtt ? '' : ' hidden'}">`;
   h += sk + '</div>';
   const hotSk = [1, 2, 3].map(() =>
     '<div class="ha-card ha-skel" style="border-radius:14px"><div class="sk sk-line" style="width:40%"></div><div class="sk sk-line" style="height:48px;margin-top:10px"></div></div>').join('');
@@ -2111,7 +2110,10 @@ async function fillHomePlatformAttitude() {
     const j = await api('/column/feed?tab=attitude&author=platform&limit=12', { timeout: 14000 });
     if (!feedEl.isConnected) return;
     const posts = (j && j.posts) || [];
-    if (paintHomeAttitudeFeed(feedEl, ms, posts)) persistHomeAttitudeCache(feedEl.innerHTML);
+    if (paintHomeAttitudeFeed(feedEl, ms, posts)) {
+      persistHomeAttitudeCache(feedEl.innerHTML);
+      syncHomeAttitudeScroll();
+    }
   } catch (e) {
     if (!feedEl.isConnected) return;
     if (feedEl.querySelector('.ha-card:not(.ha-skel)')) return;
@@ -2125,20 +2127,28 @@ async function fillHomePlatformAttitude() {
   }
 }
 let homeAttitudeScrollHooked = false;
+function homeAttitudeCardGlow(card, anchorY) {
+  const rect = card.getBoundingClientRect();
+  const range = Math.max(rect.height * 0.82, 96);
+  const offset = rect.top - anchorY;
+  let g = 1 - Math.max(0, offset) / range;
+  if (offset < 0) g = Math.max(0, 1 + offset / (range * 0.45));
+  return Math.min(1, Math.max(0, g));
+}
 function syncHomeAttitudeScroll() {
   const wrap = document.getElementById('homeAttitudeWrap');
-  if (!wrap || route().name !== 'home') return;
+  const feed = document.getElementById('homeAttitudeFeed');
+  if (!wrap || !feed || route().name !== 'home') return;
   const apply = () => {
     const el = document.getElementById('homeAttitudeWrap');
-    if (!el || route().name !== 'home') return;
-    const rect = el.getBoundingClientRect();
-    const vh = window.innerHeight || 640;
-    const start = el.offsetTop - Math.min(120, vh * 0.14);
-    const range = Math.max(260, el.offsetHeight * 0.65, vh * 0.35);
-    const y = window.scrollY || document.documentElement.scrollTop || 0;
-    const p = Math.min(1, Math.max(0, (y - start) / range));
-    el.style.setProperty('--ha-p', p.toFixed(3));
-    el.style.setProperty('--ha-diag', (p * 100).toFixed(1) + '%');
+    const fd = document.getElementById('homeAttitudeFeed');
+    if (!el || !fd || route().name !== 'home') return;
+    if (el.classList.contains('hidden')) return;
+    const anchorY = fd.getBoundingClientRect().top + 4;
+    fd.querySelectorAll('.ha-card:not(.ha-skel)').forEach((card) => {
+      const g = homeAttitudeCardGlow(card, anchorY);
+      card.style.setProperty('--ha-card-glow', g.toFixed(3));
+    });
   };
   apply();
   if (!homeAttitudeScrollHooked) {
@@ -10365,8 +10375,10 @@ document.addEventListener('click', async e => {
       if (S.homeMidTab === next) return;
       S.homeMidTab = next;
       syncHomeMidPanels();
-      if (next === 'attitude') fillHomePlatformAttitude();
-      else {
+      if (next === 'attitude') {
+        fillHomePlatformAttitude();
+        requestAnimationFrame(() => syncHomeAttitudeScroll());
+      } else {
         S.homeHotLoaded = false;
         fillHomeTribeHot();
       }
