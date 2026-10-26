@@ -307,35 +307,109 @@ function normalizeSchedule(j) {
 }
 
 const RESULT_STATUS = { '1': '未完场', '2': '已完成' };
+const resultsArchive = require('./lib/results-archive');
 function winFlagOf(full) {
   const [hg, ag] = String(full).split(':').map(Number);
   if (Number.isNaN(hg) || Number.isNaN(ag)) return '';
   return hg > ag ? 'H' : hg === ag ? 'D' : 'A';
 }
+function mapUniformResultRow(m) {
+  if (!m || !m.sectionsNo999 || !String(m.sectionsNo999).trim()) return null;
+  const num = m.matchNumStr || '';
+  const matchDate = m.matchDate;
+  return {
+    id: String(m.matchId), num, league: m.leagueNameAbbr || m.leagueName,
+    leagueColor: m.leagueBackColor ? '#' + String(m.leagueBackColor).replace('#', '') : null,
+    date: matchDate, businessDate: issueDateFromNum(matchDate, num),
+    home: m.homeTeam || m.allHomeTeam, away: m.awayTeam || m.allAwayTeam,
+    homeLogo: teamLogo(logoFields(m, 'home'), m.homeTeamId, m.homeTeamAbbName || m.homeTeamAllName || m.homeTeam || m.allHomeTeam || m.home),
+    awayLogo: teamLogo(logoFields(m, 'away'), m.awayTeamId, m.awayTeamAbbName || m.awayTeamAllName || m.awayTeam || m.allAwayTeam || m.away),
+    homeTeamId: m.homeTeamId != null ? String(m.homeTeamId) : '',
+    awayTeamId: m.awayTeamId != null ? String(m.awayTeamId) : '',
+    half: m.sectionsNo1 || '', full: m.sectionsNo999 || '', goalLine: m.goalLine || '',
+    winFlag: m.winFlag || '', had: m.h ? { h: f(m.h), d: f(m.d), a: f(m.a) } : null,
+    status: RESULT_STATUS[m.matchResultStatus] || m.matchResultStatus || '',
+  };
+}
 function normalizeResults(j) {
   const arr = (j.value && (j.value.matchResult || j.value.list)) || [];
-  const list = arr
-    // only finished matches with a score (or an official "无效场次"); in-progress rows have empty scores
-    .filter(m => m.sectionsNo999 && String(m.sectionsNo999).trim())
-    .map(m => {
-      const num = m.matchNumStr || '';
-      const matchDate = m.matchDate;
-      return {
-        id: String(m.matchId), num, league: m.leagueNameAbbr || m.leagueName,
-        leagueColor: m.leagueBackColor ? '#' + String(m.leagueBackColor).replace('#', '') : null,
-        date: matchDate, businessDate: issueDateFromNum(matchDate, num),
-        home: m.homeTeam || m.allHomeTeam, away: m.awayTeam || m.allAwayTeam,
-        homeLogo: teamLogo(logoFields(m, 'home'), m.homeTeamId, m.homeTeamAbbName || m.homeTeamAllName || m.homeTeam || m.allHomeTeam || m.home),
-        awayLogo: teamLogo(logoFields(m, 'away'), m.awayTeamId, m.awayTeamAbbName || m.awayTeamAllName || m.awayTeam || m.allAwayTeam || m.away),
-        homeTeamId: m.homeTeamId != null ? String(m.homeTeamId) : '',
-        awayTeamId: m.awayTeamId != null ? String(m.awayTeamId) : '',
-        half: m.sectionsNo1 || '', full: m.sectionsNo999 || '', goalLine: m.goalLine || '',
-        winFlag: m.winFlag || '', had: m.h ? { h: f(m.h), d: f(m.d), a: f(m.a) } : null,
-        status: RESULT_STATUS[m.matchResultStatus] || m.matchResultStatus || '',
-      };
-    });
+  const list = arr.map(mapUniformResultRow).filter(Boolean);
   if (!list.length) throw new Error('API返回空赛果');
   return list;
+}
+
+/** Fetch per kickoff-day rows for matches that aged out of the rolling RESULT_DAYS window. */
+async function backfillHistoricalResults(resultsList, scheduleList) {
+  const byId = new Map((resultsList || []).map(r => [String(r.id), r]));
+  const now = Date.now();
+  const cutoff = bjDate(-RESULT_DAYS);
+  const datesNeeded = new Set();
+  for (const m of scheduleList || []) {
+    const id = String(m.id || '');
+    if (!id) continue;
+    if (byId.get(id)?.full) continue;
+    const ko = kickoffMs(m.date, m.time);
+    if (!Number.isFinite(ko) || ko > now - 30 * 60e3) continue;
+    const fetchDate = m.date;
+    if (!fetchDate || fetchDate > bjDate(0)) continue;
+    datesNeeded.add(fetchDate);
+  }
+  const toFetch = [...datesNeeded].filter(d => d <= cutoff).sort().slice(-10);
+  let added = 0;
+  for (const d of toFetch) {
+    const stillNeed = (scheduleList || []).some(m => m.date === d && !byId.get(String(m.id))?.full);
+    if (!stillNeed) continue;
+    const ep = `/gateway/uniform/football/getUniformMatchResultV1.qry?matchBeginDate=${d}&matchEndDate=${d}&leagueId=&pageSize=100&pageNo=1&isFix=0&matchPage=1&pcOrWap=1`;
+    try {
+      const j = await fetchJson(BASE + ep);
+      const arr = (j.value && (j.value.matchResult || j.value.list)) || [];
+      for (const row of arr) {
+        const mapped = mapUniformResultRow(row);
+        if (!mapped) continue;
+        const id = String(mapped.id);
+        if (!byId.get(id)?.full) {
+          byId.set(id, { ...(byId.get(id) || {}), ...mapped });
+          added++;
+        }
+      }
+    } catch (e) {
+      (lastError.resultsBackfill = lastError.resultsBackfill || []).push(`${d}: ${e.message}`);
+    }
+  }
+  if (added) console.log('[results] historical backfill', JSON.stringify({ added, dates: toFetch.length }));
+  return [...byId.values()];
+}
+
+async function completeResults(list) {
+  let data = list || [];
+  const seenMerge = resultsArchive.mergeSeenIntoResults(data);
+  data = seenMerge.data;
+  let schedRows = [];
+  try {
+    const schedPayload = cache.schedule && cache.schedule.payload;
+    if (schedPayload && Array.isArray(schedPayload.data)) schedRows = schedPayload.data;
+    else {
+      const sp = await getData('schedule');
+      schedRows = (sp && sp.data) || [];
+    }
+  } catch (e) {
+    console.warn('[results] schedule unavailable for merge', e.message);
+  }
+  const absorbed = resultsArchive.absorbScheduleFinished(data, schedRows);
+  data = absorbed.data;
+  try {
+    data = await backfillHistoricalResults(data, schedRows);
+  } catch (e) {
+    console.warn('[results] backfillHistoricalResults failed', e.message);
+  }
+  resultsArchive.recordResultsFromList(data);
+  const metaExtra = {
+    resultsArchive: {
+      seenMerged: seenMerge.merged,
+      scheduleAbsorbed: absorbed.added,
+    },
+  };
+  return { data, metaExtra };
 }
 
 // Settled results lag kickoff. Official live scores (getMatchLiveV1) fill that gap
@@ -414,6 +488,8 @@ function pruneAndSaveScheduleSeen(byId) {
       homeRank: m.homeRank || '', awayRank: m.awayRank || '',
       homeTeamId: m.homeTeamId || '', awayTeamId: m.awayTeamId || '',
       had: m.had || null, hhad: m.hhad || null, status: m.status || '',
+      half: m.half || '', full: m.full || '', goalLine: m.goalLine != null ? String(m.goalLine) : '',
+      winFlag: m.winFlag || '',
     };
   }
   try {
@@ -667,7 +743,17 @@ async function getData(kind) {
           console.warn('[matches] completeMatches failed', e.message);
         }
       }
-      if (kind === 'results') { try { data = await enrichResults(data); } catch (e) { lastError.live = [e.message]; } }
+      if (kind === 'results') {
+        try { data = await enrichResults(data); } catch (e) { lastError.live = [e.message]; }
+        try {
+          const done = await completeResults(data);
+          data = done.data;
+          metaExtra = { ...(metaExtra || {}), ...(done.metaExtra || {}) };
+        } catch (e) {
+          lastError.resultsComplete = [e.message];
+          console.warn('[results] completeResults failed', e.message);
+        }
+      }
       const byBiz = summarizeByBusinessDate(data);
       console.log(`[${kind}] live ${data.length} rows`, JSON.stringify(byBiz));
       // Assert: schedule/matches must not silently shrink below sporttery payload length
@@ -695,7 +781,13 @@ async function getData(kind) {
   }
   lastError[kind] = errors;
   // Fallback: clearly labeled sample data (cached shorter so live is retried soon)
-  const sampleData = kind === 'results' ? sample.results() : sample.matches();
+  let sampleData = kind === 'results' ? sample.results() : sample.matches();
+  if (kind === 'results') {
+    try {
+      const merged = resultsArchive.mergeSeenIntoResults(sampleData);
+      sampleData = merged.data;
+    } catch { /* optional */ }
+  }
   const payload = { source: 'sample', note: '官方接口不可达，当前展示为示例数据（非真实赛事/赔率）', errors, fetchedAt: new Date().toISOString(),
     data: sampleData, meta: { total: sampleData.length, byBusinessDate: summarizeByBusinessDate(sampleData) } };
   cache[kind] = { at: Date.now() - CACHE_MS + 60 * 1000, payload };

@@ -18,16 +18,16 @@ assert.ok(/\.rs-body \.mc-result \.rs-upset-tag/.test(css), '爆冷角标样式'
 assert.ok(/\.rs-body \.mc-result \.match-meta \{ font-size: 10px/.test(css), '开奖场次信息更小');
 assert.ok(/\.rs-body \.mc-result \.mc-teams \.badge[^}]*width: 24px/.test(css), '开奖队徽略大');
 
-assert.ok(/jc-v1\.9\.215/.test(swJs), 'SW VER 1.9.215');
+assert.ok(/jc-v1\.9\.218/.test(swJs), 'SW VER 1.9.218');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.215');
+assert.strictEqual(pkg.version, '1.9.218');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.215/.test(ver));
-assert.ok(/VERSION_CODE=252/.test(ver));
+assert.ok(/VERSION=1\.9\.218/.test(ver));
+assert.ok(/VERSION_CODE=255/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.strictEqual(cfg.version, '1.9.215');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.215\}"/.test(apkSh), 'build-apk default VERSION_NAME');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-252\}"/.test(apkSh), 'build-apk default VERSION_CODE');
+assert.strictEqual(cfg.version, '1.9.218');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.218\}"/.test(apkSh), 'build-apk default VERSION_NAME');
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-255\}"/.test(apkSh), 'build-apk default VERSION_CODE');
 
 console.log('ui-215-test OK');

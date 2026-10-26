@@ -5381,20 +5381,41 @@ async function fillAfPlayer(id, lg, { soft } = {}) {
   }
 }
 
+/** Copy finished score fields from schedule/seen stub onto a 开奖 row (historical days). */
+function hydrateResultScores(row, schedById) {
+  if (!row || row.full) return row;
+  const s = schedById.get(String(row.id));
+  if (!s || !s.full) return row;
+  const goalLine = row.goalLine || (s.hhad && s.hhad.goalLine) || s.goalLine || '';
+  return {
+    ...row,
+    full: s.full,
+    half: row.half || s.half || '',
+    goalLine,
+    had: row.had || s.had || null,
+    hhad: row.hhad || s.hhad || null,
+    status: row.status || s.status || '完场',
+  };
+}
+
 /** Build 开奖 list day + filtered rows (shared by page + soft patch). */
 function resultsDayModel() {
   const rs = S.results;
   if (!rs) return null;
   const sched = (S.schedule && S.schedule.length) ? S.schedule : [];
+  const schedById = new Map(sched.map(m => [String(m.id), m]));
   const today = bjDate(0);
   const dates = [...new Set([...rs.map(issueDate), ...sched.filter(m => issueDate(m) <= today).map(issueDate)])].sort();
   if (!dates.length) return { emptyAll: true, dates };
   if (!S.rsDate || !dates.includes(S.rsDate)) {
-    const withScores = dates.filter(d => rs.some(r => issueDate(r) === d && d <= today));
+    const withScores = dates.filter(d => rs.some(r => issueDate(r) === d && r.full && d <= today)
+      || sched.some(m => issueDate(m) === d && m.full && d <= today));
     S.rsDate = withScores[withScores.length - 1] || [...dates].reverse().find(d => d <= today) || dates[dates.length - 1];
   }
-  const dayRes = rs.filter(r => issueDate(r) === S.rsDate);
-  const dayFix = sched.filter(m => issueDate(m) === S.rsDate && !dayRes.some(r => r.id === m.id));
+  const dayRes = rs.filter(r => issueDate(r) === S.rsDate).map(r => hydrateResultScores(r, schedById));
+  const dayFix = sched
+    .filter(m => issueDate(m) === S.rsDate && !dayRes.some(r => r.id === m.id))
+    .map(m => hydrateResultScores(m, schedById));
   const day = [...dayRes, ...dayFix];
   S.rsLeague = '全部';
   const list = day.sort((a, b) => String(a.num).localeCompare(String(b.num), 'zh'));
