@@ -280,7 +280,7 @@ function issueWeek(m) {
   if (m.weekday) return m.weekday;
   return wd(issueDate(m));
 }
-/** 1.9.212: reference-style score column (red status + spaced score + HT line). */
+/** 1.9.213: compact score column (red status + spaced score + HT line). */
 function formatScoreSpaced(full, homeScore, awayScore) {
   if (homeScore != null && awayScore != null && !Number.isNaN(Number(homeScore)) && !Number.isNaN(Number(awayScore))) {
     return `${homeScore} : ${awayScore}`;
@@ -290,7 +290,7 @@ function formatScoreSpaced(full, homeScore, awayScore) {
   if (parts.length >= 2) return `${String(parts[0]).trim()} : ${String(parts[1]).trim()}`;
   return String(full);
 }
-function matchCardMeta(m, { favSize = 16 } = {}) {
+function matchCardMeta(m, { favSize = 14 } = {}) {
   const tail = [];
   if (m.sample) tail.push('<span class="sample-tag">示例</span>');
   if (isFav(m.id)) tail.push(`<span class="fav-on" style="width:${favSize}px;height:${favSize}px">${I.star}</span>`);

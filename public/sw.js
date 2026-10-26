@@ -1,5 +1,5 @@
 // 竞彩预测 service worker: offline app shell + last-known public match/data APIs. Account APIs are never cached.
-const VER = 'jc-v1.9.212';
+const VER = 'jc-v1.9.213';
 const CREST_CACHE = 'jc-crests-v1';
 const SHELL = ['./', './index.html', './style.css', './app.js', './config.js', './data-center-boot-slices.js', './sample-data.js', './manifest.json',
   './data-center-boot.json',
