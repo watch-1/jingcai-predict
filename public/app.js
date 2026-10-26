@@ -7344,7 +7344,7 @@ async function loadLiveStats(x, { force } = {}) {
           hero.outerHTML = matchHero(m || x, m, r, { favBtn: matchFavBtn(m || x) });
         }
         if (route().name === 'schedule') render();
-        else if (route().name === 'home') { if (!softPatchLiveScoreCards()) render(); }
+        else if (route().name === 'home') { patchHomeFocusStrip(); if (!softPatchLiveScoreCards()) render(); }
       } catch (_) {}
     }
     return j;
