@@ -781,7 +781,13 @@ async function getData(kind) {
   }
   lastError[kind] = errors;
   // Fallback: clearly labeled sample data (cached shorter so live is retried soon)
-  const sampleData = kind === 'results' ? sample.results() : sample.matches();
+  let sampleData = kind === 'results' ? sample.results() : sample.matches();
+  if (kind === 'results') {
+    try {
+      const merged = resultsArchive.mergeSeenIntoResults(sampleData);
+      sampleData = merged.data;
+    } catch { /* optional */ }
+  }
   const payload = { source: 'sample', note: '官方接口不可达，当前展示为示例数据（非真实赛事/赔率）', errors, fetchedAt: new Date().toISOString(),
     data: sampleData, meta: { total: sampleData.length, byBusinessDate: summarizeByBusinessDate(sampleData) } };
   cache[kind] = { at: Date.now() - CACHE_MS + 60 * 1000, payload };
