@@ -63,6 +63,7 @@ html[data-ready="1"] .app {
 .view.sub { padding-bottom: calc(20px + var(--safe-b)); }
 .view.has-bar { padding-bottom: calc(var(--tab-h) + var(--safe-b) + 80px); }
 .view.sub.has-bar { padding-bottom: calc(var(--safe-b) + 86px); }
+.view.has-calcbar { padding-bottom: calc(var(--tab-h) + var(--safe-b) + 88px); }
 
 /* ---------- header ---------- */
 .hdr {
@@ -1379,6 +1380,87 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 }
 .sch-filter-banner b { font-variant-numeric: tabular-nums; }
 .sch-filter-banner .btn { flex: none; white-space: nowrap; }
+
+/* ---------- 赛程 · 竞足串关计算器 (1.9.219) ---------- */
+.calc-panel { padding: 0 0 8px; background: #eef3fb; min-height: 40vh; }
+.calc-panel-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 4px; background: linear-gradient(180deg, #2f6fed 0%, #2563d4 100%); color: #fff;
+}
+.calc-title { font-size: 16px; font-weight: 700; }
+.calc-help-link {
+  font-size: 13px; color: #e8f0ff; padding: 4px 8px; border-radius: 14px; background: rgba(255,255,255,.12);
+}
+.calc-date-pill {
+  margin: 10px 12px 0; padding: 8px 14px; border-radius: 20px; background: #fff;
+  text-align: center; font-size: 14px; font-weight: 600; color: var(--t1); box-shadow: var(--sh);
+}
+.calc-edu-note { margin: 8px 14px 0; font-size: 12px; color: var(--t3); }
+.calc-list { margin: 10px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.calc-card {
+  margin: 0 10px; padding: 10px 10px 8px; background: #fff; border-radius: 10px;
+  border: 1px solid rgba(47,111,237,.12); box-shadow: 0 2px 8px rgba(16,24,40,.06);
+}
+.calc-card-top { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.calc-teams-line {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
+}
+.calc-teams-line .ct { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.calc-teams-line .ct b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 88px; }
+.calc-teams-line .ct-vs { flex: none; font-size: 11px; color: var(--t3); font-weight: 700; }
+.calc-card-meta { flex: none; text-align: right; font-size: 11px; line-height: 1.35; color: var(--t3); }
+.calc-card-meta .calc-num { display: block; font-weight: 700; color: var(--t2); }
+.calc-card-meta .calc-lg { display: block; font-weight: 600; }
+.calc-card-odds { display: flex; gap: 6px; align-items: stretch; }
+.calc-odds-stack { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.calc-odds-row { display: grid; grid-template-columns: 28px 1fr 1fr 1fr; gap: 4px; }
+.calc-gl {
+  display: grid; place-items: center; border-radius: 6px; background: #f2f5fb;
+  font-size: 11px; font-weight: 700; color: var(--t2);
+}
+.calc-gl.neg { color: var(--green); } .calc-gl.pos { color: var(--red); }
+.calc-cell {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 40px; padding: 4px 2px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fafbfd;
+  font-size: 11px; color: var(--t2);
+}
+.calc-cell .lab { font-weight: 600; }
+.calc-cell .num { font-size: 13px; font-weight: 800; color: var(--t1); margin-top: 1px; }
+.calc-cell.dis { opacity: .45; }
+.calc-cell.sel { background: var(--pri); border-color: var(--pri); color: #e8f0ff; }
+.calc-cell.sel .num { color: #fff; }
+.calc-cell.is-hot .calc-hot {
+  position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #f04438; color: #fff; font-size: 9px; font-style: normal; font-weight: 700;
+  display: grid; place-items: center; line-height: 1;
+}
+.calc-more-btn {
+  flex: none; width: 36px; border-radius: 8px; border: 0; background: #d9e8ff; color: #1a62f0;
+  font-size: 11px; font-weight: 700; line-height: 1.25; padding: 4px 2px;
+}
+.calc-more-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.calc-cell--sm { min-width: 64px; min-height: 36px; }
+.calc-more-sec { margin-top: 12px; }
+.calcbar {
+  position: fixed; left: 50%; transform: translateX(-50%); width: 100%; max-width: var(--maxw);
+  bottom: calc(var(--tab-h) + var(--safe-b)); z-index: 46;
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 12px;
+  background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(16,24,40,.08);
+}
+.calcbar-clear {
+  flex: none; width: 36px; height: 36px; border-radius: 8px; border: 0; background: #f2f5fb; color: var(--t2);
+  display: grid; place-items: center;
+}
+.calcbar-clear svg { width: 18px; height: 18px; }
+.calcbar-hint { flex: 1; min-width: 0; }
+.calcbar-hint .t { font-size: 14px; font-weight: 700; color: var(--t1); }
+.calcbar-hint .s { font-size: 11px; color: var(--t3); margin-top: 2px; }
+.calcbar-submit {
+  flex: none; min-width: 88px; height: 44px; padding: 0 16px; border-radius: 8px 0 0 8px; border: 0;
+  background: #7eb8ff; color: #fff; font-size: 15px; font-weight: 700;
+}
+.calcbar-submit:not(.dis) { background: linear-gradient(90deg, #4d9bff, #2f6fed); }
+.calcbar-submit.dis { opacity: .55; }
 
 .league-chips.strong { padding-top: 8px; padding-bottom: 6px; }
 .league-chips .lg-hot { font-weight: 600; }

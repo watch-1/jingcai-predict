@@ -753,7 +753,8 @@ const S = {
   tribeSub: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_tribe_sub')) || 'enter',
   tribeSearchQ: '',
   sel: {}, types: [], mult: 1, navDepth: 0,
-  schDate: null, schLeague: '全部', schMode: initSchMode(),
+  schDate: null, schLeague: '全部', schMode: initSchMode(), schChannel: initSchChannel(),
+  calcSel: {}, calcTypes: [], calcMult: 1,
   schHideFinished: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_hide_fin') === '1'),
   liveScores: null, liveScoresAt: 0, liveScorePoll: null, liveScoresLoading: false,
   rsDate: null, rsLeague: '全部', prFilter: '全部', prLane: 'hub', dataLeague: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_lg')) || 'epl', dataKind: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_kind')) || 'standings', dataSection: initDataSectionEarly(), bannerIdx: 0, pendingAv: null,
@@ -1810,22 +1811,49 @@ async function deletePlan(id) {
 
 // ---------- selection → 方案 calculator (personal record only) ----------
 const findMatch = id => (S.matches || []).find(m => m.id === String(id)) || (S.schedule || []).find(m => m.id === String(id)) || null;
-function selMatches() {
-  return Object.entries(S.sel).map(([id, ks]) => {
-    const m = findMatch(id); if (!m) return null; const keys = Object.keys(ks);
-    return { m, keys, odds: keys.map(k => m[k.slice(0, -1)][k.slice(-1)]) };
-  }).filter(x => x && x.keys.length);
+function oddsForSelKey(m, key, stored) {
+  if (typeof stored === 'number' && stored >= 1.01) return stored;
+  if (key.startsWith('hhad')) return m.hhad && m.hhad[key.slice(4)];
+  if (key.startsWith('had')) return m.had && m.had[key.slice(3)];
+  return Number(stored) || 0;
 }
+function selMatchesFrom(sel) {
+  return Object.entries(sel || {}).map(([id, ks]) => {
+    const m = findMatch(id); if (!m) return null;
+    const keys = Object.keys(ks);
+    const odds = keys.map(k => oddsForSelKey(m, k, ks[k])).filter(v => v > 0);
+    return { m, keys, odds };
+  }).filter(x => x && x.keys.length && x.odds.length === x.keys.length);
+}
+function selMatches() { return selMatchesFrom(S.sel); }
+function calcSelMatches() { return selMatchesFrom(S.calcSel); }
 function combos(arr, k, s = 0, cur = [], out = []) { if (cur.length === k) { out.push(cur.slice()); return out; } for (let i = s; i < arr.length; i++) { cur.push(arr[i]); combos(arr, k, i + 1, cur, out); cur.pop(); } return out; }
 const typeName = t => (t === 1 ? '单关' : `${t}串1`);
-function calc() {
-  const sm = selMatches(); const n = sm.length;
+/** Jingcai parlay math: 2 yuan/note base, combinatorial expansion across matches/options. */
+function calcFrom(sel, types, mult) {
+  const sm = selMatchesFrom(sel);
+  const n = sm.length;
   const avail = n === 1 ? [1] : Array.from({ length: Math.max(0, Math.min(n, 8) - 1) }, (_, i) => i + 2);
-  S.types = S.types.filter(t => avail.includes(t)); if (!S.types.length && n) S.types = [n === 1 ? 1 : Math.min(n, 8)];
+  let nextTypes = (types || []).filter(t => avail.includes(t));
+  if (!nextTypes.length && n) nextTypes = [n === 1 ? 1 : Math.min(n, 8)];
   let bets = 0, maxB = 0, minB = 0;
-  for (const t of S.types) for (const c of combos(sm, t)) { bets += c.reduce((a, x) => a * x.odds.length, 1); maxB += c.reduce((a, x) => a * Math.max(...x.odds), 1); }
-  if (S.types.length) { const t = Math.min(...S.types); minB = sm.map(x => Math.min(...x.odds)).sort((a, b) => a - b).slice(0, t).reduce((a, b) => a * b, 1); }
-  const k = 2 * S.mult; return { n, avail, bets, cost: bets * k, max: maxB * k, min: minB * k };
+  for (const t of nextTypes) {
+    for (const c of combos(sm, t)) {
+      bets += c.reduce((a, x) => a * x.odds.length, 1);
+      maxB += c.reduce((a, x) => a * Math.max(...x.odds), 1);
+    }
+  }
+  if (nextTypes.length) {
+    const t = Math.min(...nextTypes);
+    minB = sm.map(x => Math.min(...x.odds)).sort((a, b) => a - b).slice(0, t).reduce((a, b) => a * b, 1);
+  }
+  const stake = 2 * (mult || 1);
+  return { n, avail, types: nextTypes, bets, cost: bets * stake, max: maxB * stake, min: minB * stake };
+}
+function calc() {
+  const c = calcFrom(S.sel, S.types, S.mult);
+  S.types = c.types;
+  return c;
 }
 function toggleSel(mid, key) {
   const s = (S.sel[mid] ||= {}); s[key] ? delete s[key] : (s[key] = 1); if (!Object.keys(s).length) delete S.sel[mid];
@@ -1834,7 +1862,7 @@ function toggleSel(mid, key) {
 }
 function renderPlanBar() {
   const bar = $('#planbar'); const n = selMatches().length; const r = route();
-  const show = n > 0 && ['schedule', 'match', 'home'].includes(r.name);
+  const show = n > 0 && ['schedule', 'match', 'home'].includes(r.name) && !(r.name === 'schedule' && schChannelOf() === 'calc');
   bar.classList.toggle('hidden', !show); $('#view').classList.toggle('has-bar', show);
   if (!show) return;
   bar.classList.toggle('sub', !TABS.includes(r.name));
@@ -3559,6 +3587,17 @@ function isFinishedRow(x) { return x._t === 'r' || !!x.full || (x.status && /完
 const SCH_MODES = ['关注', '未开始', '已结束'];
 /** 1.9.148: 赛程主筛选项（关注 / 未开始 / 已结束）在顶栏中部；1.9.147 曾误放在日期条下。 */
 const SCH_MODE_ALL = '全部';
+function initSchChannel() {
+  try {
+    const ch = localStorage.getItem('jc_sch_channel');
+    return ch === 'calc' ? 'calc' : 'list';
+  } catch (_) { return 'list'; }
+}
+function schChannelOf() { return S.schChannel === 'calc' ? 'calc' : 'list'; }
+function setSchChannel(ch) {
+  S.schChannel = ch === 'calc' ? 'calc' : 'list';
+  try { localStorage.setItem('jc_sch_channel', S.schChannel); } catch (_) {}
+}
 function initSchMode() {
   const def = '未开始';
   try {
@@ -3924,16 +3963,207 @@ function softPatchSchedule() {
   } catch (_) { return false; }
 }
 
+function schChannelsHtml() {
+  const ch = schChannelOf();
+  return `<nav class="sch-channels" aria-label="赛程视图">
+    <button type="button" class="${ch === 'list' ? 'on' : ''}" data-act="schChannel" data-ch="list" aria-current="${ch === 'list' ? 'true' : 'false'}">比分</button>
+    <button type="button" class="${ch === 'calc' ? 'on' : ''}" data-act="schChannel" data-ch="calc" aria-current="${ch === 'calc' ? 'true' : 'false'}">计算器</button>
+  </nav>`;
+}
+
+function calcOddsCell(m, pool, k) {
+  const o = m[pool];
+  const v = o && o[k];
+  const key = pool + k;
+  const sel = S.calcSel[m.id]?.[key];
+  const pr = implied(o);
+  const top = pr ? order(pr)[0] : null;
+  const hot = !!(pr && k === top && pr[k] >= 0.45);
+  return `<button type="button" class="calc-cell ${v ? '' : 'dis'} ${sel ? 'sel' : ''}${hot ? ' is-hot' : ''}" data-act="calcPick" data-mid="${esc(m.id)}" data-calc-key="${esc(key)}" data-odds="${v || ''}"${v ? '' : ' disabled'}><span class="lab">${LBL[pool][k]}</span><b class="num">${v ? v.toFixed(2) : '--'}</b>${hot ? '<i class="calc-hot">热</i>' : ''}</button>`;
+}
+function calcOddsRow(m, pool) {
+  const o = m[pool];
+  const gl = pool === 'had' ? '0' : (o?.goalLine || '-');
+  return `<div class="calc-odds-row"><div class="calc-gl ${pool === 'had' ? '' : String(gl).startsWith('-') ? 'neg' : 'pos'}">${esc(gl)}</div>${['h', 'd', 'a'].map(k => calcOddsCell(m, pool, k)).join('')}</div>`;
+}
+function calcMatchCard(m) {
+  const lg = esc(m.leagueColor || '#2F6FED');
+  return `<div class="calc-card" data-mid="${esc(m.id)}">
+    <div class="calc-card-top">
+      <div class="calc-teams-line"><span class="ct h">${badge(m.home, 'sm', m.homeLogo)}<b>${esc(m.home)}</b></span><span class="ct-vs">VS</span><span class="ct a"><b>${esc(m.away)}</b>${badge(m.away, 'sm', m.awayLogo)}</span></div>
+      <div class="calc-card-meta"><span class="calc-num">${esc(m.num || '')}</span><span class="calc-lg" style="color:${lg}">${esc(m.league || '')}</span><span class="calc-tm">${esc(m.time || '--:--')}</span></div>
+    </div>
+    <div class="calc-card-odds">
+      <div class="calc-odds-stack">${calcOddsRow(m, 'had')}${calcOddsRow(m, 'hhad')}</div>
+      <button type="button" class="calc-more-btn" data-act="calcMore" data-mid="${esc(m.id)}">更多玩法</button>
+    </div>
+  </div>`;
+}
+function scheduleCalcRows(model) {
+  const rows = scheduleListRows(model.modeRows).filter(x => x._kind !== 'ft');
+  return rows.filter(x => x.had || x.hhad);
+}
+function scheduleCalcHtml(model) {
+  if (!model) return '';
+  const rows = scheduleCalcRows(model);
+  const wk = wd(S.schDate || bjDate(0));
+  let h = `<div class="calc-panel">
+    <div class="calc-panel-hd">
+      <span class="calc-title">竞足计算器</span>
+      <button type="button" class="calc-help-link" data-act="calcHelp">玩法说明</button>
+    </div>
+    <div class="calc-date-pill">${esc(S.schDate || '')} ${wk} 共${rows.length}场</div>
+    <p class="calc-edu-note">串关试算工具，仅供学习参考，非投注下单。</p>`;
+  if (!rows.length) {
+    h += empty('该日期暂无在售场次，可切换日期或查看比分列表。', '', '暂无可算场次');
+  } else {
+    h += `<div class="calc-list">${rows.map(calcMatchCard).join('')}</div>`;
+  }
+  return h + '</div>';
+}
+function calcPickCount() {
+  return calcSelMatches().reduce((a, x) => a + x.keys.length, 0);
+}
+function calcCanSubmit() {
+  const sm = calcSelMatches();
+  if (!sm.length) return false;
+  if (sm.length >= 2) return true;
+  return sm.length === 1 && sm[0].keys.length >= 1;
+}
+function calcSelLabel(key) {
+  if (key.startsWith('hhad')) return LBL.hhad[key.slice(4)] + '(让球)';
+  if (key.startsWith('had')) return LBL.had[key.slice(3)];
+  if (key === 'crs_s1sh') return '比分 胜其它';
+  if (key === 'crs_s1sd') return '比分 平其它';
+  if (key === 'crs_s1sa') return '比分 负其它';
+  if (key.startsWith('crs_')) {
+    const m = key.slice(4).match(/s(\d+)s(\d+)/);
+    return '比分 ' + (m ? (+m[1]) + ':' + (+m[2]) : key.slice(4));
+  }
+  if (key.startsWith('ttg_')) return '总进球 ' + (key.slice(4) === 's7' ? '7+' : key.slice(4).replace('s', ''));
+  if (key.startsWith('hafu_')) {
+    const map = { hh: '胜胜', hd: '胜平', ha: '胜负', dh: '平胜', dd: '平平', da: '平负', ah: '负胜', ad: '负平', aa: '负负' };
+    return '半全场 ' + (map[key.slice(5)] || key.slice(5));
+  }
+  return key;
+}
+function toggleCalcPick(mid, key, oddsVal) {
+  const m = findMatch(mid);
+  if (!m || !key) return;
+  const v = Number(oddsVal);
+  if (!v || v < 1) return;
+  const s = (S.calcSel[mid] ||= {});
+  if (s[key]) delete s[key];
+  else s[key] = v;
+  if (!Object.keys(s).length) delete S.calcSel[mid];
+  document.querySelectorAll(`.calc-cell[data-mid="${CSS.escape(String(mid))}"][data-calc-key="${CSS.escape(key)}"]`).forEach(el => el.classList.toggle('sel', !!S.calcSel[mid]?.[key]));
+  renderCalcBar();
+}
+function renderCalcBar() {
+  const bar = $('#calcbar');
+  if (!bar) return;
+  const r = route();
+  const show = r.name === 'schedule' && schChannelOf() === 'calc';
+  bar.classList.toggle('hidden', !show);
+  const view = $('#view');
+  if (view) view.classList.toggle('has-calcbar', show);
+  if (!show) return;
+  const sm = calcSelMatches();
+  const c = calcFrom(S.calcSel, S.calcTypes, S.calcMult);
+  S.calcTypes = c.types;
+  const can = calcCanSubmit();
+  const hintTitle = !sm.length ? '请选择比赛' : (sm.length === 1 ? `已选 1 场 · ${calcPickCount()} 项` : `已选 ${sm.length} 场 · ${calcPickCount()} 项`);
+  const hintSub = !sm.length ? '至少选择1场单关或任意两场比赛' : (sm.length === 1 ? '单关试算（2元/注）' : `${(c.types || []).map(typeName).join('、') || '串关'}试算`);
+  bar.innerHTML = `<button type="button" class="calcbar-clear" data-act="calcClear" aria-label="清空">${I.trash || '🗑'}</button>
+    <div class="calcbar-hint"><div class="t">${hintTitle}</div><div class="s">${hintSub}</div></div>
+    <button type="button" class="calcbar-submit${can ? '' : ' dis'}" data-act="calcSubmit"${can ? '' : ' disabled'}>提交</button>`;
+}
+function openCalcHelpSheet() {
+  const sh = $('#sheet');
+  sh.classList.remove('hidden');
+  sh.innerHTML = `<div class="sheet calc-help-sheet"><h3><span>玩法说明</span><button class="x" data-act="closeSheet">✕</button></h3>
+    <div class="doc" style="margin:0;box-shadow:none;padding:0">
+      <p>本页为<strong>串关试算计算器</strong>：选择胜平负、让球及更多玩法后，按竞彩固定奖金规则估算注数与中奖金额。</p>
+      <ul><li>每注按 <b>2 元</b>面值试算（与官方单注面值一致）。</li><li>单关：仅选 1 场；M串1：从所选场次中取 M 场组成一注，多场多选时按组合展开。</li><li>同场多选项会按「复式」展开；最高试算奖金为各注赔率乘积之和 × 2元 × 倍数。</li><li>未含税、未考虑官方封顶；结果仅供学习，不构成投注建议。</li></ul>
+    </div></div>`;
+}
+function openCalcSubmitSheet() {
+  const sm = calcSelMatches();
+  if (!calcCanSubmit()) return toast('请先按规则选择场次');
+  const c = calcFrom(S.calcSel, S.calcTypes, S.calcMult);
+  S.calcTypes = c.types;
+  const sh = $('#sheet');
+  sh.classList.remove('hidden');
+  sh.innerHTML = `<div class="sheet calc-result-sheet"><h3><span>试算结果</span><button class="x" data-act="closeSheet">✕</button></h3>
+    ${sm.map(x => `<div class="pk"><div class="n">${esc(x.m.num)} ${esc(x.m.home)} vs ${esc(x.m.away)}</div>
+      <div class="items">${x.keys.map((k, i) => `<span>${esc(calcSelLabel(k))} @${x.odds[i].toFixed(2)}</span>`).join('')}</div></div>`).join('')}
+    <div class="types">${c.avail.map(t => `<button type="button" data-act="calcType" data-type="${t}" class="${S.calcTypes.includes(t) ? 'on' : ''}">${typeName(t)}</button>`).join('')}</div>
+    <div class="calc-row"><span>倍数</span><div class="stepper"><button type="button" data-act="calcMult" data-mult="-1">−</button><input id="calcMultInp" type="number" min="1" max="99" value="${S.calcMult}"><button type="button" data-act="calcMult" data-mult="1">＋</button></div></div>
+    <div class="calc-row"><span>注数</span><span class="num"><b>${c.bets}</b> 注 · 面值 ${c.cost} 元</span></div>
+    <div class="calc-row"><span>中奖试算</span><span class="num"><b>${c.max.toFixed(2)}</b> 元</span></div>
+    <p class="note">若所选赛果全部命中，按当前赔率组合展开后的最高可中金额（2元/注 × 赔率乘积 × 倍数，未计税）。仅供学习试算。</p>
+    <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`;
+}
+function renderCalcMorePickables(mid, snap, m) {
+  const p = snap && snap.pools;
+  if (!p) return '<p class="note">暂无更多玩法数据，请稍后重试。</p>';
+  let h = '';
+  const pickBtn = (key, lab, val) => {
+    if (val == null || val === '' || Number(val) < 1) return '';
+    const sel = S.calcSel[mid]?.[key] ? ' sel' : '';
+    return `<button type="button" class="calc-cell calc-cell--sm${sel}" data-act="calcPick" data-mid="${esc(mid)}" data-calc-key="${esc(key)}" data-odds="${Number(val)}"><span class="lab">${esc(lab)}</span><b class="num">${fmtOdd(val)}</b></button>`;
+  };
+  if (p.crs) {
+    h += `<div class="calc-more-sec"><div class="os-hd">比分</div><div class="calc-more-grid">`;
+    for (let hg = 0; hg <= 5; hg++) for (let ag = 0; ag <= 5; ag++) {
+      const key = 'crs_s' + String(hg).padStart(2, '0') + 's' + String(ag).padStart(2, '0');
+      const v = p.crs[key];
+      if (v != null) h += pickBtn(key, `${hg}:${ag}`, v);
+    }
+    h += pickBtn('crs_s1sh', '胜其它', p.crs.s1sh) + pickBtn('crs_s1sd', '平其它', p.crs.s1sd) + pickBtn('crs_s1sa', '负其它', p.crs.s1sa);
+    h += `</div></div>`;
+  }
+  if (p.ttg) {
+    h += `<div class="calc-more-sec"><div class="os-hd">总进球</div><div class="calc-more-grid">`;
+    for (let i = 0; i <= 7; i++) h += pickBtn('ttg_s' + i, i === 7 ? '7+' : String(i), p.ttg['s' + i]);
+    h += `</div></div>`;
+  }
+  if (p.hafu) {
+    const labs = [['hh', '胜胜'], ['hd', '胜平'], ['ha', '胜负'], ['dh', '平胜'], ['dd', '平平'], ['da', '平负'], ['ah', '负胜'], ['ad', '负平'], ['aa', '负负']];
+    h += `<div class="calc-more-sec"><div class="os-hd">半全场</div><div class="calc-more-grid">`;
+    for (const [k, lab] of labs) h += pickBtn('hafu_' + k, lab, p.hafu[k]);
+    h += `</div></div>`;
+  }
+  if (!h) h = '<p class="note">该场暂无比分/总进球/半全场开售数据。</p>';
+  return h;
+}
+async function openCalcMoreSheet(mid) {
+  const m = findMatch(mid);
+  if (!m) return;
+  const sh = $('#sheet');
+  sh.classList.remove('hidden');
+  sh.innerHTML = `<div class="sheet calc-more-sheet"><h3><span>${esc(m.home)} vs ${esc(m.away)}</span><button class="x" data-act="closeSheet">✕</button></h3><div class="spinner"></div><p class="note">加载更多玩法…</p></div>`;
+  const snap = await loadOddsSnapshot(mid, m.date, m);
+  const inner = document.querySelector('.calc-more-sheet');
+  if (!inner) return;
+  inner.innerHTML = `<h3><span>${esc(m.home)} vs ${esc(m.away)}</span><button class="x" data-act="closeSheet">✕</button></h3>${renderCalcMorePickables(mid, snap, m)}`;
+}
+
 function pageSchedule() {
   let h = '';
   const model = scheduleDayModel();
   if (!model) return h + skeleton(4);
   const { modeRows, classifiedDay } = model;
-  h += leagueChips(modeRows, S.schLeague, 'slg', { strong: true });
-  h += `<div id="schBody" class="sch-body">${scheduleBodyHtml(model)}</div>`;
+  h += schChannelsHtml();
+  if (schChannelOf() === 'calc') {
+    h += scheduleCalcHtml(model);
+  } else {
+    h += leagueChips(modeRows, S.schLeague, 'slg', { strong: true });
+    h += `<div id="schBody" class="sch-body">${scheduleBodyHtml(model)}</div>`;
+  }
   const allDayIds = classifiedDay.map(x => String(x.id));
   const needFetch = !S.liveScoresAt || Date.now() - S.liveScoresAt > 35000;
-  if (needFetch && allDayIds.length) {
+  if (needFetch && allDayIds.length && schChannelOf() === 'list') {
     setTimeout(async () => {
       await loadLiveScores(allDayIds);
       if (route().name === 'schedule') render();
@@ -5443,7 +5673,7 @@ function resultsBodyHtml(list) {
   const wk = list && list[0] ? issueWeek(list[0]) : wd(S.rsDate);
   h += `<div class="list-meta"><span>${esc(S.rsDate)} ${wk} 开奖</span><span>${(list || []).length} 场</span></div>`;
   h += (list && list.length)
-    ? `<div class="grid">${list.map(x => x.full ? resultCard(x) : matchCard(x)).join('')}</div>`
+    ? `<div class="grid">${list.map(x => x.full ? resultCard(x) : matchCard(x, { odds: false })).join('')}</div>`
     : empty('该日期暂无场次。', '', '暂无场次');
   return h;
 }
@@ -10528,7 +10758,8 @@ function tabContentSig(name) {
     }
     if (name === 'schedule') {
       const n = (S.schedule && S.schedule.length) || (S.matches && S.matches.length) || 0;
-      return 's:' + n + ':' + (S.schDate || '') + ':' + (S.schLeague || '') + ':' + (S.schHideFinished ? 1 : 0);
+      const calcN = calcSelMatches().length;
+      return 's:' + n + ':' + (S.schDate || '') + ':' + (S.schLeague || '') + ':' + (S.schHideFinished ? 1 : 0) + ':' + schChannelOf() + ':' + calcN + ':' + (S.calcMult || 1);
     }
     if (name === 'predict') {
       const ms = S.matches || [];
@@ -10764,6 +10995,7 @@ function render(opts) {
     applyViewWrapClass(v, r);
     if (meDrawerOpen()) syncMeDrawer();
     renderPlanBar();
+    renderCalcBar();
     return;
   }
 
@@ -10823,6 +11055,7 @@ function render(opts) {
   syncTabbar(r.name, isTab);
   if (meDrawerOpen()) syncMeDrawer();
   renderPlanBar();
+  renderCalcBar();
   const payPhase = (S.payUi && S.payUi.phase) || 'form';
   const hasVip = (r.name === 'membership' && loggedIn()) || (r.name === 'pay' && payPhase === 'form');
   v.classList.toggle('has-vip', !!hasVip);
@@ -11429,6 +11662,27 @@ document.addEventListener('click', async e => {
       S.favs = S.favs.filter(f => f.matchId !== d.id); persistLists(); toast('已取消关注'); return render();
     }
     case 'clearSel': S.sel = {}; S.types = []; S.mult = 1; return render();
+    case 'schChannel': {
+      setSchChannel(d.ch);
+      invalidateTabKeep('schedule');
+      stopLiveScorePoll();
+      return render({ force: true });
+    }
+    case 'calcPick': return toggleCalcPick(d.mid, d.calcKey, d.odds);
+    case 'calcClear': S.calcSel = {}; S.calcTypes = []; S.calcMult = 1; return render({ force: true });
+    case 'calcSubmit': return openCalcSubmitSheet();
+    case 'calcHelp': return openCalcHelpSheet();
+    case 'calcMore': return openCalcMoreSheet(d.mid);
+    case 'calcType': {
+      const n = +d.type;
+      S.calcTypes = S.calcTypes.includes(n) ? S.calcTypes.filter(x => x !== n) : [...S.calcTypes, n];
+      if (!S.calcTypes.length) S.calcTypes = [n];
+      return openCalcSubmitSheet();
+    }
+    case 'calcMult': {
+      S.calcMult = Math.max(1, Math.min(99, S.calcMult + +d.mult));
+      return openCalcSubmitSheet();
+    }
     case 'openPlan': return openPlanSheet();
     case 'closeSheet': return closeSheet();
     case 'savePlan': return savePlan();
@@ -11737,6 +11991,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'mult') { S.mult = Math.max(1, Math.min(99, parseInt(e.target.value) || 1)); openPlanSheet(); }
+  if (e.target.id === 'calcMultInp') { S.calcMult = Math.max(1, Math.min(99, parseInt(e.target.value) || 1)); openCalcSubmitSheet(); }
   if (e.target.id === 'schHideFin') { setSchHideFinished(!!e.target.checked); render(); }
   if (e.target.id === 'colMatchSel' || e.target.id === 'colTitle' || e.target.id === 'colBody') syncColumnComposeFromDom();
 });
