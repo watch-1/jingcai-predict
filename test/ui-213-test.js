@@ -16,16 +16,16 @@ assert.ok(/\.mc-mid \.score \{ font-size: 19px/.test(css), 'compact main score')
 assert.ok(/\.mc \{ padding: 5px 12px 6px/.test(css), 'tight mc padding');
 assert.ok(/\.ls-row \{[^}]*padding: 5px 12px 6px/.test(css), 'tight ls-row padding');
 
-assert.ok(/jc-v1\.9\.213/.test(swJs), 'SW VER 1.9.213');
+assert.ok(/jc-v1\.9\.215/.test(swJs), 'SW VER 1.9.215');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.213');
+assert.strictEqual(pkg.version, '1.9.215');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.213/.test(ver));
-assert.ok(/VERSION_CODE=250/.test(ver));
+assert.ok(/VERSION=1\.9\.215/.test(ver));
+assert.ok(/VERSION_CODE=252/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.strictEqual(cfg.version, '1.9.213');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.213\}"/.test(apkSh), 'build-apk default VERSION_NAME');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-250\}"/.test(apkSh), 'build-apk default VERSION_CODE');
+assert.strictEqual(cfg.version, '1.9.215');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.215\}"/.test(apkSh), 'build-apk default VERSION_NAME');
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-252\}"/.test(apkSh), 'build-apk default VERSION_CODE');
 
 console.log('ui-213-test OK');
