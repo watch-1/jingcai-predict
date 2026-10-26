@@ -2374,10 +2374,8 @@ function resultInfo(r) {
   const ip = implied(r.had); return { res, hres, sp: r.had && res ? r.had[res] : null, fav: ip ? order(ip)[0] : null };
 }
 function resultTags(r) {
-  const { res, hres, sp, fav } = resultInfo(r);
+  const { res, fav } = resultInfo(r);
   const bits = [];
-  if (res) bits.push(`<span class="w">胜平负：${LBL.had[res]}${sp ? ' @' + sp.toFixed(2) : ''}</span>`);
-  if (hres) bits.push(`<span class="w">让球(${esc(r.goalLine)})：${hres}</span>`);
   const marketHit = !!(fav && res && fav === res);
   if (fav && res) {
     // Secondary / muted: odds-favorite baseline (do not change meaning of 赔率热门命中率)
@@ -2397,6 +2395,7 @@ function resultTags(r) {
       bits.push(`<span class="lean ${leanHit ? 'hit' : 'miss'}">表态 ${leanHit ? '✓ 命中' : '✗ 未中'}</span>`);
     }
   }
+  if (!bits.length) return '';
   return `<div class="rs-tags">${bits.join('')}</div>`;
 }
 function resultCard(r) {
@@ -3384,7 +3383,17 @@ function pageTribePost(id) {
 
 function dateStrip(dates, cur, key, { light = true } = {}) {
   const cls = 'dstrip' + (light ? ' light' : '');
-  return `<div class="${cls}" id="dstrip">${dates.map(d => `<button class="${d === cur ? 'on' : ''}" data-${key}="${d}">${dayName(d)}<small>${d.slice(5)}</small></button>`).join('')}</div>`;
+  const btns = dates.map(d => `<button type="button" class="${d === cur ? 'on' : ''}" data-${key}="${d}">${dayName(d)}<small>${d.slice(5)}</small></button>`).join('');
+  return `<div class="${cls}" id="dstrip"><span class="dstrip-edge" aria-hidden="true"></span>${btns}<span class="dstrip-edge" aria-hidden="true"></span></div>`;
+}
+/** 1.9.214: date strip — keep selected day readable without half-clipped edge cells. */
+function syncDateStripScroll(nds) {
+  if (!nds) return;
+  const on = nds.querySelector('button.on');
+  if (!on) return;
+  const pad = Math.max(10, (nds.clientWidth - on.offsetWidth) / 2);
+  const max = Math.max(0, nds.scrollWidth - nds.clientWidth);
+  nds.scrollLeft = Math.max(0, Math.min(on.offsetLeft - pad, max));
 }
 /** 热门 = 竞彩常见优先联赛（LEAGUE_PRIO 白名单），不含瑞超/挪超/巴甲等长尾。 */
 function isHotLeague(l) { return prio(l) < 99; }
@@ -3688,21 +3697,8 @@ function scheduleBodyHtml(model) {
       <span>编号缺口：当日缺 ${gapInfo.missing.map(n => '「' + n + '」').join('、')}（已显示 ${gapInfo.have}/${gapInfo.max}）。下拉刷新或稍后再试。</span>
     </div>`;
   }
-  const modeN = modeRows.length;
-  const hint = counts.live
-    ? `<span class="ls-live-hint"><i class="ls-dot"></i>当日 ${counts.live} 场进行中 · 约 50 秒自动刷新</span>`
-    : `当日 ${modeN} 场`;
-  const dayPhase = !counts.all ? '无赛'
-    : counts.live ? '进行中'
-      : counts.ns === counts.all ? '未开始'
-        : counts.ft === counts.all ? '已完赛' : '当日赛程';
-  h += `<div class="sch-toolbar">
-    <span class="sch-ch-hint">${hint}</span>
-    <button type="button" class="btn ghost sm" data-act="schRefresh">${S.liveScoresLoading ? '刷新中…' : '刷新'}</button>
-  </div>`;
   h += warnBar();
   const rows = scheduleListRows(modeRows);
-  h += `<div class="list-meta"><span>${esc(S.schDate)} ${rows[0] ? issueWeek(rows[0]) : wd(S.schDate)} · ${esc(dayPhase)}</span><span>${rows.length ? `${rows.length} 场` : '0 场'}</span></div>`;
   if (!rows.length) {
     h += empty('该日期暂无场次，可切换日期查看。', '', '暂无场次');
   } else if (S.schLeague === '全部') {
@@ -5324,8 +5320,7 @@ function softPatchResults() {
     const nds = document.getElementById('dstrip');
     if (nds) {
       if (dsx !== null) nds.scrollLeft = dsx;
-      const on = nds.querySelector('.on');
-      if (on) nds.scrollLeft = on.offsetLeft - nds.clientWidth / 2 + on.clientWidth / 2;
+      else syncDateStripScroll(nds);
     }
     try {
       const n = (S.results && S.results.length) || 0;
@@ -10655,10 +10650,7 @@ function render(opts) {
   const nds = $('#dstrip');
   if (nds) {
     if (dsx !== null) nds.scrollLeft = dsx;
-    else {
-      const on = nds.querySelector('.on');
-      if (on) nds.scrollLeft = on.offsetLeft - nds.clientWidth / 2 + on.clientWidth / 2;
-    }
+    else syncDateStripScroll(nds);
   }
   syncTopChrome(r.name);
   syncTabbar(r.name, isTab);
