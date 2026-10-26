@@ -2373,39 +2373,20 @@ function resultInfo(r) {
   if (ok && r.goalLine !== '' && !isNaN(gl)) { const x = hg + gl - ag; hres = x > 0 ? '让胜' : x === 0 ? '让平' : '让负'; }
   const ip = implied(r.had); return { res, hres, sp: r.had && res ? r.had[res] : null, fav: ip ? order(ip)[0] : null };
 }
-function resultTags(r) {
+/** 开奖爆冷：赛果与胜平负赔率热门（隐含概率最高项）相反。 */
+function isMarketUpset(r) {
   const { res, fav } = resultInfo(r);
-  const bits = [];
-  const marketHit = !!(fav && res && fav === res);
-  if (fav && res) {
-    // Secondary / muted: odds-favorite baseline (do not change meaning of 赔率热门命中率)
-    bits.push(`<span class="mkt ${marketHit ? 'hit' : 'miss'}">赔率热门 ${PICK.had[fav]} ${marketHit ? '✓ 命中' : '✗ 未中'}</span>`);
-  }
-  // Primary: 表态 from stored leanFeedback / usefulness byMatch — never invent for old matches
-  const lf = (S.leanByMatch || {})[String(r.id)];
-  if (lf && lf.speakMode === 'amplify' && res && (lf.lean || lf.amplifyHit != null || lf.leanHit != null)) {
-    const leanHit = lf.amplifyHit != null ? !!lf.amplifyHit : (lf.leanHit != null ? !!lf.leanHit : (lf.lean ? lf.lean === res : false));
-    const leanLab = lf.pickText || (lf.lean && PICK.had[lf.lean]) || '';
-    const against = leanHit && fav && res && !marketHit; // 表态命中 + 赔率热门未中
-    if (against) {
-      bits.push(`<span class="lean hit contra" title="表态命中且与赔率热门相反">逆盘命中${leanLab ? ' · 表态 ' + leanLab : ''}</span>`);
-    } else if (leanLab) {
-      bits.push(`<span class="lean ${leanHit ? 'hit' : 'miss'}">表态 ${leanLab} ${leanHit ? '✓ 命中' : '✗ 未中'}</span>`);
-    } else {
-      bits.push(`<span class="lean ${leanHit ? 'hit' : 'miss'}">表态 ${leanHit ? '✓ 命中' : '✗ 未中'}</span>`);
-    }
-  }
-  if (!bits.length) return '';
-  return `<div class="rs-tags">${bits.join('')}</div>`;
+  return !!(res && fav && fav !== res);
 }
 function resultCard(r) {
   const row = classifyScoreRow(r);
   if (!row._half && r.half) row._half = r.half;
   if (!row._full && r.full) row._full = r.full;
-  return `<div class="card mc mc-result" data-go="#/match/${encodeURIComponent(r.id)}">
+  const upset = isMarketUpset(r);
+  return `<div class="card mc mc-result${upset ? ' is-upset' : ''}" data-go="#/match/${encodeURIComponent(r.id)}">
+    ${upset ? '<span class="rs-upset-tag">爆冷</span>' : ''}
     ${matchCardMeta(r)}
-    ${matchTeamsRow(r, row)}
-    ${resultTags(r)}</div>`;
+    ${matchTeamsRow(r, row)}</div>`;
 }
 
 // ======================= tab pages =======================
@@ -5249,29 +5230,17 @@ function resultsBodyHtml(list) {
   if (S.rsrc?.source === 'sample') {
     h += `<div class="warn-bar">⚠️ <b>示例数据</b>：${esc(S.rsrc.note || '官方接口暂不可达')}，<b>非真实赛果</b>。</div>`;
   }
-  let hit = 0, tot = 0, ampHit = 0, ampTot = 0, contraN = 0;
+  let upsetN = 0, tot = 0;
   (list || []).forEach(r => {
     if (!r.full) return;
     const { res, fav } = resultInfo(r);
-    if (res && fav) { tot++; if (res === fav) hit++; }
-    const lf = (S.leanByMatch || {})[String(r.id)];
-    if (lf && lf.speakMode === 'amplify' && (lf.amplifyHit != null || lf.leanHit != null || lf.lean)) {
-      const ok = lf.amplifyHit != null ? !!lf.amplifyHit : (lf.leanHit != null ? !!lf.leanHit : (lf.lean === res));
-      ampTot++;
-      if (ok) {
-        ampHit++;
-        if (fav && res && fav !== res) contraN++;
-      }
+    if (res && fav) {
+      tot++;
+      if (fav !== res) upsetN++;
     }
   });
   if (tot) {
-    let sub = `赔率热门（胜平负隐含概率最高项）命中 ${hit} 场，命中率 ${pct(hit / tot)}`;
-    if (ampTot) {
-      sub += `<br><span class="daysum-lean">表态命中 ${ampHit}/${ampTot}（${pct(ampHit / ampTot)}）`;
-      if (contraN) sub += ` · 逆盘 ${contraN}`;
-      sub += '</span>';
-    }
-    h += `<div class="daysum"><b class="num">${hit}/${tot}</b><div>${sub}</div></div>`;
+    h += `<div class="daysum"><b class="num">${upsetN}/${tot}</b><div>今日爆冷 ${upsetN} 场 / 共 ${tot} 场</div></div>`;
   }
   const wk = list && list[0] ? issueWeek(list[0]) : wd(S.rsDate);
   h += `<div class="list-meta"><span>${esc(S.rsDate)} ${wk} 开奖</span><span>${(list || []).length} 场</span></div>`;
