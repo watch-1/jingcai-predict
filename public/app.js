@@ -763,7 +763,7 @@ const S = {
   playerDbKey: (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('jc_player_db_key')) || null,
   playerDbCache: { overview: null, recent: null, outcomes: null, search: null, match: {}, player: {} },
   columnFeed: { attitude: null, interact: null }, columnAuthors: null, columnMe: null, columnTab: 'attitude', columnSearch: '',
-  homeMidTab: 'attitude', homeHotLoaded: false, homeHotPosts: null,
+  homeMidTab: 'attitude', homeHotLoaded: false, homeHotPosts: null, homeFocusIdx: 0, homeFocusRotateIv: null,
   columnCompose: { kind: 'match', topic: '分析', matchId: '', matchLabel: '', title: '', body: '', pick: '' },
   columnAuthorCache: {}, columnPostCache: {},
   meBackToDrawer: false,
@@ -1909,7 +1909,7 @@ function back() {
     }
   } else { NAV.length = 0; go('#/home', true); navNote('#/home'); }
 }
-window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || (detailTabOf(route().arg) !== 'data' && detailTabOf(route().arg) !== 'events')) stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'events') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || (detailTabOf(route().arg) !== 'data' && detailTabOf(route().arg) !== 'events')) stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'events') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); if (route().name !== 'home') stopHomeFocusRotate(); render(); window.scrollTo(0, 0); });
 // Android back button hook (MainActivity calls this): returns 1 if handled in-page, 0 to exit the app
 window.__appBack = () => {
   if (!$('#dialog').classList.contains('hidden')) { $('#dialog').querySelector('[data-r="0"]').click(); return 1; }
@@ -1926,7 +1926,7 @@ const hdr = (title, { back: b = true, right = '' } = {}) =>
   `<header class="hdr center"><div class="hdr-side left">${b ? `<button class="ic-btn" data-act="back" aria-label="返回">${I.back}</button>` : '<span class="ph"></span>'}</div><h1 class="hdr-title">${esc(title)}</h1><div class="hdr-side right">${right || '<span class="ph"></span>'}</div></header>`;
 const foot = () => ''; // 1.9.96: no data-source / disclaimer footer in end-user UI
 
-const TOP_TAB_DEF = [['tribe', '部落'], ['news', '头条'], ['results', '开奖']];
+const TOP_TAB_DEF = [['tribe', '论坛'], ['news', '头条'], ['results', '开奖']];
 const TAB_DEF = [['home', '首页', I.home], ['schedule', '赛程', I.cal], ['predict', '预测', I.chart], ['data', '数据', I.data]];
 
 /** Remember last 部落/头条/开奖 when user opens a top tab (not used for bottom-tool highlight). */
@@ -2307,7 +2307,7 @@ function topChromeCenterHtml(rName) {
   }
   if (rName === 'tribe') {
     const q = esc(S.tribeSearchQ || '');
-    return `<div class="tc-tribe-search" role="search" aria-label="搜索部落">
+    return `<div class="tc-tribe-search" role="search" aria-label="搜索论坛">
       <span class="tc-tribe-search-ic" aria-hidden="true">${I.search}</span>
       <input type="search" id="tribe-hub-search" class="tc-tribe-search-inp" placeholder="搜索球队/圈子" value="${q}" autocomplete="off" enterkeyhint="search" maxlength="40">
     </div>`;
@@ -2586,20 +2586,100 @@ async function fillHomeBanners() {
   }
   initBanner();
 }
-function focusMatchPool() {
+/** Home hero strip: live → recently kicked-off (within window) → upcoming not-started. */
+const HOME_FOCUS_RECENT_MS = 3 * 3600e3;
+
+function homeFocusBuckets() {
   const ms = S.matches || [];
   const now = Date.now();
   const ranked = ms.map(m => ({ m, row: classifyScoreRow(m) }));
-  const live = ranked.filter(x => x.row._kind === 'live')
-    .sort((a, b) => prio(a.m.league) - prio(b.m.league) || kickoff(a.m) - kickoff(b.m));
-  const up = ranked.filter(x => x.row._kind === 'ns' && kickoff(x.m) > now)
-    .sort((a, b) => prio(a.m.league) - prio(b.m.league) || kickoff(a.m) - kickoff(b.m));
-  const seen = new Set(); const out = [];
-  for (const { m } of [...live, ...up]) {
-    if (seen.has(m.id)) continue; seen.add(m.id); out.push(m);
-    if (out.length >= 6) break;
+  const sortLive = (a, b) => prio(a.m.league) - prio(b.m.league) || kickoff(a.m) - kickoff(b.m);
+  const sortRecent = (a, b) => prio(a.m.league) - prio(b.m.league) || kickoff(b.m) - kickoff(a.m);
+  const sortUp = (a, b) => prio(a.m.league) - prio(b.m.league) || kickoff(a.m) - kickoff(b.m);
+  const live = ranked.filter(x => x.row._kind === 'live').sort(sortLive);
+  const recent = ranked.filter(x => {
+    if (x.row._kind === 'ft' || x.row._kind === 'live') return false;
+    const ko = kickoff(x.m);
+    return now >= ko && now < ko + HOME_FOCUS_RECENT_MS;
+  }).sort(sortRecent);
+  const up = ranked.filter(x => x.row._kind === 'ns' && kickoff(x.m) > now).sort(sortUp);
+  const seen = new Set();
+  const dedupe = (list) => {
+    const out = [];
+    for (const { m } of list) {
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+      out.push(m);
+    }
+    return out;
+  };
+  const rotatePool = dedupe([...live, ...recent]);
+  seen.clear();
+  const fallback = dedupe(up).slice(0, 6);
+  return { rotatePool, fallback };
+}
+
+function focusMatchPool() {
+  const { rotatePool, fallback } = homeFocusBuckets();
+  if (rotatePool.length) return rotatePool.slice(0, 6);
+  return fallback;
+}
+
+function pickHomeFocusMatches() {
+  const { rotatePool, fallback } = homeFocusBuckets();
+  const pool = rotatePool.length ? rotatePool : fallback;
+  if (!pool.length) return [];
+  const idx = (S.homeFocusIdx || 0) % pool.length;
+  if (homeTheme() === 'luxury') {
+    if (pool.length === 1) return pool;
+    return [pool[idx], pool[(idx + 1) % pool.length]];
   }
-  return out;
+  return [pool[idx]];
+}
+
+function stopHomeFocusRotate() {
+  if (S.homeFocusRotateIv) {
+    clearInterval(S.homeFocusRotateIv);
+    S.homeFocusRotateIv = null;
+  }
+}
+
+function patchHomeFocusStrip() {
+  const row = document.querySelector('.focus-row');
+  const pitch = document.querySelector('.focus-pitch-wrap');
+  const picks = pickHomeFocusMatches();
+  if (row) {
+    row.innerHTML = picks.length
+      ? picks.map(focusCardCompact).join('')
+      : '<div class="focus-empty note">暂无焦点赛事</div>';
+    return true;
+  }
+  if (pitch) {
+    pitch.innerHTML = picks[0]
+      ? focusCardPitch(picks[0])
+      : '<div class="focus-empty note">暂无焦点赛事</div>';
+    return true;
+  }
+  return false;
+}
+
+function startHomeFocusRotate() {
+  stopHomeFocusRotate();
+  const { rotatePool } = homeFocusBuckets();
+  if (rotatePool.length < 2) return;
+  S.homeFocusRotateIv = setInterval(() => {
+    if (route().name !== 'home') {
+      stopHomeFocusRotate();
+      return;
+    }
+    const pool = homeFocusBuckets().rotatePool;
+    if (pool.length < 2) {
+      stopHomeFocusRotate();
+      return;
+    }
+    S.homeFocusIdx = ((S.homeFocusIdx || 0) + 1) % pool.length;
+    if (!patchHomeFocusStrip()) render();
+  }, 60000);
 }
 function focusCardCompact(m) {
   const row = classifyScoreRow(m);
@@ -2608,7 +2688,8 @@ function focusCardCompact(m) {
     mid = esc(row._full || m.full || '-'); meta = '完场';
   } else if (row._kind === 'live') {
     mid = row._homeScore != null ? esc(`${row._homeScore}:${row._awayScore}`) : (m.liveScore ? esc(m.liveScore) : 'VS');
-    meta = esc(row._phaseZh || '进行中');
+    const lab = scoreMinuteLab(row);
+    meta = typeof lab === 'string' && lab.indexOf('&') >= 0 ? lab : esc(lab || row._phaseZh || '进行中');
   } else {
     mid = esc(m.time || 'VS'); meta = esc(row._phaseZh || '未开赛');
   }
@@ -2621,11 +2702,21 @@ function focusCardCompact(m) {
   </button>`;
 }
 function focusCardPitch(m) {
-  const meta = esc((m.time || '') || '—');
+  const row = classifyScoreRow(m);
+  let center;
+  if (row._kind === 'ft') {
+    center = esc(row._full || m.full || '-') + ' · 完场';
+  } else if (row._kind === 'live') {
+    const sc = row._homeScore != null ? `${row._homeScore}:${row._awayScore}` : (m.liveScore || 'VS');
+    const lab = scoreMinuteLab(row) || row._phaseZh || '进行中';
+    center = esc(sc) + ' · ' + (typeof lab === 'string' && lab.indexOf('&') >= 0 ? lab : esc(lab));
+  } else {
+    center = esc((m.time || '') || '—');
+  }
   return `<button type="button" class="focus-bar" data-go="#/match/${encodeURIComponent(m.id)}">
     ${badge(m.home, 'sm', m.homeLogo)}
     <span class="fb-name">${esc(m.home)}</span>
-    <span class="fb-time num">${meta}</span>
+    <span class="fb-time num">${center}</span>
     <span class="fb-name r">${esc(m.away)}</span>
     ${badge(m.away, 'sm', m.awayLogo)}
   </button>`;
@@ -2743,8 +2834,8 @@ async function fillHomeTribeHot() {
     if (!feedEl.isConnected || (S.homeMidTab || 'attitude') !== 'hot') return;
     const posts = ((j && j.posts) || []).filter((p) => p.kind !== 'match_vote');
     if (!posts.length) {
-      feedEl.innerHTML = empty('还没有圈子热议，去部落发帖互动吧。',
-        '<button type="button" class="btn ghost sm" data-go="#/tribe">逛部落</button>', '暂无热议');
+      feedEl.innerHTML = empty('还没有圈子热议，去论坛发帖互动吧。',
+        '<button type="button" class="btn ghost sm" data-go="#/tribe">逛论坛</button>', '暂无热议');
       S.homeHotLoaded = true;
       return;
     }
@@ -2898,12 +2989,12 @@ function syncHomeAttitudeScroll() {
 function pageHome() {
   const theme = homeTheme();
   const ms = S.matches;
-  const focus = focusMatchPool();
+  const focusPicks = ms ? pickHomeFocusMatches() : [];
   let h = `<div class="banner home-hero theme-${theme}"><div class="track" id="bnTrack">${homeHeroSlides(theme, S.homeBannerNews || null)}</div><div class="dots">${Array.from({ length: BANNER_N }, (_, i) => `<i class="${i === S.bannerIdx ? 'on' : ''}"></i>`).join('')}</div></div>`;
   if (theme === 'luxury') {
-    h += `<div class="focus-row">${ms ? (focus.slice(0, 2).map(focusCardCompact).join('') || '<div class="focus-empty note">暂无焦点赛事</div>') : '<div class="focus-card skel"></div><div class="focus-card skel"></div>'}</div>`;
+    h += `<div class="focus-row">${ms ? (focusPicks.map(focusCardCompact).join('') || '<div class="focus-empty note">暂无焦点赛事</div>') : '<div class="focus-card skel"></div><div class="focus-card skel"></div>'}</div>`;
   } else {
-    h += `<div class="focus-pitch-wrap">${ms ? (focus[0] ? focusCardPitch(focus[0]) : '<div class="focus-empty note">暂无焦点赛事</div>') : '<div class="focus-bar skel"></div>'}</div>`;
+    h += `<div class="focus-pitch-wrap">${ms ? (focusPicks[0] ? focusCardPitch(focusPicks[0]) : '<div class="focus-empty note">暂无焦点赛事</div>') : '<div class="focus-bar skel"></div>'}</div>`;
   }
   h += warnBar();
   h += homeAttitudeSection(ms);
@@ -2911,11 +3002,13 @@ function pageHome() {
   h += `<div id="home-column-authors" class="col-wall">${skeletonNews(1)}</div>`;
   setTimeout(() => {
     fillHomeBanners(); fillHomeColumnAuthors(); refreshHomeMidFeed();
+    startHomeFocusRotate();
     // 1.9.123: warm live-scores without full home wipe (was blanking page under float-ball)
     const ids = (S.matches || []).slice(0, 40).map(m => String(m.id)).filter(Boolean);
     if (ids.length) {
       loadLiveScores(ids).then(() => {
         if (route().name !== 'home') return;
+        patchHomeFocusStrip();
         if (!softPatchLiveScoreCards()) render();
       }).catch(() => {});
     }
@@ -3287,7 +3380,7 @@ function pageTribeClub(id) {
     if (f) t = { tribeId: tid, nameZh: f.nameZh, leagueZh: f.leagueZh, leagueKey: f.leagueKey, logo: f.logo || '', heat: 0 };
   }
   if (!t) {
-    return hdr('球队部落', { back: true }) + empty('球队信息加载中或暂无数据。', '<button type="button" class="btn ghost sm" data-go="#/tribe">返回部落</button>', '未找到球队') + foot();
+    return hdr('球队部落', { back: true }) + empty('球队信息加载中或暂无数据。', '<button type="button" class="btn ghost sm" data-go="#/tribe">返回论坛</button>', '未找到球队') + foot();
   }
   const folOn = isTribeFollow(t.tribeId);
   const folBtn = tribeJoinBtnHtml(t, folOn);
@@ -9373,7 +9466,7 @@ function pageFriends() {
     h += '<div class="pad-card"><div class="spinner" style="margin:24px auto"></div></div>';
   } else if (!cache.length) {
     const msg = tab === 'following' ? '还没有关注任何人，在看帖时点击「+ 关注」添加好友。' : '暂无粉丝';
-    h += empty(msg, tab === 'following' ? '<button class="btn pri sm" data-go="#/tribe">去部落看看</button>' : '', tab === 'following' ? '列表为空' : '暂无粉丝');
+    h += empty(msg, tab === 'following' ? '<button class="btn pri sm" data-go="#/tribe">去论坛看看</button>' : '', tab === 'following' ? '列表为空' : '暂无粉丝');
   } else {
     h += `<div class="uf-list">${cache.map(u => friendListRow(u, { showUnfollow: tab === 'following' })).join('')}</div>`;
   }
@@ -10308,7 +10401,7 @@ function softPatchLiveScoreCards() {
 const PAGES = { home: pageHome, tribe: pageTribe, 'tribe-club': pageTribeClub, 'tribe-compose': pageTribeCompose, 'tribe-post': pageTribePost, schedule: pageSchedule, predict: pagePredict, data: pageData, results: pageResults, me: pageMe, match: pageMatch, player: pagePlayer, team: pageTeam, aplayer: pageAfPlayer, search: pageSearch, 'player-db': pagePlayerDb, plans: pagePlans, favs: pageFavs, friends: pageFriends,
   news: pageNews, login: pageLogin, register: pageRegister, profile: pageProfile, password: pagePassword, delete: pageDelete, settings: pageSettings, about: pageAbout, terms: pageTerms, privacy: pagePrivacy,
   membership: pageMembership, pay: pagePay, orders: pageOrders, 'member-terms': pageMemberTerms, column: pageColumn, kb: pageKb };
-const TITLES = { home: '首页', tribe: '部落', 'tribe-club': '球队部落', 'tribe-compose': '发布帖子', 'tribe-post': '看帖', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库', friends: '好友' };
+const TITLES = { home: '首页', tribe: '论坛', 'tribe-club': '球队部落', 'tribe-compose': '发布帖子', 'tribe-post': '看帖', schedule: '赛程', predict: '预测', data: '数据中心', results: '开奖', news: '头条', me: '我的', match: '赛事详情', player: '球员详情', team: '球队详情', aplayer: '球员详情', search: '搜索', 'player-db': '球员库', news: '体坛资讯', login: '登录', register: '注册', membership: '会员中心', pay: '确认支付', orders: '会员订单', 'member-terms': '会员服务协议', column: '球迷专栏', kb: '我的知识库', friends: '好友' };
 
 /** In-memory keep-alive for bottom-tab pages — restore DOM HTML instead of wiping to skeleton. */
 const TAB_KEEP = Object.create(null);
