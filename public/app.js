@@ -1877,12 +1877,13 @@ function renderPlanBar() {
 }
 function openPlanSheet() {
   const sm = selMatches(); if (!sm.length) return closeSheet();
+  S.mult = clampCalcMult(S.mult);
   const c = calc(); const sh = $('#sheet'); sh.classList.remove('hidden');
   sh.innerHTML = `<div class="sheet"><h3><span>方案预览</span><button class="x" data-act="closeSheet">✕</button></h3>
     ${sm.map(x => `<div class="pk"><div class="n">${esc(x.m.num)} ${esc(x.m.home)} vs ${esc(x.m.away)}</div><div class="s">${esc(x.m.league)} · ${esc(x.m.date.slice(5))} ${esc(x.m.time)}</div>
       <div class="items">${x.keys.map((k, i) => `<span>${LBL[k.slice(0, -1)][k.slice(-1)]}${k.startsWith('hhad') ? '(' + esc(x.m.hhad.goalLine) + ')' : ''} @${x.odds[i].toFixed(2)}</span>`).join('')}</div></div>`).join('')}
     <div class="types">${c.avail.map(t => `<button data-type="${t}" class="${S.types.includes(t) ? 'on' : ''}">${typeName(t)}</button>`).join('')}</div>
-    <div class="calc-row"><span>倍数</span><div class="stepper"><button data-mult="-1">−</button><input id="mult" type="number" min="1" max="99" value="${S.mult}"><button data-mult="1">＋</button></div></div>
+    <div class="calc-row"><span>倍数</span><div class="stepper"><button data-mult="-1">−</button><input id="mult" type="number" min="1" max="${CALC_MULT_MAX}" value="${S.mult}"><button data-mult="1">＋</button></div></div>
     <div class="calc-row"><span>组合数</span><span class="num">${c.bets} 注（按每注2元计 ${c.cost} 元）</span></div>
     <div class="calc-row"><span>理论奖金</span><span class="num"><b>${c.min.toFixed(2)}</b> ~ <b>${c.max.toFixed(2)}</b> 元</span></div>
     <p class="note">理论奖金 = 2元 × 赔率乘积 × 倍数，未计税与官方封顶。方案只作为个人记录保存${loggedIn() ? '并同步到你的账号' : '在本机'}，不会提交到任何第三方。</p>
@@ -11327,7 +11328,7 @@ document.addEventListener('click', async e => {
   const d = el.dataset;
   if (d.key) return toggleSel(d.mid, d.key);
   if (d.type) { const n = +d.type; S.types = S.types.includes(n) ? S.types.filter(x => x !== n) : [...S.types, n]; if (!S.types.length) S.types = [n]; return openPlanSheet(); }
-  if (d.mult) { S.mult = Math.max(1, Math.min(99, S.mult + +d.mult)); return openPlanSheet(); }
+  if (d.mult) { S.mult = clampCalcMult(S.mult + +d.mult); return openPlanSheet(); }
   if (d.sdate) {
     if (window.__schDateSuppressClick) return;
     commitSchDate(d.sdate);
@@ -12159,7 +12160,7 @@ document.addEventListener('input', e => {
   }
 });
 document.addEventListener('change', e => {
-  if (e.target.id === 'mult') { S.mult = Math.max(1, Math.min(99, parseInt(e.target.value) || 1)); openPlanSheet(); }
+  if (e.target.id === 'mult') { S.mult = clampCalcMult(parseInt(e.target.value, 10) || 1); openPlanSheet(); }
   if (e.target.id === 'calcMultInp') { S.calcMult = clampCalcMult(parseInt(e.target.value, 10) || 1); openCalcSubmitSheet(); }
   if (e.target.id === 'schHideFin') { setSchHideFinished(!!e.target.checked); render(); }
   if (e.target.id === 'colMatchSel' || e.target.id === 'colTitle' || e.target.id === 'colBody') syncColumnComposeFromDom();
