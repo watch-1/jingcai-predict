@@ -1881,8 +1881,25 @@ function openPlanSheet() {
     <p class="note">理论奖金 = 2元 × 赔率乘积 × 倍数，未计税与官方封顶。方案只作为个人记录保存${loggedIn() ? '并同步到你的账号' : '在本机'}，不会提交到任何第三方。</p>
     <button class="btn pri block" data-act="savePlan">保存方案</button></div>`;
 }
-function closeSheet() { $('#sheet').classList.add('hidden'); $('#sheet').innerHTML = ''; }
+function syncSheetScrollLock() {
+  const sh = $('#sheet');
+  const on = sh && !sh.classList.contains('hidden');
+  document.body.classList.toggle('sheet-on', !!on);
+  const view = $('#view');
+  if (view) view.classList.toggle('sheet-lock', !!on);
+}
+function closeSheet() {
+  $('#sheet').classList.add('hidden');
+  $('#sheet').innerHTML = '';
+  syncSheetScrollLock();
+}
 globalThis.closeSheet = closeSheet;
+function openSheetHtml(html) {
+  const sh = $('#sheet');
+  sh.classList.remove('hidden');
+  sh.innerHTML = html;
+  syncSheetScrollLock();
+}
 
 // ======================= router =======================
 /** 1.9.146: top feed tabs (部落/头条/开奖) + bottom tabs (首页/赛程/预测/数据). */
@@ -3835,7 +3852,7 @@ function ensureLiveScorePoll(ids, hasLive) {
     const r = route();
     if (r.name !== 'schedule') { stopLiveScorePoll(); return; }
     await loadLiveScores(ids, { force: true });
-    // soft re-render only schedule list body if possible
+    purgeCalcSelClosed();
     if (route().name === 'schedule') render();
   }, 50000);
 }
@@ -3971,7 +3988,32 @@ function schChannelsHtml() {
   </nav>`;
 }
 
-function calcOddsCell(m, pool, k) {
+/** 计算器停选：与比分页 classifyScoreRow + 开球时刻一致（非仅按日历日）。 */
+function calcMatchClosed(row) {
+  if (!row) return true;
+  const x = row._kind != null ? row : classifyScoreRow(row);
+  if (x._kind === 'ft' || x._kind === 'live') return true;
+  if (Date.now() >= kickoff(x)) return true;
+  return false;
+}
+function crsPoolKey(hg, ag) {
+  return 's' + String(hg).padStart(2, '0') + 's' + String(ag).padStart(2, '0');
+}
+function crsCalcSelKey(hg, ag) {
+  return 'crs_' + crsPoolKey(hg, ag);
+}
+function purgeCalcSelClosed() {
+  let changed = false;
+  for (const mid of Object.keys(S.calcSel)) {
+    const m = findMatch(mid);
+    if (!m || calcMatchClosed(m)) {
+      delete S.calcSel[mid];
+      changed = true;
+    }
+  }
+  return changed;
+}
+function calcOddsCell(m, pool, k, closed) {
   const o = m[pool];
   const v = o && o[k];
   const key = pool + k;
@@ -3979,23 +4021,26 @@ function calcOddsCell(m, pool, k) {
   const pr = implied(o);
   const top = pr ? order(pr)[0] : null;
   const hot = !!(pr && k === top && pr[k] >= 0.45);
-  return `<button type="button" class="calc-cell ${v ? '' : 'dis'} ${sel ? 'sel' : ''}${hot ? ' is-hot' : ''}" data-act="calcPick" data-mid="${esc(m.id)}" data-calc-key="${esc(key)}" data-odds="${v || ''}"${v ? '' : ' disabled'}><span class="lab">${LBL[pool][k]}</span><b class="num">${v ? v.toFixed(2) : '--'}</b>${hot ? '<i class="calc-hot">热</i>' : ''}</button>`;
+  const dis = closed || !v;
+  return `<button type="button" class="calc-cell ${dis ? 'dis' : ''} ${sel ? 'sel' : ''}${hot && !dis ? ' is-hot' : ''}"${dis ? '' : ' data-act="calcPick"'} data-mid="${esc(m.id)}" data-calc-key="${esc(key)}" data-odds="${v || ''}"${dis ? ' disabled' : ''}><span class="lab">${LBL[pool][k]}</span><b class="num">${v ? v.toFixed(2) : '--'}</b>${hot && !dis ? '<i class="calc-hot">热</i>' : ''}</button>`;
 }
-function calcOddsRow(m, pool) {
+function calcOddsRow(m, pool, closed) {
   const o = m[pool];
   const gl = pool === 'had' ? '0' : (o?.goalLine || '-');
-  return `<div class="calc-odds-row"><div class="calc-gl ${pool === 'had' ? '' : String(gl).startsWith('-') ? 'neg' : 'pos'}">${esc(gl)}</div>${['h', 'd', 'a'].map(k => calcOddsCell(m, pool, k)).join('')}</div>`;
+  return `<div class="calc-odds-row"><div class="calc-gl ${pool === 'had' ? '' : String(gl).startsWith('-') ? 'neg' : 'pos'}">${esc(gl)}</div>${['h', 'd', 'a'].map(k => calcOddsCell(m, pool, k, closed)).join('')}</div>`;
 }
 function calcMatchCard(m) {
+  const closed = calcMatchClosed(m);
   const lg = esc(m.leagueColor || '#2F6FED');
-  return `<div class="calc-card" data-mid="${esc(m.id)}">
+  const phase = closed ? (m._phaseZh || (Date.now() >= kickoff(m) ? '已开赛' : '')) : '';
+  return `<div class="calc-card${closed ? ' is-closed' : ''}" data-mid="${esc(m.id)}">
     <div class="calc-card-top">
       <div class="calc-teams-line"><span class="ct h">${badge(m.home, 'sm', m.homeLogo)}<b>${esc(m.home)}</b></span><span class="ct-vs">VS</span><span class="ct a"><b>${esc(m.away)}</b>${badge(m.away, 'sm', m.awayLogo)}</span></div>
-      <div class="calc-card-meta"><span class="calc-num">${esc(m.num || '')}</span><span class="calc-lg" style="color:${lg}">${esc(m.league || '')}</span><span class="calc-tm">${esc(m.time || '--:--')}</span></div>
+      <div class="calc-card-meta"><span class="calc-num">${esc(m.num || '')}</span><span class="calc-lg" style="color:${lg}">${esc(m.league || '')}</span><span class="calc-tm">${esc(m.time || '--:--')}</span>${phase ? `<span class="calc-st">${esc(phase)}</span>` : ''}</div>
     </div>
     <div class="calc-card-odds">
-      <div class="calc-odds-stack">${calcOddsRow(m, 'had')}${calcOddsRow(m, 'hhad')}</div>
-      <button type="button" class="calc-more-btn" data-act="calcMore" data-mid="${esc(m.id)}">更多玩法</button>
+      <div class="calc-odds-stack">${calcOddsRow(m, 'had', closed)}${calcOddsRow(m, 'hhad', closed)}</div>
+      <button type="button" class="calc-more-btn${closed ? ' dis' : ''}" data-act="calcMore" data-mid="${esc(m.id)}"${closed ? ' disabled' : ''}>更多玩法</button>
     </div>
   </div>`;
 }
@@ -4049,7 +4094,7 @@ function calcSelLabel(key) {
 }
 function toggleCalcPick(mid, key, oddsVal) {
   const m = findMatch(mid);
-  if (!m || !key) return;
+  if (!m || !key || calcMatchClosed(m)) return;
   const v = Number(oddsVal);
   if (!v || v < 1) return;
   const s = (S.calcSel[mid] ||= {});
@@ -4060,6 +4105,7 @@ function toggleCalcPick(mid, key, oddsVal) {
   renderCalcBar();
 }
 function renderCalcBar() {
+  purgeCalcSelClosed();
   const bar = $('#calcbar');
   if (!bar) return;
   const r = route();
@@ -4079,22 +4125,19 @@ function renderCalcBar() {
     <button type="button" class="calcbar-submit${can ? '' : ' dis'}" data-act="calcSubmit"${can ? '' : ' disabled'}>提交</button>`;
 }
 function openCalcHelpSheet() {
-  const sh = $('#sheet');
-  sh.classList.remove('hidden');
-  sh.innerHTML = `<div class="sheet calc-help-sheet"><h3><span>玩法说明</span><button class="x" data-act="closeSheet">✕</button></h3>
+  openSheetHtml(`<div class="sheet calc-help-sheet"><h3><span>玩法说明</span><button class="x" data-act="closeSheet">✕</button></h3>
     <div class="doc" style="margin:0;box-shadow:none;padding:0">
       <p>本页为<strong>串关试算计算器</strong>：选择胜平负、让球及更多玩法后，按竞彩固定奖金规则估算注数与中奖金额。</p>
       <ul><li>每注按 <b>2 元</b>面值试算（与官方单注面值一致）。</li><li>单关：仅选 1 场；M串1：从所选场次中取 M 场组成一注，多场多选时按组合展开。</li><li>同场多选项会按「复式」展开；最高试算奖金为各注赔率乘积之和 × 2元 × 倍数。</li><li>未含税、未考虑官方封顶；结果仅供学习，不构成投注建议。</li></ul>
-    </div></div>`;
+    </div></div>`);
 }
 function openCalcSubmitSheet() {
+  purgeCalcSelClosed();
   const sm = calcSelMatches();
   if (!calcCanSubmit()) return toast('请先按规则选择场次');
   const c = calcFrom(S.calcSel, S.calcTypes, S.calcMult);
   S.calcTypes = c.types;
-  const sh = $('#sheet');
-  sh.classList.remove('hidden');
-  sh.innerHTML = `<div class="sheet calc-result-sheet"><h3><span>试算结果</span><button class="x" data-act="closeSheet">✕</button></h3>
+  openSheetHtml(`<div class="sheet calc-result-sheet"><h3><span>试算结果</span><button class="x" data-act="closeSheet">✕</button></h3>
     ${sm.map(x => `<div class="pk"><div class="n">${esc(x.m.num)} ${esc(x.m.home)} vs ${esc(x.m.away)}</div>
       <div class="items">${x.keys.map((k, i) => `<span>${esc(calcSelLabel(k))} @${x.odds[i].toFixed(2)}</span>`).join('')}</div></div>`).join('')}
     <div class="types">${c.avail.map(t => `<button type="button" data-act="calcType" data-type="${t}" class="${S.calcTypes.includes(t) ? 'on' : ''}">${typeName(t)}</button>`).join('')}</div>
@@ -4102,23 +4145,27 @@ function openCalcSubmitSheet() {
     <div class="calc-row"><span>注数</span><span class="num"><b>${c.bets}</b> 注 · 面值 ${c.cost} 元</span></div>
     <div class="calc-row"><span>中奖试算</span><span class="num"><b>${c.max.toFixed(2)}</b> 元</span></div>
     <p class="note">若所选赛果全部命中，按当前赔率组合展开后的最高可中金额（2元/注 × 赔率乘积 × 倍数，未计税）。仅供学习试算。</p>
-    <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`;
+    <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`);
 }
 function renderCalcMorePickables(mid, snap, m) {
+  const closed = calcMatchClosed(m);
   const p = snap && snap.pools;
   if (!p) return '<p class="note">暂无更多玩法数据，请稍后重试。</p>';
   let h = '';
   const pickBtn = (key, lab, val) => {
     if (val == null || val === '' || Number(val) < 1) return '';
     const sel = S.calcSel[mid]?.[key] ? ' sel' : '';
-    return `<button type="button" class="calc-cell calc-cell--sm${sel}" data-act="calcPick" data-mid="${esc(mid)}" data-calc-key="${esc(key)}" data-odds="${Number(val)}"><span class="lab">${esc(lab)}</span><b class="num">${fmtOdd(val)}</b></button>`;
+    const dis = closed ? ' dis' : '';
+    const act = closed ? '' : ' data-act="calcPick"';
+    const disAttr = closed ? ' disabled' : '';
+    return `<button type="button" class="calc-cell calc-cell--sm${sel}${dis}"${act} data-mid="${esc(mid)}" data-calc-key="${esc(key)}" data-odds="${Number(val)}"${disAttr}><span class="lab">${esc(lab)}</span><b class="num">${fmtOdd(val)}</b></button>`;
   };
   if (p.crs) {
-    h += `<div class="calc-more-sec"><div class="os-hd">比分</div><div class="calc-more-grid">`;
+    h += `<div class="calc-more-sec"><div class="os-hd">比分</div><div class="calc-more-grid calc-crs-grid">`;
     for (let hg = 0; hg <= 5; hg++) for (let ag = 0; ag <= 5; ag++) {
-      const key = 'crs_s' + String(hg).padStart(2, '0') + 's' + String(ag).padStart(2, '0');
-      const v = p.crs[key];
-      if (v != null) h += pickBtn(key, `${hg}:${ag}`, v);
+      const pk = crsPoolKey(hg, ag);
+      const v = p.crs[pk];
+      if (v != null) h += pickBtn(crsCalcSelKey(hg, ag), `${hg}:${ag}`, v);
     }
     h += pickBtn('crs_s1sh', '胜其它', p.crs.s1sh) + pickBtn('crs_s1sd', '平其它', p.crs.s1sd) + pickBtn('crs_s1sa', '负其它', p.crs.s1sa);
     h += `</div></div>`;
@@ -4140,20 +4187,22 @@ function renderCalcMorePickables(mid, snap, m) {
 async function openCalcMoreSheet(mid) {
   const m = findMatch(mid);
   if (!m) return;
-  const sh = $('#sheet');
-  sh.classList.remove('hidden');
-  sh.innerHTML = `<div class="sheet calc-more-sheet"><h3><span>${esc(m.home)} vs ${esc(m.away)}</span><button class="x" data-act="closeSheet">✕</button></h3><div class="spinner"></div><p class="note">加载更多玩法…</p></div>`;
+  if (calcMatchClosed(m)) return toast('该场已开赛，不可再选');
+  openSheetHtml(`<div class="sheet calc-more-sheet"><h3><span>${esc(m.home)} vs ${esc(m.away)}</span><button class="x" data-act="closeSheet">✕</button></h3><div class="calc-more-scroll"><div class="spinner"></div><p class="note">加载更多玩法…</p></div></div>`);
   const snap = await loadOddsSnapshot(mid, m.date, m);
   const inner = document.querySelector('.calc-more-sheet');
   if (!inner) return;
-  inner.innerHTML = `<h3><span>${esc(m.home)} vs ${esc(m.away)}</span><button class="x" data-act="closeSheet">✕</button></h3>${renderCalcMorePickables(mid, snap, m)}`;
+  const scroll = inner.querySelector('.calc-more-scroll');
+  const body = renderCalcMorePickables(mid, snap, m);
+  if (scroll) scroll.innerHTML = body;
+  else inner.innerHTML = `<h3><span>${esc(m.home)} vs ${esc(m.away)}</span><button class="x" data-act="closeSheet">✕</button></h3>${body}`;
 }
 
 function pageSchedule() {
   let h = '';
   const model = scheduleDayModel();
   if (!model) return h + skeleton(4);
-  const { modeRows, classifiedDay } = model;
+  const { modeRows, classifiedDay, counts } = model;
   h += schChannelsHtml();
   if (schChannelOf() === 'calc') {
     h += scheduleCalcHtml(model);
@@ -4163,10 +4212,15 @@ function pageSchedule() {
   }
   const allDayIds = classifiedDay.map(x => String(x.id));
   const needFetch = !S.liveScoresAt || Date.now() - S.liveScoresAt > 35000;
-  if (needFetch && allDayIds.length && schChannelOf() === 'list') {
+  const needLivePoll = (counts && counts.live > 0) || classifiedDay.some(x => x._kind !== 'ft' && Date.now() >= kickoff(x));
+  if (schChannelOf() === 'calc') ensureLiveScorePoll(allDayIds, needLivePoll);
+  if (needFetch && allDayIds.length) {
     setTimeout(async () => {
       await loadLiveScores(allDayIds);
-      if (route().name === 'schedule') render();
+      if (route().name === 'schedule') {
+        purgeCalcSelClosed();
+        render();
+      }
     }, 0);
   }
   return h + foot();
