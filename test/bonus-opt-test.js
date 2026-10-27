@@ -12,11 +12,17 @@ const chunk = appJs.match(
 )?.[0];
 assert.ok(chunk, 'bonus-opt helpers present in app.js');
 
+const simChunk = appJs.match(
+  /function simultaneousWinPrizeRange\(lines, mults\) \{[\s\S]*?\n\}/
+)?.[0];
+assert.ok(simChunk, 'simultaneousWinPrizeRange present in app.js');
+
 const ctx = { console, LBL: { had: { h: '胜', d: '平', a: '负' }, hhad: { h: '让胜', d: '让平', a: '让负' } } };
 vm.createContext(ctx);
-vm.runInContext(chunk + `
+vm.runInContext(chunk + simChunk + `
 globalThis.computeBonusOptMults = computeBonusOptMults;
 globalThis.lineEstPrize = lineEstPrize;
+globalThis.simultaneousWinPrizeRange = simultaneousWinPrizeRange;
 `, ctx);
 
 const lines = [
@@ -58,10 +64,31 @@ assert.strictEqual(coldOff.reduce((a, b) => a + b, 0), 100);
 assert.ok(coldOff[3] >= 70, 'official-like slip: coldest line ~70%+ units');
 assert.ok(coldOff[0] >= 10 && coldOff[1] >= 6 && coldOff[2] >= 5, 'official-like tail coverage');
 
+const mkLine = (picks, oddsProd) => ({ picks, oddsProd });
+const nested = [
+  mkLine([{ num: '001', key: 'hadh' }, { num: '002', key: 'hadh' }], 10),
+  mkLine([{ num: '001', key: 'hadh' }, { num: '003', key: 'hadh' }], 8),
+  mkLine([{ num: '001', key: 'hadd' }, { num: '002', key: 'hadh' }], 12),
+];
+const mults = [10, 10, 10];
+const singleExtrema = {
+  min: Math.min(...nested.map((l, i) => ctx.lineEstPrize(l, mults[i]))),
+  max: Math.max(...nested.map((l, i) => ctx.lineEstPrize(l, mults[i]))),
+};
+const sim = ctx.simultaneousWinPrizeRange(nested, mults);
+assert.ok(sim.max > singleExtrema.max, 'max should exceed largest single-line prize when lines hit together');
+assert.ok(sim.max === ctx.lineEstPrize(nested[0], 10) + ctx.lineEstPrize(nested[1], 10), 'best outcome sums compatible 001胜 lines');
+assert.ok(sim.min > 0 && sim.min < sim.max, 'min is positive simultaneous total below max');
+assert.ok(sim.min !== singleExtrema.max || sim.max > singleExtrema.max, 'range is not single-line extrema only');
+
 const appStr = appJs;
 assert.ok(/data-act="openBonusOpt"/.test(appStr), 'trial sheet: 优化方案 button');
 assert.ok(/奖金优化/.test(appStr) && /未做优化/.test(appStr) && /平均优化/.test(appStr) && /博冷优化/.test(appStr), 'bonus opt modes');
 assert.ok(/function expandCalcDanShiLines/.test(appStr), 'expand 单式 lines');
+assert.ok(/function simultaneousWinPrizeRange/.test(appStr), 'simultaneous prize range helper');
+assert.ok(/bonus-opt-disclaimer/.test(appStr), 'bonus opt page disclaimer at bottom');
+assert.ok(/calc-panel[\s\S]*calc-list[\s\S]*calc-edu-note/.test(appStr), 'calc disclaimer after match list');
+assert.ok(!/calc-date-row[\s\S]{0,120}calc-edu-note/.test(appStr), 'calc disclaimer not under date row');
 assert.ok(/var\(--sat\)/.test(fs.readFileSync(path.join(root, 'public/style.css'), 'utf8')), 'bonus opt header uses safe-area top');
 
-console.log('bonus-opt-test OK', { none, avg, cold, coldOff });
+console.log('bonus-opt-test OK', { none, avg, cold, coldOff, sim, singleExtrema });

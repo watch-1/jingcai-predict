@@ -34,7 +34,7 @@ assert.strictEqual(cfg.version, '1.9.219');
 assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.219\}"/.test(apkSh), 'build-apk default VERSION_NAME');
 assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-256\}"/.test(apkSh), 'build-apk default VERSION_CODE');
 
-assert.ok(/maxB \+= c\.reduce/.test(appJs), 'calc: sums parlay max odds products');
+assert.ok(/simultaneousWinPrizeRange/.test(appJs), 'calc: predicted prize uses simultaneous-win totals');
 assert.ok(/bets \+= c\.reduce/.test(appJs), 'calc: expands note count');
 assert.ok(/中奖试算/.test(appJs.match(/function openCalcSubmitSheet[\s\S]*?^}/m)?.[0] || ''), 'submit sheet shows prize figure');
 
