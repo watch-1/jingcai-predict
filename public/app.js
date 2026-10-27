@@ -1839,24 +1839,19 @@ function combos(arr, k, s = 0, cur = [], out = []) { if (cur.length === k) { out
 const typeName = t => (t === 1 ? '单关' : `${t}串1`);
 /** Jingcai parlay math: 2 yuan/note base, combinatorial expansion across matches/options. */
 function calcFrom(sel, types, mult) {
-  const sm = selMatchesFrom(sel);
+  const { sm, avail, types: nextTypes } = calcResolvedTypes(sel, types);
   const n = sm.length;
-  const avail = n === 1 ? [1] : Array.from({ length: Math.max(0, Math.min(n, 8) - 1) }, (_, i) => i + 2);
-  let nextTypes = (types || []).filter(t => avail.includes(t));
-  if (!nextTypes.length && n) nextTypes = [n === 1 ? 1 : Math.min(n, 8)];
-  let bets = 0, maxB = 0, minB = 0;
+  let bets = 0;
   for (const t of nextTypes) {
     for (const c of combos(sm, t)) {
       bets += c.reduce((a, x) => a * x.odds.length, 1);
-      maxB += c.reduce((a, x) => a * Math.max(...x.odds), 1);
     }
   }
-  if (nextTypes.length) {
-    const t = Math.min(...nextTypes);
-    minB = sm.map(x => Math.min(...x.odds)).sort((a, b) => a - b).slice(0, t).reduce((a, b) => a * b, 1);
-  }
-  const stake = 2 * (mult || 1);
-  return { n, avail, types: nextTypes, bets, cost: bets * stake, max: maxB * stake, min: minB * stake };
+  const m = mult || 1;
+  const stake = 2 * m;
+  const lines = expandCalcDanShiLines(sel, nextTypes);
+  const range = simultaneousWinPrizeRange(lines, lines.map(() => m));
+  return { n, avail, types: nextTypes, bets, cost: bets * stake, min: range.min, max: range.max };
 }
 function calcResolvedTypes(sel, types) {
   const sm = selMatchesFrom(sel);
@@ -1972,20 +1967,59 @@ function computeBonusOptMults(mode, lines, amountYuan, baseMult) {
   const weights = lines.map(l => 1 / l.oddsProd);
   return distributeIntegerUnits(weights, units).map(m => Math.max(0, Math.min(9999, m)));
 }
+/** Min/max total prize when all jointly winnable 单式 hit under some full outcome (竞彩预测奖金语义). */
+function simultaneousWinPrizeRange(lines, mults) {
+  const active = [];
+  for (let i = 0; i < lines.length; i++) {
+    const prize = lineEstPrize(lines[i], mults[i] || 0);
+    if (prize > 0) active.push({ line: lines[i], prize });
+  }
+  if (!active.length) return { min: 0, max: 0 };
+  const perMatchKeys = {};
+  for (const { line } of active) {
+    for (const p of line.picks) {
+      (perMatchKeys[p.num] ||= new Set()).add(p.key);
+    }
+  }
+  const matchNums = Object.keys(perMatchKeys);
+  const keyLists = matchNums.map(n => [...perMatchKeys[n]]);
+  let max = 0;
+  let min = Infinity;
+  const walk = (idx, outcome) => {
+    if (idx >= matchNums.length) {
+      let sum = 0;
+      for (const { line, prize } of active) {
+        let ok = true;
+        for (const p of line.picks) {
+          if (outcome[p.num] !== p.key) { ok = false; break; }
+        }
+        if (ok) sum += prize;
+      }
+      if (sum > 0) min = Math.min(min, sum);
+      if (sum > max) max = sum;
+      return;
+    }
+    const num = matchNums[idx];
+    for (const k of keyLists[idx]) {
+      outcome[num] = k;
+      walk(idx + 1, outcome);
+    }
+  };
+  walk(0, {});
+  if (min === Infinity) min = 0;
+  return { min, max };
+}
 function bonusOptTotals(lines, mults) {
   let bets = 0, cost = 0;
-  const prizes = [];
   for (let i = 0; i < lines.length; i++) {
     const m = mults[i] || 0;
     if (m > 0) {
       bets++;
       cost += m * 2;
-      prizes.push(lineEstPrize(lines[i], m));
     }
   }
-  const min = prizes.length ? Math.min(...prizes) : 0;
-  const max = prizes.length ? Math.max(...prizes) : 0;
-  return { bets, cost, min, max };
+  const range = simultaneousWinPrizeRange(lines, mults);
+  return { bets, cost, min: range.min, max: range.max };
 }
 function calcSubmitSheetOpen() {
   const sh = $('#sheet');
@@ -4277,12 +4311,13 @@ function scheduleCalcHtml(model) {
       <div class="calc-date-pill">${esc(S.schDate || '')} ${wk} 共${rows.length}场</div>
       <button type="button" class="calc-help-inline" data-act="calcHelp">玩法说明</button>
     </div>
-    <p class="calc-edu-note">串关试算工具，仅供学习参考，非投注下单。</p>`;
+    `;
   if (!rows.length) {
     h += empty('该日期暂无在售场次，可切换日期或查看比分列表。', '', '暂无可算场次');
   } else {
     h += `<div class="calc-list">${rows.map(calcMatchCard).join('')}</div>`;
   }
+  h += `<p class="calc-edu-note">串关试算工具，仅供学习参考，非投注下单。</p>`;
   return h + '</div>';
 }
 function calcPickCount() {
@@ -4522,6 +4557,7 @@ function renderBonusOptSheet(lines) {
         </div>
         <button type="button" class="bonus-opt-done" data-act="bonusOptDone">完成</button>
       </div>
+      <p class="calc-edu-note bonus-opt-disclaimer">串关试算工具，仅供学习参考，非投注下单。</p>
     </footer>
   </div>`;
   syncSheetScrollLock();

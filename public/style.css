@@ -1399,7 +1399,13 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
   margin: 0; padding: 7px 14px; border-radius: 20px; background: #fff;
   text-align: center; font-size: 14px; font-weight: 600; color: var(--t1); box-shadow: var(--sh);
 }
-.calc-edu-note { margin: 6px 14px 0; font-size: 12px; color: var(--t3); text-align: center; }
+.calc-edu-note {
+  margin: 12px 0 0; padding: 10px 14px 14px;
+  font-size: 12px; color: #5c6b7a; text-align: center;
+  background: #eef4fb; border-radius: 0;
+}
+.calc-panel .calc-edu-note { margin: 16px 0 0; }
+.bonus-opt-disclaimer { margin: 0; padding: 8px 12px calc(8px + var(--safe-b)); background: #eef4fb; flex: none; }
 .calc-list { margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .calc-card {
   margin: 0 10px; padding: 8px 10px 6px;
@@ -1704,8 +1710,10 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .bonus-opt-amt { color: #2c3440; font-weight: 500; text-align: center; font-size: 12px; }
 .bonus-opt-prize { color: #e03e36; font-weight: 700; text-align: right; font-size: 13px; padding-right: 2px; }
 .bonus-opt-ft {
-  flex: none; padding: 10px 12px calc(12px + var(--safe-b)); background: transparent; border: 0; box-shadow: none;
+  flex: none; display: flex; flex-direction: column; gap: 0;
+  padding: 10px 0 0; background: transparent; border: 0; box-shadow: none;
 }
+.bonus-opt-ft-pill { margin: 0 12px; }
 .bonus-opt-ft-pill {
   display: flex; align-items: stretch; max-width: 100%; background: #fff; border-radius: 26px;
   overflow: hidden; box-shadow: 0 4px 18px rgba(16,24,40,.12);
