@@ -4263,11 +4263,10 @@ function scheduleCalcHtml(model) {
   const rows = scheduleCalcRows(model);
   const wk = wd(S.schDate || bjDate(0));
   let h = `<div class="calc-panel">
-    <div class="calc-panel-hd">
-      <span class="calc-title">竞足计算器</span>
-      <button type="button" class="calc-help-link" data-act="calcHelp">玩法说明</button>
+    <div class="calc-date-row">
+      <div class="calc-date-pill">${esc(S.schDate || '')} ${wk} 共${rows.length}场</div>
+      <button type="button" class="calc-help-inline" data-act="calcHelp">玩法说明</button>
     </div>
-    <div class="calc-date-pill">${esc(S.schDate || '')} ${wk} 共${rows.length}场</div>
     <p class="calc-edu-note">串关试算工具，仅供学习参考，非投注下单。</p>`;
   if (!rows.length) {
     h += empty('该日期暂无在售场次，可切换日期或查看比分列表。', '', '暂无可算场次');
