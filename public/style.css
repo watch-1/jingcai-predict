@@ -1437,10 +1437,16 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
   display: grid; place-items: center; line-height: 1;
 }
 .calc-more-btn {
-  flex: none; width: 36px; border-radius: 8px; border: 0; background: #d9e8ff; color: #1a62f0;
+  flex: none; width: 36px; min-height: 52px; border-radius: 8px; border: 0; background: #d9e8ff; color: #1a62f0;
   font-size: 11px; font-weight: 700; line-height: 1.25; padding: 4px 2px;
 }
 .calc-more-btn.dis { opacity: .45; background: #e8ecf3; color: var(--t3); }
+.calc-more-btn.has-sel {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; padding: 3px 2px; line-height: 1.1;
+}
+.calc-more-btn .calc-more-n { font-size: 17px; font-weight: 800; color: #1a62f0; }
+.calc-more-btn .calc-more-sel { font-size: 10px; font-weight: 600; color: #5c6b82; }
 .calc-card.is-closed { opacity: .92; }
 .calc-card-meta .calc-st { display: block; font-weight: 700; color: #f04438; margin-top: 2px; }
 .calc-more-sheet {

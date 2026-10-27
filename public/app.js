@@ -4092,9 +4092,26 @@ function calcOddsRow(m, pool, closed) {
   const gl = pool === 'had' ? '0' : (o?.goalLine || '-');
   return `<div class="calc-odds-row"><div class="calc-gl ${pool === 'had' ? '' : String(gl).startsWith('-') ? 'neg' : 'pos'}">${esc(gl)}</div>${['h', 'd', 'a'].map(k => calcOddsCell(m, pool, k, closed)).join('')}</div>`;
 }
+function calcMatchPickCount(mid) {
+  const s = S.calcSel[mid];
+  return s ? Object.keys(s).length : 0;
+}
+function calcMoreBtnInner(mid) {
+  const n = calcMatchPickCount(mid);
+  if (!n) return '更多玩法';
+  return `<span class="calc-more-n">${n}</span><span class="calc-more-sel">已选</span>`;
+}
+function syncCalcMoreBtn(mid) {
+  const btn = document.querySelector(`.calc-more-btn[data-mid="${CSS.escape(String(mid))}"]`);
+  if (!btn) return;
+  const n = calcMatchPickCount(mid);
+  btn.classList.toggle('has-sel', n > 0);
+  btn.innerHTML = calcMoreBtnInner(mid);
+}
 function calcMatchCard(m) {
   const closed = calcMatchClosed(m);
   const lg = esc(m.leagueColor || '#2F6FED');
+  const pickN = calcMatchPickCount(m.id);
   const phase = closed ? (m._phaseZh || (Date.now() >= kickoff(m) ? '已开赛' : '')) : '';
   return `<div class="calc-card${closed ? ' is-closed' : ''}" data-mid="${esc(m.id)}">
     <div class="calc-card-top">
@@ -4103,7 +4120,7 @@ function calcMatchCard(m) {
     </div>
     <div class="calc-card-odds">
       <div class="calc-odds-stack">${calcOddsRow(m, 'had', closed)}${calcOddsRow(m, 'hhad', closed)}</div>
-      <button type="button" class="calc-more-btn${closed ? ' dis' : ''}" data-act="calcMore" data-mid="${esc(m.id)}"${closed ? ' disabled' : ''}>更多玩法</button>
+      <button type="button" class="calc-more-btn${pickN ? ' has-sel' : ''}${closed ? ' dis' : ''}" data-act="calcMore" data-mid="${esc(m.id)}"${closed ? ' disabled' : ''}>${calcMoreBtnInner(m.id)}</button>
     </div>
   </div>`;
 }
@@ -4168,6 +4185,7 @@ function toggleCalcPick(mid, key, oddsVal) {
   const midQ = CSS.escape(String(mid));
   const keyQ = CSS.escape(key);
   document.querySelectorAll(`.calc-cell[data-mid="${midQ}"][data-calc-key="${keyQ}"],.calc-more-cell[data-mid="${midQ}"][data-calc-key="${keyQ}"]`).forEach(el => el.classList.toggle('sel', on));
+  syncCalcMoreBtn(mid);
   renderCalcBar();
 }
 function renderCalcBar() {
@@ -11327,8 +11345,8 @@ document.addEventListener('click', async e => {
   }
   const d = el.dataset;
   if (d.key) return toggleSel(d.mid, d.key);
-  if (d.type) { const n = +d.type; S.types = S.types.includes(n) ? S.types.filter(x => x !== n) : [...S.types, n]; if (!S.types.length) S.types = [n]; return openPlanSheet(); }
-  if (d.mult) { S.mult = clampCalcMult(S.mult + +d.mult); return openPlanSheet(); }
+  if (d.type && d.act !== 'calcType') { const n = +d.type; S.types = S.types.includes(n) ? S.types.filter(x => x !== n) : [...S.types, n]; if (!S.types.length) S.types = [n]; return openPlanSheet(); }
+  if (d.mult && d.act !== 'calcMult') { S.mult = clampCalcMult(S.mult + +d.mult); return openPlanSheet(); }
   if (d.sdate) {
     if (window.__schDateSuppressClick) return;
     commitSchDate(d.sdate);
