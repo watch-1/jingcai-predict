@@ -1578,11 +1578,13 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
   display: flex; flex-direction: column; overflow: hidden; animation: none;
 }
 .bonus-opt-hd {
-  flex: none; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center;
-  padding: calc(8px + var(--safe-t)) 8px 10px; background: linear-gradient(180deg, #3d84f0, #2f6fed); color: #fff;
+  flex: none; display: grid; grid-template-columns: 48px 1fr 48px; align-items: center;
+  padding: calc(var(--sat) + 8px) 8px 10px; min-height: calc(var(--sat) + 52px);
+  background: linear-gradient(180deg, #3d84f0, #2f6fed); color: #fff;
 }
 .bonus-opt-back, .bonus-opt-help {
-  width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; font-size: 22px; line-height: 1;
+  width: 40px; height: 40px; border: 0; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff;
+  font-size: 22px; line-height: 1; display: grid; place-items: center; touch-action: manipulation;
 }
 .bonus-opt-help { font-size: 15px; font-weight: 700; }
 .bonus-opt-title { text-align: center; font-size: 17px; font-weight: 700; }
