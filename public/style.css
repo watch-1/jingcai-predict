@@ -1155,7 +1155,7 @@ body.sheet-on #view.sheet-lock { overflow: hidden; touch-action: none; }
 .pk .s { color: var(--t3); font-size: 12px; }
 .pk .items { margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; }
 .pk .items span { background: var(--pri-l); color: var(--pri-d); border-radius: 6px; padding: 1px 8px; font-size: 12px; }
-.types { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.types { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; align-items: flex-start; }
 .types button { padding: 5px 14px; border-radius: 16px; background: #f2f4f8; color: var(--t2); font-size: 13px; }
 .types button.on { background: var(--pri); color: #fff; }
 .calc-row { display: flex; align-items: center; justify-content: space-between; margin: 10px 0; font-size: 14px; }
@@ -1455,6 +1455,94 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .calc-more-grid { display: flex; flex-wrap: wrap; gap: 6px; }
 .calc-cell--sm { min-width: 64px; min-height: 36px; }
 .calc-more-sec { margin-top: 12px; }
+
+/* 更多玩法 · 官方竞足布局 */
+.calc-more-sheet--official {
+  padding: 0; max-height: 92vh; display: flex; flex-direction: column; border-radius: 0;
+}
+.calc-more-sheet--official .calc-more-top {
+  flex: none; display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 4px;
+  padding: 10px 8px 10px 4px; background: linear-gradient(180deg, #2f6fed 0%, #2563d4 100%); color: #fff;
+}
+.calc-more-back {
+  width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: #fff;
+  font-size: 28px; line-height: 1; font-weight: 300;
+}
+.calc-more-title { font-size: 15px; font-weight: 700; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calc-more-rules {
+  flex: none; border: 0; background: rgba(255,255,255,.14); color: #e8f0ff; font-size: 12px;
+  padding: 5px 8px; border-radius: 14px; white-space: nowrap;
+}
+.calc-more-body { flex: 1; min-height: 0; overflow: auto; padding: 10px 10px 12px; background: #eef3fb; }
+.calc-more-foot {
+  flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  padding: 10px 12px calc(10px + var(--safe-b)); background: #fff; border-top: 1px solid var(--line);
+}
+.calc-more-cancel, .calc-more-ok {
+  height: 44px; border-radius: 22px; font-size: 16px; font-weight: 700;
+}
+.calc-more-cancel { border: 1px solid var(--pri); background: #fff; color: var(--pri); }
+.calc-more-ok { border: 0; background: linear-gradient(90deg, #4d9bff, #2f6fed); color: #fff; }
+.calc-more-block { margin-bottom: 10px; background: #fff; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
+.calc-more-st {
+  padding: 8px 10px; font-size: 14px; font-weight: 700; color: var(--t1); border-bottom: 1px solid #eef1f6;
+}
+.calc-more-wdl { display: flex; flex-direction: column; }
+.calc-more-wdl-row { display: grid; grid-template-columns: 32px 1fr; border-top: 1px solid #eef1f6; }
+.calc-more-wdl-row:first-child { border-top: 0; }
+.calc-more-gl {
+  display: grid; place-items: center; background: #f2f5fb; font-size: 12px; font-weight: 800; color: var(--t2);
+  border-right: 1px solid #eef1f6;
+}
+.calc-more-wdl-row .calc-more-gl.neg { color: var(--green); }
+.calc-more-wdl-row .calc-more-gl.pos { color: var(--red); }
+.calc-more-wdl-cells { display: grid; grid-template-columns: repeat(3, 1fr); }
+.calc-more-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 44px; padding: 4px 2px; border: 0; border-right: 1px solid #eef1f6; border-bottom: 1px solid #eef1f6;
+  background: #fff; font-size: 12px; color: var(--t2);
+}
+.calc-more-wdl-cells .calc-more-cell:nth-child(3n) { border-right: 0; }
+.calc-more-cell .t { font-weight: 600; }
+.calc-more-cell .o { font-size: 13px; font-weight: 800; color: var(--t1); margin-top: 2px; }
+.calc-more-cell.sel { background: var(--pri); color: #e8f0ff; }
+.calc-more-cell.sel .o { color: #fff; }
+.calc-more-crs-wrap { display: flex; flex-direction: column; }
+.calc-more-crs-band { display: grid; grid-template-columns: 28px 1fr; border-top: 1px solid #eef1f6; }
+.calc-more-crs-band:first-child { border-top: 0; }
+.calc-more-band-lab {
+  display: grid; place-items: center; writing-mode: vertical-rl; text-orientation: mixed;
+  font-size: 13px; font-weight: 800; color: #fff; letter-spacing: 2px;
+  background: linear-gradient(180deg, #3d8bff, #2f6fed); border-right: 1px solid #eef1f6;
+}
+.calc-more-crs-band.draw .calc-more-band-lab { background: linear-gradient(180deg, #5a9fff, #3d7fe8); }
+.calc-more-band-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
+}
+.calc-more-band-grid .calc-more-cell { border-right: 1px solid #eef1f6; border-bottom: 1px solid #eef1f6; min-height: 40px; }
+.calc-more-band-grid .calc-more-cell:nth-child(5n) { border-right: 0; }
+.calc-more-ttg-wrap, .calc-more-hafu-wrap { display: grid; grid-template-columns: 28px 1fr; }
+.calc-more-band-lab.ttg, .calc-more-band-lab.hafu { min-height: 72px; }
+.calc-more-ttg-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+.calc-more-hafu-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
+
+/* 试算结果 · 队标与纵向串关 */
+.calc-result-sheet .calc-rc-list { margin: 0 0 8px; }
+.calc-rc-match { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.calc-rc-match:last-child { border-bottom: 0; }
+.calc-rc-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.calc-rc-teams {
+  flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px;
+  font-size: 13px; font-weight: 700; color: var(--t1);
+}
+.calc-rc-teams .nm { max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calc-rc-teams .vs { flex: none; font-size: 11px; color: var(--t3); font-weight: 700; }
+.calc-rc-hcap { font-style: normal; font-size: 11px; font-weight: 600; color: var(--green); margin-left: 2px; }
+.calc-rc-num { flex: none; font-size: 12px; font-weight: 700; color: var(--t3); white-space: nowrap; }
+.calc-rc-lines { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; color: var(--t2); line-height: 1.55; }
+.calc-rc-lines li { padding: 2px 0; }
+.types.types--stack { flex-direction: column; align-items: stretch; }
+.types.types--stack button { width: 100%; text-align: center; border-radius: 8px; padding: 8px 14px; }
 .calcbar {
   position: fixed; left: 50%; transform: translateX(-50%); width: 100%; max-width: var(--maxw);
   bottom: calc(var(--tab-h) + var(--safe-b)); z-index: 46;
