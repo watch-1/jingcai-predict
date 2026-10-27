@@ -205,6 +205,13 @@ try { window.avatarHtml = avatarHtml; } catch (_) {}
 
 // ======================= prediction model (odds baseline + multi-factor briefing) =======================
 const LBL = { had: { h: '胜', d: '平', a: '负' }, hhad: { h: '让胜', d: '让平', a: '让负' } };
+/** 竞足试算倍数上限（对齐官方常见 99999，加减与手输均受此约束） */
+const CALC_MULT_MAX = 99999;
+function clampCalcMult(n) {
+  const v = Math.floor(Number(n));
+  if (!Number.isFinite(v) || v < 1) return 1;
+  return Math.min(CALC_MULT_MAX, v);
+}
 const PICK = { had: { h: '主胜', d: '平局', a: '客胜' }, hhad: { h: '让胜', d: '让平', a: '让负' } };
 function implied(o) {
   if (!o || !o.h || !o.d || !o.a) return null;
@@ -4156,7 +4163,10 @@ function toggleCalcPick(mid, key, oddsVal) {
   if (s[key]) delete s[key];
   else s[key] = v;
   if (!Object.keys(s).length) delete S.calcSel[mid];
-  document.querySelectorAll(`.calc-cell[data-mid="${CSS.escape(String(mid))}"][data-calc-key="${CSS.escape(key)}"]`).forEach(el => el.classList.toggle('sel', !!S.calcSel[mid]?.[key]));
+  const on = !!S.calcSel[mid]?.[key];
+  const midQ = CSS.escape(String(mid));
+  const keyQ = CSS.escape(key);
+  document.querySelectorAll(`.calc-cell[data-mid="${midQ}"][data-calc-key="${keyQ}"],.calc-more-cell[data-mid="${midQ}"][data-calc-key="${keyQ}"]`).forEach(el => el.classList.toggle('sel', on));
   renderCalcBar();
 }
 function renderCalcBar() {
@@ -4186,71 +4196,124 @@ function openCalcHelpSheet() {
       <ul><li>每注按 <b>2 元</b>面值试算（与官方单注面值一致）。</li><li>单关：仅选 1 场；M串1：从所选场次中取 M 场组成一注，多场多选时按组合展开。</li><li>同场多选项会按「复式」展开；最高试算奖金为各注赔率乘积之和 × 2元 × 倍数。</li><li>未含税、未考虑官方封顶；结果仅供学习，不构成投注建议。</li></ul>
     </div></div>`);
 }
+function calcPickLineText(key, odds) {
+  if (key.startsWith('had')) return `胜平负：${LBL.had[key.slice(3)]}@ ${odds.toFixed(2)}`;
+  if (key.startsWith('hhad')) return `让球：${LBL.hhad[key.slice(4)]}@ ${odds.toFixed(2)}`;
+  return `${calcSelLabel(key)} @${odds.toFixed(2)}`;
+}
+function calcResultMatchBlock(x) {
+  const m = x.m;
+  const gl = m.hhad?.goalLine;
+  const hcap = gl ? `<em class="calc-rc-hcap">(主${esc(gl)})</em>` : '';
+  const lines = x.keys.map((k, i) => `<li>${esc(calcPickLineText(k, x.odds[i]))}</li>`).join('');
+  return `<div class="calc-rc-match">
+    <div class="calc-rc-hd">
+      <div class="calc-rc-teams">${badge(m.home, 'sm', m.homeLogo)}<span class="nm">${esc(m.home)}${hcap}</span><span class="vs">VS</span><span class="nm">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div>
+      <span class="calc-rc-num">${esc(m.num || '')}</span>
+    </div>
+    <ul class="calc-rc-lines">${lines}</ul>
+  </div>`;
+}
 function openCalcSubmitSheet() {
   purgeCalcSelClosed();
   const sm = calcSelMatches();
   if (!calcCanSubmit()) return toast('请先按规则选择场次');
+  S.calcMult = clampCalcMult(S.calcMult);
   const c = calcFrom(S.calcSel, S.calcTypes, S.calcMult);
   S.calcTypes = c.types;
   openSheetHtml(`<div class="sheet calc-result-sheet"><h3><span>试算结果</span><button class="x" data-act="closeSheet">✕</button></h3>
-    ${sm.map(x => `<div class="pk"><div class="n">${esc(x.m.num)} ${esc(x.m.home)} vs ${esc(x.m.away)}</div>
-      <div class="items">${x.keys.map((k, i) => `<span>${esc(calcSelLabel(k))} @${x.odds[i].toFixed(2)}</span>`).join('')}</div></div>`).join('')}
-    <div class="types">${c.avail.map(t => `<button type="button" data-act="calcType" data-type="${t}" class="${S.calcTypes.includes(t) ? 'on' : ''}">${typeName(t)}</button>`).join('')}</div>
-    <div class="calc-row"><span>倍数</span><div class="stepper"><button type="button" data-act="calcMult" data-mult="-1">−</button><input id="calcMultInp" type="number" min="1" max="99" value="${S.calcMult}"><button type="button" data-act="calcMult" data-mult="1">＋</button></div></div>
+    <div class="calc-rc-list">${sm.map(calcResultMatchBlock).join('')}</div>
+    <div class="types types--stack">${c.avail.map(t => `<button type="button" data-act="calcType" data-type="${t}" class="${S.calcTypes.includes(t) ? 'on' : ''}">${typeName(t)}</button>`).join('')}</div>
+    <div class="calc-row"><span>倍数</span><div class="stepper"><button type="button" data-act="calcMult" data-mult="-1">−</button><input id="calcMultInp" type="number" min="1" max="${CALC_MULT_MAX}" value="${S.calcMult}"><button type="button" data-act="calcMult" data-mult="1">＋</button></div></div>
     <div class="calc-row"><span>注数</span><span class="num"><b>${c.bets}</b> 注 · 面值 ${c.cost} 元</span></div>
     <div class="calc-row"><span>中奖试算</span><span class="num"><b>${c.max.toFixed(2)}</b> 元</span></div>
     <p class="note">若所选赛果全部命中，按当前赔率组合展开后的最高可中金额（2元/注 × 赔率乘积 × 倍数，未计税）。仅供学习试算。</p>
     <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`);
 }
+const CRS_MORE_WIN = [[1, 0], [2, 0], [2, 1], [3, 0], [3, 1], [3, 2], [4, 0], [4, 1], [4, 2], [5, 0], [5, 1], [5, 2]];
+const CRS_MORE_DRAW = [[0, 0], [1, 1], [2, 2], [3, 3]];
+const CRS_MORE_LOSE = [[0, 1], [1, 2], [2, 3], [0, 2], [1, 3], [2, 4], [0, 3], [1, 4], [2, 5], [0, 4], [1, 5], [0, 5]];
+function calcMorePickCell(mid, key, topLab, oddsVal, closed) {
+  if (oddsVal == null || oddsVal === '' || Number(oddsVal) < 1) return '';
+  const sel = S.calcSel[mid]?.[key] ? ' sel' : '';
+  const dis = closed ? ' dis' : '';
+  const act = closed ? '' : ' data-act="calcPick"';
+  const disAttr = closed ? ' disabled' : '';
+  return `<button type="button" class="calc-more-cell${sel}${dis}"${act} data-mid="${esc(mid)}" data-calc-key="${esc(key)}" data-odds="${Number(oddsVal)}"${disAttr}><span class="t">${esc(topLab)}</span><b class="o">${fmtOdd(oddsVal)}</b></button>`;
+}
+function calcMoreWdlRow(mid, gl, pool, o, closed) {
+  if (!o) return '';
+  const glLab = pool === 'had' ? '0' : (gl ?? o.goalLine ?? '-');
+  const glCls = pool === 'had' ? '' : (String(glLab).startsWith('-') ? 'neg' : 'pos');
+  const cells = ['h', 'd', 'a'].map(k => calcMorePickCell(mid, pool + k, LBL[pool][k], o[k], closed)).join('');
+  if (!cells.replace(/\s/g, '')) return '';
+  return `<div class="calc-more-wdl-row"><div class="calc-more-gl ${glCls}">${esc(glLab)}</div><div class="calc-more-wdl-cells">${cells}</div></div>`;
+}
+function calcMoreCrsBand(mid, p, seg, lab, scores, otherKey, otherLab, closed) {
+  let cells = scores.map(([hg, ag]) => {
+    const pk = crsPoolKey(hg, ag);
+    return calcMorePickCell(mid, crsCalcSelKey(hg, ag), `${hg}:${ag}`, p.crs[pk], closed);
+  }).join('');
+  cells += calcMorePickCell(mid, 'crs_' + otherKey, otherLab, p.crs[otherKey], closed);
+  if (!cells.replace(/\s/g, '')) return '';
+  return `<div class="calc-more-crs-band ${seg}"><div class="calc-more-band-lab">${esc(lab)}</div><div class="calc-more-band-grid">${cells}</div></div>`;
+}
 function renderCalcMorePickables(mid, snap, m) {
   const closed = calcMatchClosed(m);
   const p = snap && snap.pools;
-  if (!p) return '<p class="note">暂无更多玩法数据，请稍后重试。</p>';
+  const had = (p && p.had) || m?.had;
+  const hhad = (p && p.hhad) || m?.hhad;
   let h = '';
-  const pickBtn = (key, lab, val) => {
-    if (val == null || val === '' || Number(val) < 1) return '';
-    const sel = S.calcSel[mid]?.[key] ? ' sel' : '';
-    const dis = closed ? ' dis' : '';
-    const act = closed ? '' : ' data-act="calcPick"';
-    const disAttr = closed ? ' disabled' : '';
-    return `<button type="button" class="calc-cell calc-cell--sm${sel}${dis}"${act} data-mid="${esc(mid)}" data-calc-key="${esc(key)}" data-odds="${Number(val)}"${disAttr}><span class="lab">${esc(lab)}</span><b class="num">${fmtOdd(val)}</b></button>`;
-  };
-  if (p.crs) {
-    h += `<div class="calc-more-sec"><div class="os-hd">比分</div><div class="calc-more-grid calc-crs-grid">`;
-    for (let hg = 0; hg <= 5; hg++) for (let ag = 0; ag <= 5; ag++) {
-      const pk = crsPoolKey(hg, ag);
-      const v = p.crs[pk];
-      if (v != null) h += pickBtn(crsCalcSelKey(hg, ag), `${hg}:${ag}`, v);
-    }
-    h += pickBtn('crs_s1sh', '胜其它', p.crs.s1sh) + pickBtn('crs_s1sd', '平其它', p.crs.s1sd) + pickBtn('crs_s1sa', '负其它', p.crs.s1sa);
+  if (had || hhad) {
+    h += `<div class="calc-more-block"><div class="calc-more-st">胜平负/让球</div><div class="calc-more-wdl">`;
+    h += calcMoreWdlRow(mid, '0', 'had', had, closed);
+    h += calcMoreWdlRow(mid, hhad?.goalLine, 'hhad', hhad, closed);
     h += `</div></div>`;
   }
-  if (p.ttg) {
-    h += `<div class="calc-more-sec"><div class="os-hd">总进球</div><div class="calc-more-grid">`;
-    for (let i = 0; i <= 7; i++) h += pickBtn('ttg_s' + i, i === 7 ? '7+' : String(i), p.ttg['s' + i]);
+  if (p && p.crs) {
+    h += `<div class="calc-more-block"><div class="calc-more-st">比分</div><div class="calc-more-crs-wrap">`;
+    h += calcMoreCrsBand(mid, p, 'win', '胜', CRS_MORE_WIN, 's1sh', '胜其它', closed);
+    h += calcMoreCrsBand(mid, p, 'draw', '平', CRS_MORE_DRAW, 's1sd', '平其它', closed);
+    h += calcMoreCrsBand(mid, p, 'lose', '负', CRS_MORE_LOSE, 's1sa', '负其它', closed);
     h += `</div></div>`;
   }
-  if (p.hafu) {
+  if (p && p.ttg) {
+    h += `<div class="calc-more-block"><div class="calc-more-st">总进球</div><div class="calc-more-ttg-wrap">`;
+    h += `<div class="calc-more-band-lab ttg">进球数</div><div class="calc-more-ttg-grid">`;
+    for (let i = 0; i <= 7; i++) h += calcMorePickCell(mid, 'ttg_s' + i, (i === 7 ? '7+' : i + '球'), p.ttg['s' + i], closed);
+    h += `</div></div></div>`;
+  }
+  if (p && p.hafu) {
     const labs = [['hh', '胜胜'], ['hd', '胜平'], ['ha', '胜负'], ['dh', '平胜'], ['dd', '平平'], ['da', '平负'], ['ah', '负胜'], ['ad', '负平'], ['aa', '负负']];
-    h += `<div class="calc-more-sec"><div class="os-hd">半全场</div><div class="calc-more-grid">`;
-    for (const [k, lab] of labs) h += pickBtn('hafu_' + k, lab, p.hafu[k]);
-    h += `</div></div>`;
+    h += `<div class="calc-more-block"><div class="calc-more-st">半全场</div><div class="calc-more-hafu-wrap">`;
+    h += `<div class="calc-more-band-lab hafu">半全场</div><div class="calc-more-hafu-grid">`;
+    for (const [k, lab] of labs) h += calcMorePickCell(mid, 'hafu_' + k, lab, p.hafu[k], closed);
+    h += `</div></div></div>`;
   }
-  if (!h) h = '<p class="note">该场暂无比分/总进球/半全场开售数据。</p>';
+  if (!h) h = '<p class="note">暂无更多玩法数据，请稍后重试。</p>';
   return h;
+}
+function calcMoreSheetShell(m, body) {
+  return `<div class="calc-more-top">
+    <button type="button" class="calc-more-back" data-act="closeSheet" aria-label="返回">‹</button>
+    <span class="calc-more-title">${esc(m.home)} VS ${esc(m.away)}</span>
+    <button type="button" class="calc-more-rules" data-act="calcHelp">玩法说明</button>
+  </div>
+  <div class="calc-more-body">${body}</div>
+  <div class="calc-more-foot">
+    <button type="button" class="calc-more-cancel" data-act="closeSheet">取消</button>
+    <button type="button" class="calc-more-ok" data-act="calcMoreOk">确定</button>
+  </div>`;
 }
 async function openCalcMoreSheet(mid) {
   const m = findMatch(mid);
   if (!m) return;
   if (calcMatchClosed(m)) return toast('该场已开赛，不可再选');
-  openSheetHtml(`<div class="sheet calc-more-sheet"><h3><span>${esc(m.home)} vs ${esc(m.away)}</span><button class="x" data-act="closeSheet">✕</button></h3><div class="calc-more-scroll"><div class="spinner"></div><p class="note">加载更多玩法…</p></div></div>`);
+  openSheetHtml(`<div class="sheet calc-more-sheet calc-more-sheet--official">${calcMoreSheetShell(m, '<div class="spinner"></div><p class="note">加载更多玩法…</p>')}</div>`);
   const snap = await loadOddsSnapshot(mid, m.date, m);
   const inner = document.querySelector('.calc-more-sheet');
   if (!inner) return;
-  const scroll = inner.querySelector('.calc-more-scroll');
-  const body = renderCalcMorePickables(mid, snap, m);
-  if (scroll) scroll.innerHTML = body;
-  else inner.innerHTML = `<h3><span>${esc(m.home)} vs ${esc(m.away)}</span><button class="x" data-act="closeSheet">✕</button></h3>${body}`;
+  inner.innerHTML = calcMoreSheetShell(m, renderCalcMorePickables(mid, snap, m));
 }
 
 function pageSchedule() {
@@ -11785,9 +11848,10 @@ document.addEventListener('click', async e => {
       return openCalcSubmitSheet();
     }
     case 'calcMult': {
-      S.calcMult = Math.max(1, Math.min(99, S.calcMult + +d.mult));
+      S.calcMult = clampCalcMult(S.calcMult + +d.mult);
       return openCalcSubmitSheet();
     }
+    case 'calcMoreOk': return closeSheet();
     case 'openPlan': return openPlanSheet();
     case 'closeSheet': return closeSheet();
     case 'savePlan': return savePlan();
@@ -12096,7 +12160,7 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'mult') { S.mult = Math.max(1, Math.min(99, parseInt(e.target.value) || 1)); openPlanSheet(); }
-  if (e.target.id === 'calcMultInp') { S.calcMult = Math.max(1, Math.min(99, parseInt(e.target.value) || 1)); openCalcSubmitSheet(); }
+  if (e.target.id === 'calcMultInp') { S.calcMult = clampCalcMult(parseInt(e.target.value, 10) || 1); openCalcSubmitSheet(); }
   if (e.target.id === 'schHideFin') { setSchHideFinished(!!e.target.checked); render(); }
   if (e.target.id === 'colMatchSel' || e.target.id === 'colTitle' || e.target.id === 'colBody') syncColumnComposeFromDom();
 });
