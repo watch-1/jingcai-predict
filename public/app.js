@@ -4458,11 +4458,19 @@ function renderBonusOptSheet(lines) {
       <span class="bonus-opt-title">奖金优化</span>
       <button type="button" class="bonus-opt-help" data-act="bonusOptHelp" aria-label="说明">?</button>
     </header>
-    <div class="bonus-opt-tabs">${modeBtns}</div>
     <div class="bonus-opt-body">
+      <div class="bonus-opt-tabs-wrap"><div class="bonus-opt-tabs">${modeBtns}</div></div>
       <div class="bonus-opt-card">
         <section class="bonus-opt-amt-card">
-          <div class="bonus-opt-amt-row"><span class="bonus-opt-amt-lab">优化金额</span><div class="bonus-opt-amt-in"><button type="button" data-act="bonusOptAmt" data-delta="-10" aria-label="减少金额">−</button><span class="bonus-opt-amt-val"><input id="bonusOptAmtInp" type="number" min="2" step="2" value="${bo.amount}"></span><span class="yuan">元</span><button type="button" data-act="bonusOptAmt" data-delta="10" aria-label="增加金额">＋</button></div></div>
+          <div class="bonus-opt-amt-lab">优化金额</div>
+          <div class="bonus-opt-amt-center">
+            <button type="button" class="bonus-opt-amt-btn" data-act="bonusOptAmt" data-delta="-10" aria-label="减少金额">−</button>
+            <div class="bonus-opt-amt-main">
+              <span class="bonus-opt-amt-val"><input id="bonusOptAmtInp" type="number" min="2" step="2" value="${bo.amount}"></span>
+              <span class="yuan">元</span>
+            </div>
+            <button type="button" class="bonus-opt-amt-btn" data-act="bonusOptAmt" data-delta="10" aria-label="增加金额">＋</button>
+          </div>
           <p class="bonus-opt-amt-sub">（优化倍数 <b>${optUnits}</b> 倍）</p>
         </section>
         <section class="bonus-opt-results">
