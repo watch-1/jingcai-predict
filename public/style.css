@@ -1384,26 +1384,29 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .sch-filter-banner .btn { flex: none; white-space: nowrap; }
 
 /* ---------- 赛程 · 竞足串关计算器 (1.9.219) ---------- */
-.calc-panel { padding: 0 0 8px; background: #eef3fb; min-height: 40vh; }
-.calc-panel-hd {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 14px 4px; background: linear-gradient(180deg, #2f6fed 0%, #2563d4 100%); color: #fff;
+.calc-panel { padding: 8px 0 8px; background: #eef3fb; min-height: 40vh; }
+.calc-date-row {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  margin: 4px 12px 0; min-height: 36px; padding: 0 52px 0 8px;
 }
-.calc-title { font-size: 16px; font-weight: 700; }
-.calc-help-link {
-  font-size: 13px; color: #e8f0ff; padding: 4px 8px; border-radius: 14px; background: rgba(255,255,255,.12);
+.calc-help-inline {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  font-size: 12px; font-weight: 600; color: var(--pri); padding: 4px 2px;
+  background: none; border: 0; text-decoration: underline; text-underline-offset: 2px;
 }
 .calc-date-pill {
-  margin: 10px 12px 0; padding: 8px 14px; border-radius: 20px; background: #fff;
+  margin: 0; padding: 7px 14px; border-radius: 20px; background: #fff;
   text-align: center; font-size: 14px; font-weight: 600; color: var(--t1); box-shadow: var(--sh);
 }
-.calc-edu-note { margin: 8px 14px 0; font-size: 12px; color: var(--t3); }
-.calc-list { margin: 10px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.calc-edu-note { margin: 6px 14px 0; font-size: 12px; color: var(--t3); text-align: center; }
+.calc-list { margin: 8px 0 0; display: flex; flex-direction: column; gap: 6px; }
 .calc-card {
-  margin: 0 10px; padding: 10px 10px 8px; background: #fff; border-radius: 10px;
-  border: 1px solid rgba(47,111,237,.12); box-shadow: 0 2px 8px rgba(16,24,40,.06);
+  margin: 0 10px; padding: 8px 10px 6px;
+  background: linear-gradient(135deg, #f7f9fc 0%, #f0f5ff 42%, #dce9ff 100%);
+  border-radius: 14px; border: 1px solid #e8ecf4;
+  box-shadow: 0 2px 10px rgba(30, 50, 90, .06);
 }
-.calc-card-top { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.calc-card-top { display: flex; gap: 6px; align-items: flex-start; justify-content: space-between; margin-bottom: 5px; }
 .calc-teams-line {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
 }
@@ -1414,8 +1417,8 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .calc-card-meta .calc-num { display: block; font-weight: 700; color: var(--t2); }
 .calc-card-meta .calc-lg { display: block; font-weight: 600; }
 .calc-card-odds { display: flex; gap: 6px; align-items: stretch; }
-.calc-odds-stack { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.calc-odds-row { display: grid; grid-template-columns: 28px 1fr 1fr 1fr; gap: 4px; }
+.calc-odds-stack { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.calc-odds-row { display: grid; grid-template-columns: 28px 1fr 1fr 1fr; gap: 3px; }
 .calc-gl {
   display: grid; place-items: center; border-radius: 6px; background: #f2f5fb;
   font-size: 11px; font-weight: 700; color: var(--t2);
@@ -1423,7 +1426,7 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .calc-gl.neg { color: var(--green); } .calc-gl.pos { color: var(--red); }
 .calc-cell {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  min-height: 40px; padding: 4px 2px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fafbfd;
+  min-height: 36px; padding: 3px 2px; border-radius: 6px; border: 1px solid #e2e8f0; background: rgba(255,255,255,.72);
   font-size: 11px; color: var(--t2);
 }
 .calc-cell .lab { font-weight: 600; }
@@ -1437,8 +1440,8 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
   display: grid; place-items: center; line-height: 1;
 }
 .calc-more-btn {
-  flex: none; width: 36px; min-height: 52px; border-radius: 8px; border: 0; background: #d9e8ff; color: #1a62f0;
-  font-size: 11px; font-weight: 700; line-height: 1.25; padding: 4px 2px;
+  flex: none; width: 36px; min-height: 0; border-radius: 8px; border: 0; background: #d9e8ff; color: #1a62f0;
+  font-size: 11px; font-weight: 700; line-height: 1.2; padding: 3px 2px;
 }
 .calc-more-btn.dis { opacity: .45; background: #e8ecf3; color: var(--t3); }
 .calc-more-btn.has-sel {
