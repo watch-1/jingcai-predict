@@ -38,4 +38,9 @@ assert.ok(/maxB \+= c\.reduce/.test(appJs), 'calc: sums parlay max odds products
 assert.ok(/bets \+= c\.reduce/.test(appJs), 'calc: expands note count');
 assert.ok(/中奖试算/.test(appJs.match(/function openCalcSubmitSheet[\s\S]*?^}/m)?.[0] || ''), 'submit sheet shows prize figure');
 
+assert.ok(/function calcMatchClosed/.test(appJs) && /kickoff\(x\)/.test(appJs.match(/function calcMatchClosed[\s\S]*?^}/m)?.[0] || ''), 'calc: close picks after kickoff/live/ft');
+assert.ok(/function purgeCalcSelClosed/.test(appJs), 'calc: purge stale selections');
+assert.ok(/crsPoolKey\(hg, ag\)/.test(appJs.match(/function renderCalcMorePickables[\s\S]*?^}/m)?.[0] || ''), 'calc more: CRS uses sporttery pool keys');
+assert.ok(/body\.sheet-on/.test(css) && /calc-more-scroll/.test(css), 'calc sheet scroll lock styles');
+
 console.log('ui-219-test OK');
