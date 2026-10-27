@@ -3824,6 +3824,62 @@ function scoreCard(row) {
 function stopLiveScorePoll() {
   if (S.liveScorePoll) { clearInterval(S.liveScorePoll); S.liveScorePoll = null; }
 }
+function scheduleRowSource(id) {
+  const sid = String(id);
+  return (S.matches || []).find(z => String(z.id) === sid)
+    || (S.schedule || []).find(z => String(z.id) === sid)
+    || (S.results || []).find(z => String(z.id) === sid);
+}
+/** 当日仍有未确认完场且已过开球 → 需要 live-scores 轮询（含尚未标 live 的场次）。 */
+function scheduleNeedLivePoll(classifiedDay, counts) {
+  if (!classifiedDay || !classifiedDay.length) return false;
+  if (counts && counts.live > 0) return true;
+  const now = Date.now();
+  return classifiedDay.some(x => x._kind !== 'ft' && now >= kickoff(x));
+}
+function resumeScheduleLivePoll() {
+  if (route().name !== 'schedule') return;
+  const model = scheduleDayModel();
+  if (!model) return;
+  const { classifiedDay, counts } = model;
+  ensureLiveScorePoll(classifiedDay.map(x => String(x.id)), scheduleNeedLivePoll(classifiedDay, counts));
+}
+/** live-scores 回流后刷新赛程 DOM（避开 tabContentSig 相同导致 render no-op）。 */
+function afterScheduleLiveScoresLoaded() {
+  if (route().name !== 'schedule') return;
+  purgeCalcSelClosed();
+  if (schChannelOf() === 'list' && softPatchScheduleLiveRows()) return;
+  if (softPatchSchedule()) return;
+  render({ force: true });
+}
+/** 原地更新赛程比分列表 ls-row（不整页 wipe）。 */
+function softPatchScheduleLiveRows() {
+  try {
+    if (route().name !== 'schedule' || schChannelOf() !== 'list') return false;
+    const nodes = document.querySelectorAll('#schBody .ls-row[data-go], .ls-list .ls-row[data-go]');
+    if (!nodes.length) return false;
+    let n = 0;
+    nodes.forEach((btn) => {
+      const go = btn.getAttribute('data-go') || '';
+      const m = /#\/match\/(.+)$/.exec(go);
+      if (!m) return;
+      let id;
+      try { id = decodeURIComponent(m[1]); } catch (_) { id = m[1]; }
+      const rowSrc = scheduleRowSource(id);
+      if (!rowSrc) return;
+      const row = classifyScoreRow(rowSrc);
+      const kind = row._kind;
+      const statusCls = kind === 'live' ? 'live' : kind === 'ft' ? 'ft' : 'ns';
+      const wantCls = 'ls-row ' + statusCls;
+      if (btn.className !== wantCls) { btn.className = wantCls; n++; }
+      const mid = btn.querySelector('.ls-mid');
+      if (!mid) return;
+      const next = matchScoreColumn(row);
+      if (mid.innerHTML !== next) { mid.innerHTML = next; n++; }
+    });
+    return n > 0;
+  } catch (_) { return false; }
+}
 async function loadLiveScores(ids, { force } = {}) {
   const list = [...new Set((ids || []).map(String).filter(Boolean))];
   if (!list.length) { S.liveScores = S.liveScores || {}; return S.liveScores; }
@@ -3852,8 +3908,7 @@ function ensureLiveScorePoll(ids, hasLive) {
     const r = route();
     if (r.name !== 'schedule') { stopLiveScorePoll(); return; }
     await loadLiveScores(ids, { force: true });
-    purgeCalcSelClosed();
-    if (route().name === 'schedule') render();
+    afterScheduleLiveScoresLoaded();
   }, 50000);
 }
 
@@ -3934,7 +3989,6 @@ function scheduleBodyHtml(model) {
   if (typeof console !== 'undefined' && console.debug) {
     console.debug('[schedule]', S.schDate, 'shown=', modeRows.length, 'league=', S.schLeague, 'gaps=', gapInfo || null);
   }
-  ensureLiveScorePoll(classifiedDay.map(x => String(x.id)), counts.live > 0);
   return h;
 }
 
@@ -3971,6 +4025,7 @@ function softPatchSchedule() {
       else v.appendChild(body);
     }
     body.innerHTML = scheduleBodyHtml(model);
+    resumeScheduleLivePoll();
     try {
       render.lastSig = tabContentSig('schedule');
       render.last = location.hash;
@@ -4202,7 +4257,7 @@ function pageSchedule() {
   let h = '';
   const model = scheduleDayModel();
   if (!model) return h + skeleton(4);
-  const { modeRows, classifiedDay, counts } = model;
+  const { modeRows, classifiedDay } = model;
   h += schChannelsHtml();
   if (schChannelOf() === 'calc') {
     h += scheduleCalcHtml(model);
@@ -4212,15 +4267,10 @@ function pageSchedule() {
   }
   const allDayIds = classifiedDay.map(x => String(x.id));
   const needFetch = !S.liveScoresAt || Date.now() - S.liveScoresAt > 35000;
-  const needLivePoll = (counts && counts.live > 0) || classifiedDay.some(x => x._kind !== 'ft' && Date.now() >= kickoff(x));
-  if (schChannelOf() === 'calc') ensureLiveScorePoll(allDayIds, needLivePoll);
   if (needFetch && allDayIds.length) {
     setTimeout(async () => {
       await loadLiveScores(allDayIds);
-      if (route().name === 'schedule') {
-        purgeCalcSelClosed();
-        render();
-      }
+      afterScheduleLiveScoresLoaded();
     }, 0);
   }
   return h + foot();
@@ -11116,7 +11166,8 @@ function render(opts) {
   if (r.name === 'home' && !canRestore) initBanner();
   else if (r.name === 'home' && canRestore && $('#bnTrack')) initBanner();
   if (r.name === 'home') setTimeout(syncHomeAttitudeScroll, 0);
-  if (r.name !== 'schedule') stopLiveScorePoll();
+  if (r.name === 'schedule') resumeScheduleLivePoll();
+  else stopLiveScorePoll();
   document.title = (TITLES[r.name] ? TITLES[r.name] + ' · ' : '') + '竞彩预测';
   try { if (window.JCFloatBall) window.JCFloatBall.syncRoute(r.name); } catch (_) {}
   if (r.name === 'predict' || r.name === 'home') {
