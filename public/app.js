@@ -762,6 +762,7 @@ const S = {
   sel: {}, types: [], mult: 1, navDepth: 0,
   schDate: null, schLeague: '全部', schMode: initSchMode(), schChannel: initSchChannel(),
   calcSel: {}, calcTypes: [], calcMult: 1,
+  bonusOpt: { mode: 'avg', amount: 0, mults: [] },
   schHideFinished: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_hide_fin') === '1'),
   liveScores: null, liveScoresAt: 0, liveScorePoll: null, liveScoresLoading: false,
   rsDate: null, rsLeague: '全部', prFilter: '全部', prLane: 'hub', dataLeague: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_lg')) || 'epl', dataKind: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_kind')) || 'standings', dataSection: initDataSectionEarly(), bannerIdx: 0, pendingAv: null,
@@ -1857,6 +1858,110 @@ function calcFrom(sel, types, mult) {
   const stake = 2 * (mult || 1);
   return { n, avail, types: nextTypes, bets, cost: bets * stake, max: maxB * stake, min: minB * stake };
 }
+function calcResolvedTypes(sel, types) {
+  const sm = selMatchesFrom(sel);
+  const n = sm.length;
+  const avail = n === 1 ? [1] : Array.from({ length: Math.max(0, Math.min(n, 8) - 1) }, (_, i) => i + 2);
+  let nextTypes = (types || []).filter(t => avail.includes(t));
+  if (!nextTypes.length && n) nextTypes = [n === 1 ? 1 : Math.min(n, 8)];
+  return { sm, avail, types: nextTypes };
+}
+function cartesianProd(arrays) {
+  if (!arrays.length) return [[]];
+  return arrays.reduce((acc, arr) => {
+    const out = [];
+    for (const a of acc) for (const b of arr) out.push(a.concat([b]));
+    return out;
+  }, [[]]);
+}
+function calcDanShiShortLabel(key) {
+  if (key.startsWith('hhad')) return LBL.hhad[key.slice(4)];
+  if (key.startsWith('had')) return LBL.had[key.slice(3)];
+  return calcSelLabel(key).replace(/^比分 /, '').replace(/^总进球 /, '').replace(/^半全场 /, '');
+}
+/** Expand calculator slip into 单式 lines (same combinatorial basis as calcFrom bet count). */
+function expandCalcDanShiLines(sel, types) {
+  const { sm, types: nextTypes } = calcResolvedTypes(sel, types);
+  const lines = [];
+  for (const t of nextTypes) {
+    for (const c of combos(sm, t)) {
+      const pickArrays = c.map(x => x.keys.map((k, i) => ({
+        num: x.m.num, key: k, odds: x.odds[i], short: calcDanShiShortLabel(k),
+      })));
+      for (const picks of cartesianProd(pickArrays)) {
+        const oddsProd = picks.reduce((a, p) => a * p.odds, 1);
+        lines.push({ picks, oddsProd, parlay: t });
+      }
+    }
+  }
+  return lines;
+}
+function defaultBonusOptAmount(costYuan) {
+  const c = Math.max(2, Math.round(costYuan) || 2);
+  if (c >= 100) return Math.ceil(c / 10) * 10;
+  return Math.max(c, 200);
+}
+/** Integer unit counts summing to totalUnits, proportional to weights. */
+function distributeIntegerUnits(weights, totalUnits) {
+  const n = weights.length;
+  if (!n) return [];
+  const U = Math.max(0, Math.floor(totalUnits));
+  if (!U) return weights.map(() => 0);
+  const w = weights.map(x => Math.max(0, Number(x) || 0));
+  const sumW = w.reduce((a, b) => a + b, 0);
+  if (sumW <= 0) {
+    const base = Math.floor(U / n);
+    const rem = U - base * n;
+    return w.map((_, i) => base + (i < rem ? 1 : 0));
+  }
+  const ideal = w.map(x => (x / sumW) * U);
+  const mults = ideal.map(x => Math.floor(x));
+  let used = mults.reduce((a, b) => a + b, 0);
+  const order = ideal.map((x, i) => ({ i, f: x - mults[i] })).sort((a, b) => b.f - a.f);
+  for (let k = 0; used < U; k++, used++) mults[order[k % n].i]++;
+  return mults;
+}
+function bonusOptUnitsFromAmount(yuan) { return Math.max(0, Math.floor((Number(yuan) || 0) / 2)); }
+function computeBonusOptMults(mode, lines, amountYuan, baseMult) {
+  const n = lines.length;
+  if (!n) return [];
+  const units = bonusOptUnitsFromAmount(amountYuan);
+  if (mode === 'none') {
+    const m = Math.max(1, Math.min(99, baseMult || 1));
+    return lines.map(() => m);
+  }
+  if (!units) return lines.map(() => 0);
+  const weights = lines.map(l => (mode === 'avg' ? 1 / l.oddsProd : l.oddsProd));
+  let mults = distributeIntegerUnits(weights, units);
+  if (mode === 'cold' && units >= n) {
+    for (let i = 0; i < n; i++) if (!mults[i]) mults[i] = 1;
+    let sum = mults.reduce((a, b) => a + b, 0);
+    while (sum > units) {
+      let j = 0;
+      for (let i = 1; i < n; i++) if (mults[i] > mults[j] && mults[i] > 1) j = i;
+      if (mults[j] <= 1) break;
+      mults[j]--;
+      sum--;
+    }
+    while (sum < units) {
+      let j = 0;
+      for (let i = 1; i < n; i++) if (lines[i].oddsProd > lines[j].oddsProd) j = i;
+      mults[j]++;
+      sum++;
+    }
+  }
+  return mults.map(m => Math.max(0, Math.min(9999, m)));
+}
+function bonusOptTotals(lines, mults) {
+  let bets = 0, cost = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const m = mults[i] || 0;
+    if (m > 0) bets++;
+    cost += m * 2;
+  }
+  return { bets, cost };
+}
+function lineEstPrize(line, mult) { return line.oddsProd * 2 * (mult || 0); }
 function calc() {
   const c = calcFrom(S.sel, S.types, S.mult);
   S.types = c.types;
@@ -1897,8 +2002,10 @@ function syncSheetScrollLock() {
   if (view) view.classList.toggle('sheet-lock', !!on);
 }
 function closeSheet() {
-  $('#sheet').classList.add('hidden');
-  $('#sheet').innerHTML = '';
+  const sh = $('#sheet');
+  sh.classList.add('hidden');
+  sh.classList.remove('bonus-opt-mask');
+  sh.innerHTML = '';
   syncSheetScrollLock();
 }
 globalThis.closeSheet = closeSheet;
@@ -1966,7 +2073,10 @@ window.addEventListener('hashchange', () => { navNote(location.hash || '#/home')
 // Android back button hook (MainActivity calls this): returns 1 if handled in-page, 0 to exit the app
 window.__appBack = () => {
   if (!$('#dialog').classList.contains('hidden')) { $('#dialog').querySelector('[data-r="0"]').click(); return 1; }
-  if (!$('#sheet').classList.contains('hidden')) { closeSheet(); return 1; }
+  if (!$('#sheet').classList.contains('hidden')) {
+    if ($('#sheet').classList.contains('bonus-opt-mask')) { closeBonusOptSheet(); openCalcSubmitSheet(); return 1; }
+    closeSheet(); return 1;
+  }
   if (meDrawerOpen()) { closeMeDrawer(); return 1; }
   const r = route();
   if (r.name === 'login' && !S.guest && !loggedIn()) return 0;
@@ -4247,6 +4357,7 @@ function openCalcSubmitSheet() {
     <div class="calc-row"><span>注数</span><span class="num"><b>${c.bets}</b> 注 · 面值 ${c.cost} 元</span></div>
     <div class="calc-row"><span>中奖试算</span><span class="num"><b>${c.max.toFixed(2)}</b> 元</span></div>
     <p class="note">若所选赛果全部命中，按当前赔率组合展开后的最高可中金额（2元/注 × 赔率乘积 × 倍数，未计税）。仅供学习试算。</p>
+    <button type="button" class="btn pri block" data-act="openBonusOpt">优化方案</button>
     <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`);
 }
 const CRS_MORE_WIN = [[1, 0], [2, 0], [2, 1], [3, 0], [3, 1], [3, 2], [4, 0], [4, 1], [4, 2], [5, 0], [5, 1], [5, 2]];
@@ -4276,6 +4387,80 @@ function calcMoreCrsBand(mid, p, seg, lab, scores, otherKey, otherLab, closed) {
   cells += calcMorePickCell(mid, 'crs_' + otherKey, otherLab, p.crs[otherKey], closed);
   if (!cells.replace(/\s/g, '')) return '';
   return `<div class="calc-more-crs-band ${seg}"><div class="calc-more-band-lab">${esc(lab)}</div><div class="calc-more-band-grid">${cells}</div></div>`;
+}
+function bonusOptModes() {
+  return [
+    { id: 'none', label: '未做优化' },
+    { id: 'avg', label: '平均优化' },
+    { id: 'cold', label: '博冷优化' },
+  ];
+}
+function syncBonusOptFromCalc(forceAmount) {
+  const lines = expandCalcDanShiLines(S.calcSel, S.calcTypes);
+  const c = calcFrom(S.calcSel, S.calcTypes, S.calcMult);
+  S.calcTypes = c.types;
+  const bo = S.bonusOpt;
+  if (forceAmount || !bo.amount) bo.amount = defaultBonusOptAmount(c.cost);
+  bo.mults = computeBonusOptMults(bo.mode || 'avg', lines, bo.amount, S.calcMult);
+  return lines;
+}
+function openBonusOptSheet() {
+  if (!calcCanSubmit()) return toast('请先按规则选择场次');
+  const lines = syncBonusOptFromCalc(true);
+  if (!lines.length) return toast('当前串关无可优化单式');
+  renderBonusOptSheet(lines);
+}
+function renderBonusOptSheet(lines) {
+  const bo = S.bonusOpt;
+  const modes = bonusOptModes();
+  const mode = bo.mode || 'avg';
+  const mults = bo.mults || [];
+  const totals = bonusOptTotals(lines, mults);
+  const optUnits = bonusOptUnitsFromAmount(bo.amount);
+  const sh = $('#sheet');
+  sh.classList.remove('hidden');
+  sh.classList.add('bonus-opt-mask');
+  const modeBtns = modes.map(m => `<button type="button" class="bonus-opt-tab${mode === m.id ? ' on' : ''}" data-act="bonusOptMode" data-mode="${m.id}">${m.label}</button>`).join('');
+  const rows = lines.map((line, i) => {
+    const m = mults[i] || 0;
+    const amt = m * 2;
+    const prize = lineEstPrize(line, m);
+    const tags = line.picks.map(p => `<span class="bonus-opt-tag">${esc(p.num)} ${esc(p.short)}</span>`).join('');
+    return `<div class="bonus-opt-row" data-line="${i}">
+      <div class="bonus-opt-tags">${tags}</div>
+      <div class="bonus-opt-step stepper"><button type="button" data-act="bonusOptMult" data-line="${i}" data-delta="-1">−</button><input type="number" class="bonus-opt-mult-inp" data-line="${i}" min="0" max="9999" value="${m}"><button type="button" data-act="bonusOptMult" data-line="${i}" data-delta="1">＋</button></div>
+      <div class="bonus-opt-amt">${amt}元</div>
+      <div class="bonus-opt-prize">${prize.toFixed(2)}</div>
+    </div>`;
+  }).join('');
+  sh.innerHTML = `<div class="sheet bonus-opt-page">
+    <header class="bonus-opt-hd">
+      <button type="button" class="bonus-opt-back" data-act="bonusOptBack" aria-label="返回">‹</button>
+      <span class="bonus-opt-title">奖金优化</span>
+      <button type="button" class="bonus-opt-help" data-act="bonusOptHelp" aria-label="说明">?</button>
+    </header>
+    <div class="bonus-opt-tabs">${modeBtns}</div>
+    <div class="bonus-opt-amt-card">
+      <div class="bonus-opt-amt-row"><span>优化金额</span><div class="bonus-opt-amt-in"><button type="button" data-act="bonusOptAmt" data-delta="-10">−</button><input id="bonusOptAmtInp" type="number" min="2" step="2" value="${bo.amount}"><span class="yuan">元</span><button type="button" data-act="bonusOptAmt" data-delta="10">＋</button></div></div>
+      <p class="bonus-opt-amt-sub">（优化倍数 <b>${optUnits}</b> 倍）</p>
+    </div>
+    <div class="bonus-opt-table-hd"><span>单式</span><span>倍数</span><span>金额</span><span>预估奖金</span></div>
+    <div class="bonus-opt-rows">${rows}</div>
+    <footer class="bonus-opt-ft">
+      <div class="bonus-opt-sum">共 <b>${totals.bets}</b> 注 <b>${totals.cost}</b> 元</div>
+      <button type="button" class="bonus-opt-done" data-act="bonusOptDone">完成</button>
+    </footer>
+  </div>`;
+  syncSheetScrollLock();
+}
+function closeBonusOptSheet() {
+  const sh = $('#sheet');
+  sh.classList.remove('bonus-opt-mask');
+}
+function openBonusOptHelp() {
+  confirmDlg('奖金优化说明',
+    '<p>将试算单式按目标金额分配整数倍数，仅供学习试算，不涉及真实投注。</p><ul style="margin:8px 0 0;padding-left:18px;text-align:left"><li><b>未做优化</b>：每条单式使用试算倍数，不重新分配。</li><li><b>平均优化</b>：在优化金额内按赔率倒数分配倍数，使各单式预估奖金尽量接近。</li><li><b>博冷优化</b>：偏高赔率单式分配更多倍数。</li></ul>',
+    '知道了');
 }
 function renderCalcMorePickables(mid, snap, m) {
   const closed = calcMatchClosed(m);
@@ -11871,6 +12056,29 @@ document.addEventListener('click', async e => {
       return openCalcSubmitSheet();
     }
     case 'calcMoreOk': return closeSheet();
+    case 'openBonusOpt': return openBonusOptSheet();
+    case 'bonusOptBack': { closeBonusOptSheet(); return openCalcSubmitSheet(); }
+    case 'bonusOptHelp': return openBonusOptHelp();
+    case 'bonusOptDone': { toast('方案已保存（仅本机试算记录，未投注）', 2200); closeBonusOptSheet(); return openCalcSubmitSheet(); }
+    case 'bonusOptMode': {
+      S.bonusOpt.mode = d.mode || 'avg';
+      const lines = syncBonusOptFromCalc(false);
+      return renderBonusOptSheet(lines);
+    }
+    case 'bonusOptAmt': {
+      S.bonusOpt.amount = Math.max(2, Math.min(99999, (S.bonusOpt.amount || 0) + (+d.delta || 0)));
+      const lines = syncBonusOptFromCalc(false);
+      return renderBonusOptSheet(lines);
+    }
+    case 'bonusOptMult': {
+      const i = +d.line;
+      const lines = expandCalcDanShiLines(S.calcSel, S.calcTypes);
+      if (i < 0 || i >= lines.length) return;
+      const mults = S.bonusOpt.mults || [];
+      mults[i] = Math.max(0, Math.min(9999, (mults[i] || 0) + (+d.delta || 0)));
+      S.bonusOpt.mults = mults;
+      return renderBonusOptSheet(lines);
+    }
     case 'openPlan': return openPlanSheet();
     case 'closeSheet': return closeSheet();
     case 'savePlan': return savePlan();
@@ -12180,6 +12388,21 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   if (e.target.id === 'mult') { S.mult = clampCalcMult(parseInt(e.target.value, 10) || 1); openPlanSheet(); }
   if (e.target.id === 'calcMultInp') { S.calcMult = clampCalcMult(parseInt(e.target.value, 10) || 1); openCalcSubmitSheet(); }
+  if (e.target.id === 'bonusOptAmtInp') {
+    S.bonusOpt.amount = Math.max(2, Math.min(99999, parseInt(e.target.value, 10) || 2));
+    const lines = syncBonusOptFromCalc(false);
+    renderBonusOptSheet(lines);
+  }
+  if (e.target.classList.contains('bonus-opt-mult-inp')) {
+    const i = +e.target.dataset.line;
+    const lines = expandCalcDanShiLines(S.calcSel, S.calcTypes);
+    if (i >= 0 && i < lines.length) {
+      const mults = S.bonusOpt.mults || [];
+      mults[i] = Math.max(0, Math.min(9999, parseInt(e.target.value, 10) || 0));
+      S.bonusOpt.mults = mults;
+      renderBonusOptSheet(lines);
+    }
+  }
   if (e.target.id === 'schHideFin') { setSchHideFinished(!!e.target.checked); render(); }
   if (e.target.id === 'colMatchSel' || e.target.id === 'colTitle' || e.target.id === 'colBody') syncColumnComposeFromDom();
 });
