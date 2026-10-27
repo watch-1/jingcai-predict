@@ -1570,6 +1570,79 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .calcbar-submit:not(.dis) { background: linear-gradient(90deg, #4d9bff, #2f6fed); }
 .calcbar-submit.dis { opacity: .55; }
 
+.calc-result-sheet .btn.pri.block { margin-top: 4px; }
+
+.sheet-mask.bonus-opt-mask { align-items: stretch; background: #eef2f8; }
+.sheet.bonus-opt-page {
+  max-width: var(--maxw); max-height: 100%; height: 100%; border-radius: 0; padding: 0;
+  display: flex; flex-direction: column; overflow: hidden; animation: none;
+}
+.bonus-opt-hd {
+  flex: none; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center;
+  padding: calc(8px + var(--safe-t)) 8px 10px; background: linear-gradient(180deg, #3d84f0, #2f6fed); color: #fff;
+}
+.bonus-opt-back, .bonus-opt-help {
+  width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; font-size: 22px; line-height: 1;
+}
+.bonus-opt-help { font-size: 15px; font-weight: 700; }
+.bonus-opt-title { text-align: center; font-size: 17px; font-weight: 700; }
+.bonus-opt-tabs {
+  flex: none; display: flex; gap: 8px; padding: 10px 12px; background: #2f6fed;
+}
+.bonus-opt-tab {
+  flex: 1; border: 0; border-radius: 18px; padding: 8px 4px; font-size: 13px; font-weight: 600;
+  background: rgba(255,255,255,.22); color: rgba(255,255,255,.92);
+}
+.bonus-opt-tab.on { background: #fff; color: #2f6fed; }
+.bonus-opt-amt-card {
+  flex: none; margin: 10px 12px 0; padding: 12px 14px; background: #fff; border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(16,24,40,.06);
+}
+.bonus-opt-amt-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; }
+.bonus-opt-amt-in { display: flex; align-items: center; gap: 6px; }
+.bonus-opt-amt-in button {
+  width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); background: #f7f9fc; color: var(--t2); font-size: 16px;
+}
+.bonus-opt-amt-in input {
+  width: 72px; text-align: center; font-size: 22px; font-weight: 700; color: #e03e36; border: 0; background: transparent;
+}
+.bonus-opt-amt-in .yuan { font-size: 14px; color: var(--t2); font-weight: 500; }
+.bonus-opt-amt-sub { margin: 6px 0 0; font-size: 12px; color: var(--t3); text-align: center; }
+.bonus-opt-amt-sub b { color: #e03e36; }
+.bonus-opt-table-hd {
+  flex: none; display: grid; grid-template-columns: 1fr 108px 52px 72px; gap: 4px; padding: 10px 12px 6px;
+  font-size: 12px; color: var(--t3);
+}
+.bonus-opt-rows { flex: 1; overflow: auto; padding: 0 8px 8px; -webkit-overflow-scrolling: touch; }
+.bonus-opt-row {
+  display: grid; grid-template-columns: 1fr 108px 52px 72px; gap: 4px; align-items: center;
+  padding: 10px 4px; border-bottom: 1px solid var(--line); font-size: 12px;
+}
+.bonus-opt-tags { display: flex; flex-direction: column; gap: 4px; }
+.bonus-opt-tag {
+  display: inline-block; align-self: flex-start; padding: 2px 6px; border-radius: 4px;
+  background: #e8f2ff; color: #1a62f0; font-size: 11px; font-weight: 600;
+}
+.bonus-opt-step.stepper { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.bonus-opt-step.stepper button {
+  width: 26px; height: 28px; border: 1px solid var(--line); border-radius: 4px; background: #f7f9fc; color: var(--t2); font-size: 14px;
+}
+.bonus-opt-step.stepper input {
+  width: 40px; height: 28px; text-align: center; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; font-weight: 600;
+}
+.bonus-opt-amt { color: var(--t1); font-weight: 600; text-align: right; }
+.bonus-opt-prize { color: #e03e36; font-weight: 700; text-align: right; font-size: 13px; }
+.bonus-opt-ft {
+  flex: none; display: flex; align-items: center; gap: 12px; padding: 10px 12px calc(10px + var(--safe-b));
+  background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(16,24,40,.06);
+}
+.bonus-opt-sum { flex: 1; font-size: 14px; color: var(--t2); }
+.bonus-opt-sum b { color: #e03e36; font-size: 16px; }
+.bonus-opt-done {
+  flex: none; min-width: 120px; height: 44px; border: 0; border-radius: 8px;
+  background: linear-gradient(90deg, #4d9bff, #2f6fed); color: #fff; font-size: 16px; font-weight: 700;
+}
+
 .league-chips.strong { padding-top: 8px; padding-bottom: 6px; }
 .league-chips .lg-hot { font-weight: 600; }
 .chip-sep {
