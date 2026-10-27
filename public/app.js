@@ -1974,12 +1974,22 @@ function computeBonusOptMults(mode, lines, amountYuan, baseMult) {
 }
 function bonusOptTotals(lines, mults) {
   let bets = 0, cost = 0;
+  const prizes = [];
   for (let i = 0; i < lines.length; i++) {
     const m = mults[i] || 0;
-    if (m > 0) bets++;
-    cost += m * 2;
+    if (m > 0) {
+      bets++;
+      cost += m * 2;
+      prizes.push(lineEstPrize(lines[i], m));
+    }
   }
-  return { bets, cost };
+  const min = prizes.length ? Math.min(...prizes) : 0;
+  const max = prizes.length ? Math.max(...prizes) : 0;
+  return { bets, cost, min, max };
+}
+function calcSubmitSheetOpen() {
+  const sh = $('#sheet');
+  return sh && !sh.classList.contains('hidden') && !!sh.querySelector('.calc-result-sheet');
 }
 function lineEstPrize(line, mult) { return line.oddsProd * 2 * (mult || 0); }
 function calc() {
@@ -4326,15 +4336,39 @@ function renderCalcBar() {
   bar.classList.toggle('hidden', !show);
   const view = $('#view');
   if (view) view.classList.toggle('has-calcbar', show);
-  if (!show) return;
+  if (!show) {
+    bar.classList.remove('has-sel');
+    if (view) view.classList.remove('has-calcbar-sel');
+    return;
+  }
   const sm = calcSelMatches();
   const c = calcFrom(S.calcSel, S.calcTypes, S.calcMult);
   S.calcTypes = c.types;
   const can = calcCanSubmit();
-  const hintTitle = !sm.length ? '请选择比赛' : (sm.length === 1 ? `已选 1 场 · ${calcPickCount()} 项` : `已选 ${sm.length} 场 · ${calcPickCount()} 项`);
-  const hintSub = !sm.length ? '至少选择1场单关或任意两场比赛' : (sm.length === 1 ? '单关试算（2元/注）' : `${(c.types || []).map(typeName).join('、') || '串关'}试算`);
+  if (!sm.length) {
+    bar.classList.remove('has-sel');
+    if (view) view.classList.remove('has-calcbar-sel');
+    bar.innerHTML = `<button type="button" class="calcbar-clear" data-act="calcClear" aria-label="清空">${I.trash || '🗑'}</button>
+      <div class="calcbar-hint"><div class="t">请选择比赛</div><div class="s">至少选择1场单关或任意两场比赛</div></div>
+      <button type="button" class="calcbar-submit dis" data-act="calcSubmit" disabled>提交</button>`;
+    return;
+  }
+  bar.classList.add('has-sel');
+  if (view) view.classList.add('has-calcbar-sel');
+  const primaryType = (S.calcTypes && S.calcTypes.length) ? Math.min(...S.calcTypes) : (c.types[0] || 1);
+  const typeOpts = c.avail.map(t => `<option value="${t}"${t === primaryType ? ' selected' : ''}>${typeName(t)}</option>`).join('');
   bar.innerHTML = `<button type="button" class="calcbar-clear" data-act="calcClear" aria-label="清空">${I.trash || '🗑'}</button>
-    <div class="calcbar-hint"><div class="t">${hintTitle}</div><div class="s">${hintSub}</div></div>
+    <div class="calcbar-body">
+      <div class="calcbar-row1">
+        <select id="calcbarTypeSel" class="calcbar-type" aria-label="串关类型">${typeOpts}</select>
+        <div class="calcbar-mult-wrap">
+          <input id="calcbarMultInp" type="number" min="1" max="${CALC_MULT_MAX}" value="${S.calcMult}" aria-label="倍数">
+          <span class="bei">倍</span>
+        </div>
+        <div class="calcbar-cost">共 <b>${c.cost}</b> 元</div>
+      </div>
+      <div class="calcbar-row2">预测奖金 <span class="calcbar-prize"><b>${c.min.toFixed(2)}~${c.max.toFixed(2)}</b></span> 元</div>
+    </div>
     <button type="button" class="calcbar-submit${can ? '' : ' dis'}" data-act="calcSubmit"${can ? '' : ' disabled'}>提交</button>`;
 }
 function openCalcHelpSheet() {
@@ -4482,7 +4516,10 @@ function renderBonusOptSheet(lines) {
     </div>
     <footer class="bonus-opt-ft">
       <div class="bonus-opt-ft-pill">
-        <div class="bonus-opt-sum">共 <b>${totals.bets}</b> 注 <b>${totals.cost}</b> 元</div>
+        <div class="bonus-opt-sum">
+          <div class="bonus-opt-sum-line1">共 <b>${totals.bets}</b> 注 <b>${totals.cost}</b> 元</div>
+          <div class="bonus-opt-sum-line2">预测奖金 <b class="bonus-opt-prize-range">${totals.min.toFixed(2)}~${totals.max.toFixed(2)}</b> 元</div>
+        </div>
         <button type="button" class="bonus-opt-done" data-act="bonusOptDone">完成</button>
       </div>
     </footer>
@@ -12085,11 +12122,15 @@ document.addEventListener('click', async e => {
       const n = +d.type;
       S.calcTypes = S.calcTypes.includes(n) ? S.calcTypes.filter(x => x !== n) : [...S.calcTypes, n];
       if (!S.calcTypes.length) S.calcTypes = [n];
-      return openCalcSubmitSheet();
+      if (calcSubmitSheetOpen()) return openCalcSubmitSheet();
+      renderCalcBar();
+      return;
     }
     case 'calcMult': {
       S.calcMult = clampCalcMult(S.calcMult + +d.mult);
-      return openCalcSubmitSheet();
+      if (calcSubmitSheetOpen()) return openCalcSubmitSheet();
+      renderCalcBar();
+      return;
     }
     case 'calcMoreOk': return closeSheet();
     case 'openBonusOpt': return openBonusOptSheet();
@@ -12423,7 +12464,22 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'mult') { S.mult = clampCalcMult(parseInt(e.target.value, 10) || 1); openPlanSheet(); }
-  if (e.target.id === 'calcMultInp') { S.calcMult = clampCalcMult(parseInt(e.target.value, 10) || 1); openCalcSubmitSheet(); }
+  if (e.target.id === 'calcMultInp') {
+    S.calcMult = clampCalcMult(parseInt(e.target.value, 10) || 1);
+    if (calcSubmitSheetOpen()) openCalcSubmitSheet();
+    else renderCalcBar();
+  }
+  if (e.target.id === 'calcbarMultInp') {
+    S.calcMult = clampCalcMult(parseInt(e.target.value, 10) || 1);
+    if (calcSubmitSheetOpen()) openCalcSubmitSheet();
+    else renderCalcBar();
+  }
+  if (e.target.id === 'calcbarTypeSel') {
+    const n = parseInt(e.target.value, 10);
+    if (n > 0) S.calcTypes = [n];
+    if (calcSubmitSheetOpen()) openCalcSubmitSheet();
+    else renderCalcBar();
+  }
   if (e.target.id === 'bonusOptAmtInp') {
     S.bonusOpt.amount = Math.max(2, Math.min(99999, parseInt(e.target.value, 10) || 2));
     const lines = syncBonusOptFromCalc(false);
