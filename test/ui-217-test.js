@@ -22,11 +22,11 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 assert.ok(/^1\.9\.23\d/.test(pkg.version), 'package version 1.9.23x');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
 assert.ok(/VERSION=1\.9\.23\d/.test(ver));
-assert.ok(/VERSION_CODE=26\d/.test(ver));
+assert.ok(/VERSION_CODE=27\d/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 assert.ok(/^1\.9\.23\d/.test(cfg.version), 'config version');
 assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.23/.test(apkSh), 'build-apk default VERSION_NAME');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-26/.test(apkSh), 'build-apk default VERSION_CODE');
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-27/.test(apkSh), 'build-apk default VERSION_CODE');
 
 console.log('ui-217-test OK');

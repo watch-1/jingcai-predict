@@ -4505,6 +4505,7 @@ function openCalcComboSheet() {
     </div>
     ${calcComboBtnsHtml(c.avail, S.calcTypes, 'calcType')}
   </div>`);
+  renderCalcBar();
 }
 function calcMultContextCost(src) {
   if (src === 'plan') {
@@ -4609,6 +4610,7 @@ function openCalcSubmitSheet() {
     <p class="note">若所选赛果全部命中，按当前赔率组合展开后的最高可中金额（2元/注 × 赔率乘积 × 倍数，未计税）。仅供学习试算。</p>
     <button type="button" class="btn pri block" data-act="openBonusOpt">优化方案</button>
     <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`);
+  renderCalcBar();
 }
 const CRS_MORE_WIN = [[1, 0], [2, 0], [2, 1], [3, 0], [3, 1], [3, 2], [4, 0], [4, 1], [4, 2], [5, 0], [5, 1], [5, 2]];
 const CRS_MORE_DRAW = [[0, 0], [1, 1], [2, 2], [3, 3]];
