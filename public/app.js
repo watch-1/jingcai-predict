@@ -11782,8 +11782,8 @@ document.addEventListener('click', async e => {
     return;
   }
   const d = el.dataset;
-  if (d.key) return toggleSel(d.mid, d.key);
-  if (d.type && d.act !== 'calcType') { const n = +d.type; S.types = S.types.includes(n) ? S.types.filter(x => x !== n) : [...S.types, n]; if (!S.types.length) S.types = [n]; return openPlanSheet(); }
+  if (d.mid && d.key) return toggleSel(d.mid, d.key);
+  if (d.type && d.act !== 'calcType' && d.act !== 'calcTypePick') { const n = +d.type; S.types = S.types.includes(n) ? S.types.filter(x => x !== n) : [...S.types, n]; if (!S.types.length) S.types = [n]; return openPlanSheet(); }
   if (d.mult && d.act !== 'calcMult') { S.mult = clampCalcMult(S.mult + +d.mult); return openPlanSheet(); }
   if (d.sdate) {
     if (window.__schDateSuppressClick) return;
