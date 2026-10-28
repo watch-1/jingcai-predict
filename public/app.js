@@ -1854,16 +1854,39 @@ function calcFrom(sel, types, mult) {
   const m = mult || 1;
   const stake = 2 * m;
   const lines = expandCalcDanShiLines(sel, nextTypes);
-  const range = simultaneousWinPrizeRange(lines, lines.map(() => m));
-  return { n, avail, types: nextTypes, bets, cost: bets * stake, min: range.min, max: range.max };
+  const perLine = lines.map(line => lineEstPrize(line, m));
+  let minPrize = 0;
+  for (const p of perLine) if (p > 0 && (!minPrize || p < minPrize)) minPrize = p;
+  const maxParlay = Math.min(...nextTypes);
+  const maxLines = lines.filter(line => line.parlay === maxParlay);
+  const rangeMax = simultaneousWinPrizeRange(maxLines, maxLines.map(() => m));
+  return { n, avail, types: nextTypes, bets, cost: bets * stake, min: minPrize, max: rangeMax.max };
 }
 function calcResolvedTypes(sel, types) {
   const sm = selMatchesFrom(sel);
   const n = sm.length;
   const avail = n === 1 ? [1] : Array.from({ length: Math.max(0, Math.min(n, 8) - 1) }, (_, i) => i + 2);
   let nextTypes = (types || []).filter(t => avail.includes(t));
-  if (!nextTypes.length && n) nextTypes = [n === 1 ? 1 : Math.min(n, 8)];
+  if (!nextTypes.length && n) nextTypes = n === 1 ? [1] : avail.slice();
   return { sm, avail, types: nextTypes };
+}
+function calcTypeBarLabel(types) {
+  const sorted = (types || []).filter(t => t >= 1).sort((a, b) => a - b);
+  if (!sorted.length) return '过关';
+  if (sorted.length === 1) return typeName(sorted[0]);
+  return `${typeName(sorted[0])}等`;
+}
+function bumpCalcTypesOnMoreMatches(prevN) {
+  const n = calcSelMatches().length;
+  if (!n) {
+    S.calcTypes = [];
+    return;
+  }
+  const { avail, types } = calcResolvedTypes(S.calcSel, S.calcTypes);
+  let next = types.length ? types.slice() : (n === 1 ? [1] : avail.slice());
+  if (n > prevN && n > 1 && avail.includes(n) && !next.includes(n)) next.push(n);
+  S.calcTypes = next.filter(t => avail.includes(t)).sort((a, b) => a - b);
+  if (!S.calcTypes.length) S.calcTypes = n === 1 ? [1] : avail.slice();
 }
 function cartesianProd(arrays) {
   if (!arrays.length) return [[]];
@@ -2073,6 +2096,10 @@ function calcSubmitSheetOpen() {
   const sh = $('#sheet');
   return sh && !sh.classList.contains('hidden') && !!sh.querySelector('.calc-result-sheet');
 }
+function calcComboSheetOpen() {
+  const sh = $('#sheet');
+  return sh && !sh.classList.contains('hidden') && !!sh.querySelector('.calc-combo-sheet');
+}
 function jcRoundOddsProd(prod) { return Math.round(Number(prod) * 100) / 100; }
 function lineEstPrize(line, mult) { return jcRoundOddsProd(line.oddsProd) * 2 * (mult || 0); }
 function calc() {
@@ -2101,7 +2128,7 @@ function openPlanSheet() {
     ${sm.map(x => `<div class="pk"><div class="n">${esc(x.m.num)} ${esc(x.m.home)} vs ${esc(x.m.away)}</div><div class="s">${esc(x.m.league)} · ${esc(x.m.date.slice(5))} ${esc(x.m.time)}</div>
       <div class="items">${x.keys.map((k, i) => `<span>${LBL[k.slice(0, -1)][k.slice(-1)]}${k.startsWith('hhad') ? '(' + esc(x.m.hhad.goalLine) + ')' : ''} @${x.odds[i].toFixed(2)}</span>`).join('')}</div></div>`).join('')}
     <div class="calc-combo-block">
-      <div class="calc-sheet-hd-inline"><span class="t">过关方式</span><span class="sub">${calcComboSheetSubtitle(c.n)}</span></div>
+      <div class="calc-sheet-hd-inline"><span class="t">过关方式</span><span class="sub">${calcComboSheetSubtitle(c.n, S.types)}</span></div>
       ${calcComboBtnsHtml(c.avail, S.types, 'calcType')}
     </div>
     <div class="calc-row"><span>倍数</span><button type="button" class="calc-mult-trigger" data-act="openCalcMultSheet" data-mult-src="plan"><span class="v">${S.mult}</span> 倍</button></div>
@@ -4403,10 +4430,12 @@ function toggleCalcPick(mid, key, oddsVal) {
   if (!m || !key || calcMatchClosed(m)) return;
   const v = Number(oddsVal);
   if (!v || v < 1) return;
+  const prevN = calcSelMatches().length;
   const s = (S.calcSel[mid] ||= {});
   if (s[key]) delete s[key];
   else s[key] = v;
   if (!Object.keys(s).length) delete S.calcSel[mid];
+  bumpCalcTypesOnMoreMatches(prevN);
   const on = !!S.calcSel[mid]?.[key];
   const midQ = CSS.escape(String(mid));
   const keyQ = CSS.escape(key);
@@ -4442,11 +4471,11 @@ function renderCalcBar() {
   }
   bar.classList.add('has-sel');
   if (view) view.classList.add('has-calcbar-sel');
-  const primaryType = (S.calcTypes && S.calcTypes.length) ? Math.min(...S.calcTypes) : (c.types[0] || 1);
+  const typeLab = calcTypeBarLabel(S.calcTypes.length ? S.calcTypes : c.types);
   bar.innerHTML = `<button type="button" class="calcbar-clear" data-act="calcClear" aria-label="清空">${I.trash || '🗑'}</button>
     <div class="calcbar-body">
       <div class="calcbar-row1">
-        <button type="button" class="calcbar-type" data-act="openCalcComboSheet" aria-label="过关方式">${typeName(primaryType)}</button>
+        <button type="button" class="calcbar-type" data-act="openCalcComboSheet" aria-label="过关方式">${typeLab}</button>
         <button type="button" class="calcbar-mult-wrap" data-act="openCalcMultSheet" data-mult-src="bar" aria-label="倍数">
           <span class="calcbar-mult-val">${S.calcMult}</span>
           <span class="bei">倍</span>
@@ -4458,21 +4487,23 @@ function renderCalcBar() {
     <button type="button" class="calcbar-submit${can ? '' : ' dis'}" data-act="calcSubmit"${can ? '' : ' disabled'}>提交</button>`;
 }
 function calcComboBtnsHtml(avail, selectedTypes, pickAct) {
-  const act = pickAct || 'calcTypePick';
+  const act = pickAct || 'calcType';
   const on = t => (selectedTypes || []).includes(t);
   return `<div class="calc-combo-btns">${avail.map(t => `<button type="button" data-act="${act}" data-type="${t}" class="calc-combo-btn${on(t) ? ' on' : ''}">${typeName(t)}</button>`).join('')}</div>`;
 }
-function calcComboSheetSubtitle(n) { return `(命中${n}场可中奖)`; }
+function calcComboSheetSubtitle(n, types) {
+  const hit = (types && types.length) ? Math.min(...types) : (n === 1 ? 1 : 2);
+  return `(命中${hit}场可中奖)`;
+}
 function openCalcComboSheet() {
   const c = calcFrom(S.calcSel, S.calcTypes, S.calcMult);
   S.calcTypes = c.types;
-  const primary = (S.calcTypes && S.calcTypes.length) ? Math.min(...S.calcTypes) : (c.types[0] || 1);
   openSheetHtml(`<div class="sheet calc-combo-sheet">
     <div class="calc-sheet-hd">
-      <div class="calc-sheet-hd-t"><span class="t">过关方式</span><span class="sub">${calcComboSheetSubtitle(c.n)}</span></div>
+      <div class="calc-sheet-hd-t"><span class="t">过关方式</span><span class="sub">${calcComboSheetSubtitle(c.n, S.calcTypes)}</span></div>
       <button type="button" class="x" data-act="closeSheet">✕</button>
     </div>
-    ${calcComboBtnsHtml(c.avail, [primary], 'calcTypePick')}
+    ${calcComboBtnsHtml(c.avail, S.calcTypes, 'calcType')}
   </div>`);
 }
 function calcMultContextCost(src) {
@@ -4569,7 +4600,7 @@ function openCalcSubmitSheet() {
   openSheetHtml(`<div class="sheet calc-result-sheet"><h3><span>试算结果</span><button class="x" data-act="closeSheet">✕</button></h3>
     <div class="calc-rc-list">${sm.map(calcResultMatchBlock).join('')}</div>
     <div class="calc-combo-block">
-      <div class="calc-sheet-hd-inline"><span class="t">过关方式</span><span class="sub">${calcComboSheetSubtitle(c.n)}</span></div>
+      <div class="calc-sheet-hd-inline"><span class="t">过关方式</span><span class="sub">${calcComboSheetSubtitle(c.n, S.calcTypes)}</span></div>
       ${calcComboBtnsHtml(c.avail, S.calcTypes, 'calcType')}
     </div>
     <div class="calc-row"><span>倍数</span><button type="button" class="calc-mult-trigger" data-act="openCalcMultSheet" data-mult-src="submit"><span class="v">${S.calcMult}</span> 倍</button></div>
@@ -12300,8 +12331,9 @@ document.addEventListener('click', async e => {
     case 'openCalcMultSheet': return openCalcMultSheet(d.multSrc || 'bar');
     case 'calcTypePick': {
       const n = +d.type;
-      S.calcTypes = [n];
-      closeSheet();
+      S.calcTypes = S.calcTypes.includes(n) ? S.calcTypes.filter(x => x !== n) : [...S.calcTypes, n];
+      if (!S.calcTypes.length) S.calcTypes = [n];
+      if (calcComboSheetOpen()) return openCalcComboSheet();
       if (calcSubmitSheetOpen()) return openCalcSubmitSheet();
       renderCalcBar();
       return;
@@ -12331,6 +12363,7 @@ document.addEventListener('click', async e => {
       const n = +d.type;
       S.calcTypes = S.calcTypes.includes(n) ? S.calcTypes.filter(x => x !== n) : [...S.calcTypes, n];
       if (!S.calcTypes.length) S.calcTypes = [n];
+      if (calcComboSheetOpen()) return openCalcComboSheet();
       if (calcSubmitSheetOpen()) return openCalcSubmitSheet();
       renderCalcBar();
       return;
