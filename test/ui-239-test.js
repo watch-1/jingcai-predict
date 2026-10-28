@@ -18,6 +18,9 @@ assert.strictEqual(pkg.version, '1.9.239');
 
 assert.ok(/function crsScoreInList/.test(appJs), 'CRS score lists for pickKeyTrueAtScore');
 assert.ok(/key\.startsWith\('crs_'\)/.test(appJs), 'pickKeyTrueAtScore handles CRS keys');
+assert.ok(/key\.startsWith\('hafu_'\)/.test(appJs), 'pickKeyTrueAtScore handles 半全场 keys');
+assert.ok(/key\.startsWith\('ttg_'\)/.test(appJs), 'pickKeyTrueAtScore handles 总进球 keys');
+assert.ok(/needHt/.test(appJs), 'achievable subsets enumerate HT×FT when 半全场 selected');
 assert.ok(
   !/onlyWdl[\s\S]*?return unique\.map\(k => \[k\]\)/.test(appJs),
   'must not collapse mixed-play keys to singleton subsets only'
@@ -120,7 +123,87 @@ const wdlMults = wdlLines.map(() => 25);
 const wdlRange = ctx.simultaneousWinPrizeRange(wdlLines, wdlMults);
 assert.ok(wdlRange.max > 250, `WDL-only joint max got ${wdlRange.max}`);
 
+/** User follow-up: SPF/RQ + 半全场平胜 — max must sum all four, not only 让胜 pair on 002. */
+const hafuDh = 'hafu_dh';
+const hafuLines = [
+  {
+    parlay: 2,
+    picks: [{ num: '周三001', key: 'hadh' }, { num: '周三002', key: 'hhadh' }],
+    oddsProd: 219.6 / (2 * 45),
+  },
+  {
+    parlay: 2,
+    picks: [{ num: '周三001', key: 'hadh' }, { num: '周三002', key: hafuDh }],
+    oddsProd: 213.48 / (2 * 18),
+  },
+  {
+    parlay: 2,
+    picks: [{ num: '周三001', key: 'hhadh' }, { num: '周三002', key: 'hhadh' }],
+    oddsProd: 214.24 / (2 * 26),
+  },
+  {
+    parlay: 2,
+    picks: [{ num: '周三001', key: 'hhadh' }, { num: '周三002', key: hafuDh }],
+    oddsProd: 219.78 / (2 * 11),
+  },
+];
+const hafuMults = [45, 18, 26, 11];
+const hafuPrizes = hafuLines.map((line, i) => ctx.lineEstPrize(line, hafuMults[i]));
+assert.ok(Math.abs(hafuPrizes[0] - 219.6) < 0.02);
+assert.ok(Math.abs(hafuPrizes[1] - 213.48) < 0.02);
+assert.ok(Math.abs(hafuPrizes[2] - 214.24) < 0.02);
+assert.ok(Math.abs(hafuPrizes[3] - 219.78) < 0.02);
+const hafuSum = hafuPrizes.reduce((a, b) => a + b, 0);
+const hafuRange = ctx.slipPrizeRange(hafuLines, hafuMults);
+assert.ok(Math.abs(hafuRange.min - 213.48) < 0.05, `hafu min ~213.48 got ${hafuRange.min}`);
+assert.ok(
+  Math.abs(hafuRange.max - hafuSum) < 0.5,
+  `hafu max must sum all four ~867.10 got ${hafuRange.max} (bug was ~433.84)`
+);
+assert.ok(hafuRange.max > 800, `hafu max must beat 433.84 got ${hafuRange.max}`);
+
+/** 总进球 + 胜/让球: 002 的 ttg_s3 与 hhadh 可在 3:0 同时成立，四注应全计入 max。 */
+const ttg3 = 'ttg_s3';
+const ttgLines = [
+  {
+    parlay: 2,
+    picks: [{ num: '周三001', key: 'hadh' }, { num: '周三002', key: ttg3 }],
+    oddsProd: 5,
+  },
+  {
+    parlay: 2,
+    picks: [{ num: '周三001', key: 'hadh' }, { num: '周三002', key: 'hhadh' }],
+    oddsProd: 3,
+  },
+  {
+    parlay: 2,
+    picks: [{ num: '周三001', key: 'hhadh' }, { num: '周三002', key: ttg3 }],
+    oddsProd: 8,
+  },
+  {
+    parlay: 2,
+    picks: [{ num: '周三001', key: 'hhadh' }, { num: '周三002', key: 'hhadh' }],
+    oddsProd: 4,
+  },
+];
+const ttgMults = [10, 10, 10, 10];
+const ttgPrizes = ttgLines.map((line, i) => ctx.lineEstPrize(line, ttgMults[i]));
+const ttgSum = ttgPrizes.reduce((a, b) => a + b, 0);
+const ttgRange = ctx.slipPrizeRange(ttgLines, ttgMults);
+assert.ok(Math.abs(ttgRange.max - ttgSum) < 0.02, `ttg max must sum all four ~${ttgSum} got ${ttgRange.max}`);
+assert.ok(ttgRange.max > 300, `ttg max must beat ttg-only pair 260 got ${ttgRange.max}`);
+const ttg002Subsets = ctx.achievableKeySubsetsForMatch([ttg3, 'hhadh'], '-1');
+assert.ok(
+  ttg002Subsets.some(s => s.includes(ttg3) && s.includes('hhadh')),
+  'ttg_s3 and hhadh must appear in same achievable subset on one match'
+);
+
 assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.239\}"/.test(apkSh));
 assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-276\}"/.test(apkSh));
 
-console.log('ui-239-test OK', { range, sumAll, eqRange: { min: eqRange.min, max: eqRange.max } });
+console.log('ui-239-test OK', {
+  range,
+  sumAll,
+  eqRange: { min: eqRange.min, max: eqRange.max },
+  hafuRange: { min: hafuRange.min, max: hafuRange.max, sum: hafuSum },
+});

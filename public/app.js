@@ -1997,7 +1997,12 @@ const CRS_MORE_LOSE = [[0, 1], [1, 2], [2, 3], [0, 2], [1, 3], [2, 4], [0, 3], [
 function crsScoreInList(hg, ag, list) {
   return list.some(([h, a]) => h === hg && a === ag);
 }
-function pickKeyTrueAtScore(key, hg, ag, goalLine) {
+function wdlSide(hg, ag) {
+  if (hg > ag) return 'h';
+  if (hg === ag) return 'd';
+  return 'a';
+}
+function pickKeyTrueAtScore(key, hg, ag, goalLine, hthg, htag) {
   if (key.startsWith('had')) {
     const side = key.slice(3);
     if (side === 'h') return hg > ag;
@@ -2027,23 +2032,45 @@ function pickKeyTrueAtScore(key, hg, ag, goalLine) {
     if (tm) return total === +tm[1];
     return false;
   }
+  if (key.startsWith('hafu_')) {
+    const code = key.slice(5);
+    if (code.length !== 2 || hthg == null || htag == null) return false;
+    return code === wdlSide(hthg, htag) + wdlSide(hg, ag);
+  }
   return false;
 }
-/** All subsets of selected keys on one match that can win together (e.g. 胜 + 让胜 + 比分3:0). */
+function pushAchievableSubset(subsets, seen, appeared, active) {
+  if (!active.length) return;
+  active.forEach(k => appeared.add(k));
+  const sig = active.slice().sort().join('|');
+  if (seen.has(sig)) return;
+  seen.add(sig);
+  subsets.push(active);
+}
+/** All subsets of selected keys on one match that can win together (e.g. 胜 + 让胜 + 比分3:0 + 半全场). */
 function achievableKeySubsetsForMatch(keys, goalLine) {
   const unique = [...new Set(keys)];
   const seen = new Set();
   const subsets = [];
   const appeared = new Set();
-  for (let hg = 0; hg <= 12; hg++) {
-    for (let ag = 0; ag <= 12; ag++) {
-      const active = unique.filter(k => pickKeyTrueAtScore(k, hg, ag, goalLine));
-      if (!active.length) continue;
-      active.forEach(k => appeared.add(k));
-      const sig = active.slice().sort().join('|');
-      if (seen.has(sig)) continue;
-      seen.add(sig);
-      subsets.push(active);
+  const needHt = unique.some(k => k.startsWith('hafu_'));
+  if (needHt) {
+    for (let hg = 0; hg <= 12; hg++) {
+      for (let ag = 0; ag <= 12; ag++) {
+        for (let hhg = 0; hhg <= hg; hhg++) {
+          for (let hag = 0; hag <= ag; hag++) {
+            const active = unique.filter(k => pickKeyTrueAtScore(k, hg, ag, goalLine, hhg, hag));
+            pushAchievableSubset(subsets, seen, appeared, active);
+          }
+        }
+      }
+    }
+  } else {
+    for (let hg = 0; hg <= 12; hg++) {
+      for (let ag = 0; ag <= 12; ag++) {
+        const active = unique.filter(k => pickKeyTrueAtScore(k, hg, ag, goalLine));
+        pushAchievableSubset(subsets, seen, appeared, active);
+      }
     }
   }
   for (const k of unique) {
