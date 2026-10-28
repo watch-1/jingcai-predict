@@ -1939,40 +1939,42 @@ function distributeIntegerUnits(weights, totalUnits) {
   return mults;
 }
 function bonusOptUnitsFromAmount(yuan) { return Math.max(0, Math.floor((Number(yuan) || 0) / 2)); }
-/** 博冷：冷门线占大部分倍数；其余单式按赔率倒数分配，使预估奖金尽量接近。 */
-function computeColdBonusOptMults(lines, units) {
+/** 博冷：非最高赔率单式先按优化金额回本倍数，余量全部给最高赔率单式；若全体回本超预算则几乎 all-in 冷门。 */
+function coldBreakEvenUnits(line, amountYuan) {
+  const one = lineEstPrize(line, 1);
+  if (one <= 0) return 1;
+  return Math.max(1, Math.min(9999, Math.ceil(amountYuan / one)));
+}
+function computeColdBonusOptMults(lines, units, amountYuan) {
   const n = lines.length;
   if (!n) return [];
   if (n === 1) return [Math.max(0, Math.min(9999, units))];
   const U = Math.max(0, Math.floor(units));
   if (!U) return lines.map(() => 0);
+  const amount = Math.max(0, Number(amountYuan) || 0) || U * 2;
   let coldIdx = 0;
   for (let i = 1; i < n; i++) if (lines[i].oddsProd > lines[coldIdx].oddsProd) coldIdx = i;
-  const tailWeights = lines.map((l, i) => (i === coldIdx ? 0 : 1 / l.oddsProd));
-  const wSum = tailWeights.reduce((a, b) => a + b, 0);
-  const tailCount = n - 1;
-  let tailUnits = Math.max(tailCount, Math.min(U - 1, Math.round(tailCount * Math.sqrt(U))));
-  if (wSum > 0) {
-    const oddsScaled = Math.round(wSum * U + (tailCount - 1));
-    tailUnits = Math.max(tailCount, Math.min(tailUnits, oddsScaled));
+  const mults = lines.map(() => 0);
+  let tailSum = 0;
+  for (let i = 0; i < n; i++) {
+    if (i === coldIdx) continue;
+    const u = coldBreakEvenUnits(lines[i], amount);
+    mults[i] = u;
+    tailSum += u;
   }
-  const tailMults = distributeIntegerUnits(tailWeights, tailUnits);
-  const mults = tailMults.slice();
-  mults[coldIdx] = U - tailMults.reduce((a, b) => a + b, 0);
-  if (mults[coldIdx] < 1 && U >= n) {
-    mults[coldIdx] = 1;
-    let overflow = mults.reduce((a, b) => a + b, 0) - U;
-    while (overflow > 0) {
-      let j = -1;
+  if (tailSum >= U) {
+    for (let i = 0; i < n; i++) mults[i] = 0;
+    const tailCount = n - 1;
+    if (U >= n) {
       for (let i = 0; i < n; i++) {
-        if (i === coldIdx || mults[i] <= 1) continue;
-        if (j < 0 || mults[i] > mults[j]) j = i;
+        if (i !== coldIdx) mults[i] = 1;
       }
-      if (j < 0) break;
-      mults[j]--;
-      overflow--;
+      mults[coldIdx] = U - tailCount;
+    } else {
+      mults[coldIdx] = U;
     }
-    mults[coldIdx] = U - mults.reduce((a, b, idx) => a + (idx === coldIdx ? 0 : b), 0);
+  } else {
+    mults[coldIdx] = U - tailSum;
   }
   return mults.map(m => Math.max(0, Math.min(9999, m)));
 }
@@ -1985,7 +1987,7 @@ function computeBonusOptMults(mode, lines, amountYuan, baseMult) {
     return distributeIntegerUnits(lines.map(() => 1), units).map(m => Math.max(0, Math.min(9999, m)));
   }
   if (!units) return lines.map(() => 0);
-  if (mode === 'cold') return computeColdBonusOptMults(lines, units);
+  if (mode === 'cold') return computeColdBonusOptMults(lines, units, amountYuan);
   const weights = lines.map(l => 1 / l.oddsProd);
   return distributeIntegerUnits(weights, units).map(m => Math.max(0, Math.min(9999, m)));
 }
@@ -4757,7 +4759,7 @@ function closeBonusOptSheet() {
 }
 function openBonusOptHelp() {
   confirmDlg('奖金优化说明',
-    '<p>将试算单式按目标金额分配整数倍数，仅供学习试算，不涉及真实投注。</p><ul style="margin:8px 0 0;padding-left:18px;text-align:left"><li><b>未做优化</b>：在优化金额内各单式均分整数倍数（余数按序 +1）。</li><li><b>平均优化</b>：在优化金额内按赔率倒数分配倍数，使各单式预估奖金尽量接近。</li><li><b>博冷优化</b>：大部分倍数压在最高赔率单式，其余单式少量覆盖且预估奖金接近。</li></ul>',
+    '<p>将试算单式按目标金额分配整数倍数，仅供学习试算，不涉及真实投注。</p><ul style="margin:8px 0 0;padding-left:18px;text-align:left"><li><b>未做优化</b>：在优化金额内各单式均分整数倍数（余数按序 +1）。</li><li><b>平均优化</b>：在优化金额内按赔率倒数分配倍数，使各单式预估奖金尽量接近。</li><li><b>博冷优化</b>：先为其余单式分配使预估奖金不低于优化金额的倍数（回本），剩余倍数全部给最高赔率单式；若全体回本超出预算，则几乎 all-in 最高赔率单式。</li></ul>',
     '知道了');
 }
 function renderCalcMorePickables(mid, snap, m) {
