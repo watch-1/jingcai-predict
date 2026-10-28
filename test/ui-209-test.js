@@ -15,7 +15,7 @@ assert.ok(/function resolveDcPlayerEspnId/.test(appJs), 'value-board espn id res
 assert.ok(/function dcAvatarImgError/.test(appJs), 'avatar fallback chain');
 assert.ok(/data-center-boot-slices\.js/.test(indexHtml), 'index loads inline boot');
 assert.ok(/window\.__JC_DC_BOOT__=/.test(inlineJs), 'inline boot payload');
-assert.ok(/jc-v1\.9\.21\d/.test(swJs), 'SW VER 1.9.21x');
+assert.ok(/jc-v1\.9\.2\d\d/.test(swJs), 'SW VER 1.9.2xx');
 
 const boot = JSON.parse(bootJs);
 const pedri = boot.slices['laliga:playervalues'].rows.find((r) => r.player === 'Pedri');
@@ -23,9 +23,9 @@ assert.strictEqual(pedri.playerId, '250465', 'Pedri espn id in boot playervalues
 assert.ok(boot.slices['bundesliga:topscorers'].rows.length >= 10, 'bundesliga topscorers boot');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.ok(/^1\.9\.21\d$/.test(pkg.version), 'package 1.9.21x');
+assert.ok(/^1\.9\.2\d\d$/.test(pkg.version), 'package 1.9.2xx');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.21\d/.test(ver));
-assert.ok(/VERSION_CODE=25\d/.test(ver));
+assert.ok(/VERSION=1\.9\.2\d\d/.test(ver));
+assert.ok(/VERSION_CODE=26\d/.test(ver) || /VERSION_CODE=25\d/.test(ver));
 
 console.log('ui-209-test OK');

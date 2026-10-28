@@ -8,16 +8,21 @@ const root = path.join(__dirname, '..');
 const appJs = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
 
 const chunk = appJs.match(
-  /function distributeIntegerUnits\(weights, totalUnits\)[\s\S]*?function lineEstPrize\(line, mult\) \{ return line\.oddsProd \* 2 \* \(mult \|\| 0\); \}/
+  /function distributeIntegerUnits\(weights, totalUnits\)[\s\S]*?function lineEstPrize\(line, mult\) \{[\s\S]*?\n\}/
 )?.[0];
 assert.ok(chunk, 'bonus-opt helpers present in app.js');
 
 const simChunk = appJs.match(
-  /function simultaneousWinPrizeRange\(lines, mults\) \{[\s\S]*?\n\}/
+  /function pickKeyTrueAtScore[\s\S]*?function simultaneousWinPrizeRange\(lines, mults\) \{[\s\S]*?\n\}/
 )?.[0];
 assert.ok(simChunk, 'simultaneousWinPrizeRange present in app.js');
 
-const ctx = { console, LBL: { had: { h: '胜', d: '平', a: '负' }, hhad: { h: '让胜', d: '让平', a: '让负' } } };
+const ctx = {
+  console,
+  LBL: { had: { h: '胜', d: '平', a: '负' }, hhad: { h: '让胜', d: '让平', a: '让负' } },
+  S: { matches: [], schedule: [] },
+  findMatchByNum: () => null,
+};
 vm.createContext(ctx);
 vm.runInContext(chunk + simChunk + `
 globalThis.computeBonusOptMults = computeBonusOptMults;

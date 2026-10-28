@@ -1819,6 +1819,10 @@ async function deletePlan(id) {
 
 // ---------- selection → 方案 calculator (personal record only) ----------
 const findMatch = id => (S.matches || []).find(m => m.id === String(id)) || (S.schedule || []).find(m => m.id === String(id)) || null;
+function findMatchByNum(num) {
+  const s = String(num || '');
+  return (S.matches || []).find(m => String(m.num) === s) || (S.schedule || []).find(m => String(m.num) === s) || null;
+}
 function oddsForSelKey(m, key, stored) {
   if (typeof stored === 'number' && stored >= 1.01) return stored;
   if (key.startsWith('hhad')) return m.hhad && m.hhad[key.slice(4)];
@@ -1967,6 +1971,45 @@ function computeBonusOptMults(mode, lines, amountYuan, baseMult) {
   const weights = lines.map(l => 1 / l.oddsProd);
   return distributeIntegerUnits(weights, units).map(m => Math.max(0, Math.min(9999, m)));
 }
+function pickKeyTrueAtScore(key, hg, ag, goalLine) {
+  if (key.startsWith('had')) {
+    const side = key.slice(3);
+    if (side === 'h') return hg > ag;
+    if (side === 'd') return hg === ag;
+    if (side === 'a') return hg < ag;
+  }
+  if (key.startsWith('hhad')) {
+    const side = key.slice(4);
+    const gl = goalLine != null && goalLine !== '' ? Number(goalLine) : 0;
+    const adj = hg + gl - ag;
+    if (side === 'h') return adj > 0;
+    if (side === 'd') return adj === 0;
+    if (side === 'a') return adj < 0;
+  }
+  return false;
+}
+/** All subsets of selected keys on one match that can win together (e.g. 胜 + 让胜 when主胜2球+). */
+function achievableKeySubsetsForMatch(keys, goalLine) {
+  const unique = [...new Set(keys)];
+  const onlyWdl = unique.every(k => k.startsWith('had') || k.startsWith('hhad'));
+  if (!onlyWdl) {
+    return unique.map(k => [k]);
+  }
+  const seen = new Set();
+  const subsets = [];
+  for (let hg = 0; hg <= 12; hg++) {
+    for (let ag = 0; ag <= 12; ag++) {
+      const active = unique.filter(k => pickKeyTrueAtScore(k, hg, ag, goalLine));
+      if (!active.length) continue;
+      const sig = active.slice().sort().join('|');
+      if (seen.has(sig)) continue;
+      seen.add(sig);
+      subsets.push(active);
+    }
+  }
+  if (!subsets.length && unique.length) subsets.push(unique.slice(0, 1));
+  return subsets;
+}
 /** Min/max total prize when all jointly winnable 单式 hit under some full outcome (竞彩预测奖金语义). */
 function simultaneousWinPrizeRange(lines, mults) {
   const active = [];
@@ -1982,16 +2025,21 @@ function simultaneousWinPrizeRange(lines, mults) {
     }
   }
   const matchNums = Object.keys(perMatchKeys);
-  const keyLists = matchNums.map(n => [...perMatchKeys[n]]);
+  const subsetLists = matchNums.map(num => {
+    const m = findMatchByNum(num);
+    const gl = m?.hhad?.goalLine;
+    return achievableKeySubsetsForMatch([...perMatchKeys[num]], gl);
+  });
   let max = 0;
   let min = Infinity;
-  const walk = (idx, outcome) => {
+  const walk = (idx, outcomeSets) => {
     if (idx >= matchNums.length) {
       let sum = 0;
       for (const { line, prize } of active) {
         let ok = true;
         for (const p of line.picks) {
-          if (outcome[p.num] !== p.key) { ok = false; break; }
+          const set = outcomeSets[p.num];
+          if (!set || !set.has(p.key)) { ok = false; break; }
         }
         if (ok) sum += prize;
       }
@@ -2000,9 +2048,9 @@ function simultaneousWinPrizeRange(lines, mults) {
       return;
     }
     const num = matchNums[idx];
-    for (const k of keyLists[idx]) {
-      outcome[num] = k;
-      walk(idx + 1, outcome);
+    for (const subset of subsetLists[idx]) {
+      outcomeSets[num] = new Set(subset);
+      walk(idx + 1, outcomeSets);
     }
   };
   walk(0, {});
@@ -2025,7 +2073,8 @@ function calcSubmitSheetOpen() {
   const sh = $('#sheet');
   return sh && !sh.classList.contains('hidden') && !!sh.querySelector('.calc-result-sheet');
 }
-function lineEstPrize(line, mult) { return line.oddsProd * 2 * (mult || 0); }
+function jcRoundOddsProd(prod) { return Math.round(Number(prod) * 100) / 100; }
+function lineEstPrize(line, mult) { return jcRoundOddsProd(line.oddsProd) * 2 * (mult || 0); }
 function calc() {
   const c = calcFrom(S.sel, S.types, S.mult);
   S.types = c.types;
@@ -2051,8 +2100,11 @@ function openPlanSheet() {
   sh.innerHTML = `<div class="sheet"><h3><span>方案预览</span><button class="x" data-act="closeSheet">✕</button></h3>
     ${sm.map(x => `<div class="pk"><div class="n">${esc(x.m.num)} ${esc(x.m.home)} vs ${esc(x.m.away)}</div><div class="s">${esc(x.m.league)} · ${esc(x.m.date.slice(5))} ${esc(x.m.time)}</div>
       <div class="items">${x.keys.map((k, i) => `<span>${LBL[k.slice(0, -1)][k.slice(-1)]}${k.startsWith('hhad') ? '(' + esc(x.m.hhad.goalLine) + ')' : ''} @${x.odds[i].toFixed(2)}</span>`).join('')}</div></div>`).join('')}
-    <div class="types">${c.avail.map(t => `<button data-type="${t}" class="${S.types.includes(t) ? 'on' : ''}">${typeName(t)}</button>`).join('')}</div>
-    <div class="calc-row"><span>倍数</span><div class="stepper"><button data-mult="-1">−</button><input id="mult" type="number" min="1" max="${CALC_MULT_MAX}" value="${S.mult}"><button data-mult="1">＋</button></div></div>
+    <div class="calc-combo-block">
+      <div class="calc-sheet-hd-inline"><span class="t">过关方式</span><span class="sub">${calcComboSheetSubtitle(c.n)}</span></div>
+      ${calcComboBtnsHtml(c.avail, S.types, 'calcType')}
+    </div>
+    <div class="calc-row"><span>倍数</span><button type="button" class="calc-mult-trigger" data-act="openCalcMultSheet" data-mult-src="plan"><span class="v">${S.mult}</span> 倍</button></div>
     <div class="calc-row"><span>组合数</span><span class="num">${c.bets} 注（按每注2元计 ${c.cost} 元）</span></div>
     <div class="calc-row"><span>理论奖金</span><span class="num"><b>${c.min.toFixed(2)}</b> ~ <b>${c.max.toFixed(2)}</b> 元</span></div>
     <p class="note">理论奖金 = 2元 × 赔率乘积 × 倍数，未计税与官方封顶。方案只作为个人记录保存${loggedIn() ? '并同步到你的账号' : '在本机'}，不会提交到任何第三方。</p>
@@ -4391,20 +4443,96 @@ function renderCalcBar() {
   bar.classList.add('has-sel');
   if (view) view.classList.add('has-calcbar-sel');
   const primaryType = (S.calcTypes && S.calcTypes.length) ? Math.min(...S.calcTypes) : (c.types[0] || 1);
-  const typeOpts = c.avail.map(t => `<option value="${t}"${t === primaryType ? ' selected' : ''}>${typeName(t)}</option>`).join('');
   bar.innerHTML = `<button type="button" class="calcbar-clear" data-act="calcClear" aria-label="清空">${I.trash || '🗑'}</button>
     <div class="calcbar-body">
       <div class="calcbar-row1">
-        <select id="calcbarTypeSel" class="calcbar-type" aria-label="串关类型">${typeOpts}</select>
-        <div class="calcbar-mult-wrap">
-          <input id="calcbarMultInp" type="number" min="1" max="${CALC_MULT_MAX}" value="${S.calcMult}" aria-label="倍数">
+        <button type="button" class="calcbar-type" data-act="openCalcComboSheet" aria-label="过关方式">${typeName(primaryType)}</button>
+        <button type="button" class="calcbar-mult-wrap" data-act="openCalcMultSheet" data-mult-src="bar" aria-label="倍数">
+          <span class="calcbar-mult-val">${S.calcMult}</span>
           <span class="bei">倍</span>
-        </div>
+        </button>
         <div class="calcbar-cost">共 <b>${c.cost}</b> 元</div>
       </div>
       <div class="calcbar-row2">预测奖金 <span class="calcbar-prize"><b>${c.min.toFixed(2)}~${c.max.toFixed(2)}</b></span> 元</div>
     </div>
     <button type="button" class="calcbar-submit${can ? '' : ' dis'}" data-act="calcSubmit"${can ? '' : ' disabled'}>提交</button>`;
+}
+function calcComboBtnsHtml(avail, selectedTypes, pickAct) {
+  const act = pickAct || 'calcTypePick';
+  const on = t => (selectedTypes || []).includes(t);
+  return `<div class="calc-combo-btns">${avail.map(t => `<button type="button" data-act="${act}" data-type="${t}" class="calc-combo-btn${on(t) ? ' on' : ''}">${typeName(t)}</button>`).join('')}</div>`;
+}
+function calcComboSheetSubtitle(n) { return `(命中${n}场可中奖)`; }
+function openCalcComboSheet() {
+  const c = calcFrom(S.calcSel, S.calcTypes, S.calcMult);
+  S.calcTypes = c.types;
+  const primary = (S.calcTypes && S.calcTypes.length) ? Math.min(...S.calcTypes) : (c.types[0] || 1);
+  openSheetHtml(`<div class="sheet calc-combo-sheet">
+    <div class="calc-sheet-hd">
+      <div class="calc-sheet-hd-t"><span class="t">过关方式</span><span class="sub">${calcComboSheetSubtitle(c.n)}</span></div>
+      <button type="button" class="x" data-act="closeSheet">✕</button>
+    </div>
+    ${calcComboBtnsHtml(c.avail, [primary], 'calcTypePick')}
+  </div>`);
+}
+function calcMultContextCost(src) {
+  if (src === 'plan') {
+    const c = calc();
+    return c.cost;
+  }
+  const c = calcFrom(S.calcSel, S.calcTypes, S.calcMult);
+  return c.cost;
+}
+function calcMultSheetHtml(draftStr, costYuan, src) {
+  const presets = [10, 20, 50, 100, 500];
+  const show = draftStr || '1';
+  const mult = clampCalcMult(parseInt(show, 10) || 1);
+  const cost = src === 'plan' ? calc().cost : calcFrom(S.calcSel, S.calcTypes, mult).cost;
+  return `<div class="sheet calc-mult-sheet">
+    <div class="calc-sheet-hd calc-mult-hd">
+      <div class="calc-sheet-hd-t center"><span class="t">已选<b>${esc(String(show))}</b>倍 <b>${cost}</b>元</span></div>
+      <button type="button" class="x" data-act="closeCalcMultSheet">✕</button>
+    </div>
+    <div class="calc-mult-presets">${presets.map(p => `<button type="button" class="calc-mult-preset" data-act="calcMultPreset" data-val="${p}">${p}倍</button>`).join('')}</div>
+    <div class="calc-mult-pad">
+      ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" data-act="calcMultKey" data-key="${n}">${n}</button>`).join('')}
+      <button type="button" class="pad-del" data-act="calcMultKey" data-key="del">删除</button>
+      <button type="button" data-act="calcMultKey" data-key="0">0</button>
+      <button type="button" class="pad-ok" data-act="calcMultConfirm" data-mult-src="${esc(src)}">确定</button>
+    </div>
+  </div>`;
+}
+function openCalcMultSheet(src) {
+  S._calcMultDraft = String(src === 'plan' ? S.mult : S.calcMult);
+  S._calcMultSrc = src || 'bar';
+  const cost = calcMultContextCost(S._calcMultSrc);
+  openSheetHtml(calcMultSheetHtml(S._calcMultDraft, cost, S._calcMultSrc));
+}
+function refreshCalcMultSheet() {
+  if (!S._calcMultSrc) return;
+  const sh = $('#sheet');
+  if (!sh || sh.classList.contains('hidden')) return;
+  const el = sh.querySelector('.calc-mult-sheet');
+  if (!el) return;
+  el.outerHTML = calcMultSheetHtml(S._calcMultDraft || '1', calcMultContextCost(S._calcMultSrc), S._calcMultSrc);
+}
+function commitCalcMultFromDraft() {
+  const v = clampCalcMult(parseInt(S._calcMultDraft || '1', 10) || 1);
+  const src = S._calcMultSrc || 'bar';
+  if (src === 'plan') {
+    S.mult = v;
+    closeSheet();
+    return openPlanSheet();
+  }
+  S.calcMult = v;
+  closeSheet();
+  if (calcSubmitSheetOpen()) return openCalcSubmitSheet();
+  renderCalcBar();
+}
+function closeCalcMultSheet() {
+  S._calcMultDraft = '';
+  S._calcMultSrc = '';
+  closeSheet();
 }
 function openCalcHelpSheet() {
   openSheetHtml(`<div class="sheet calc-help-sheet"><h3><span>玩法说明</span><button class="x" data-act="closeSheet">✕</button></h3>
@@ -4440,8 +4568,11 @@ function openCalcSubmitSheet() {
   S.calcTypes = c.types;
   openSheetHtml(`<div class="sheet calc-result-sheet"><h3><span>试算结果</span><button class="x" data-act="closeSheet">✕</button></h3>
     <div class="calc-rc-list">${sm.map(calcResultMatchBlock).join('')}</div>
-    <div class="types types--stack">${c.avail.map(t => `<button type="button" data-act="calcType" data-type="${t}" class="${S.calcTypes.includes(t) ? 'on' : ''}">${typeName(t)}</button>`).join('')}</div>
-    <div class="calc-row"><span>倍数</span><div class="stepper"><button type="button" data-act="calcMult" data-mult="-1">−</button><input id="calcMultInp" type="number" min="1" max="${CALC_MULT_MAX}" value="${S.calcMult}"><button type="button" data-act="calcMult" data-mult="1">＋</button></div></div>
+    <div class="calc-combo-block">
+      <div class="calc-sheet-hd-inline"><span class="t">过关方式</span><span class="sub">${calcComboSheetSubtitle(c.n)}</span></div>
+      ${calcComboBtnsHtml(c.avail, S.calcTypes, 'calcType')}
+    </div>
+    <div class="calc-row"><span>倍数</span><button type="button" class="calc-mult-trigger" data-act="openCalcMultSheet" data-mult-src="submit"><span class="v">${S.calcMult}</span> 倍</button></div>
     <div class="calc-row"><span>注数</span><span class="num"><b>${c.bets}</b> 注 · 面值 ${c.cost} 元</span></div>
     <div class="calc-row"><span>中奖试算</span><span class="num"><b>${c.max.toFixed(2)}</b> 元</span></div>
     <p class="note">若所选赛果全部命中，按当前赔率组合展开后的最高可中金额（2元/注 × 赔率乘积 × 倍数，未计税）。仅供学习试算。</p>
@@ -12152,6 +12283,35 @@ document.addEventListener('click', async e => {
     case 'calcPick': return toggleCalcPick(d.mid, d.calcKey, d.odds);
     case 'calcClear': S.calcSel = {}; S.calcTypes = []; S.calcMult = 1; return render({ force: true });
     case 'calcSubmit': return openCalcSubmitSheet();
+    case 'openCalcComboSheet': return openCalcComboSheet();
+    case 'openCalcMultSheet': return openCalcMultSheet(d.multSrc || 'bar');
+    case 'calcTypePick': {
+      const n = +d.type;
+      S.calcTypes = [n];
+      closeSheet();
+      if (calcSubmitSheetOpen()) return openCalcSubmitSheet();
+      renderCalcBar();
+      return;
+    }
+    case 'closeCalcMultSheet': return closeCalcMultSheet();
+    case 'calcMultConfirm': return commitCalcMultFromDraft();
+    case 'calcMultPreset': {
+      S._calcMultDraft = String(clampCalcMult(+d.val || 1));
+      refreshCalcMultSheet();
+      return;
+    }
+    case 'calcMultKey': {
+      let s = S._calcMultDraft || '';
+      if (d.key === 'del') s = s.slice(0, -1);
+      else if (s === '0' || !s) s = d.key;
+      else s += d.key;
+      if (s.length > 5) s = s.slice(0, 5);
+      const n = parseInt(s, 10);
+      if (Number.isFinite(n) && n > CALC_MULT_MAX) s = String(CALC_MULT_MAX);
+      S._calcMultDraft = s;
+      refreshCalcMultSheet();
+      return;
+    }
     case 'calcHelp': return openCalcHelpSheet();
     case 'calcMore': return openCalcMoreSheet(d.mid);
     case 'calcType': {
@@ -12499,23 +12659,6 @@ document.addEventListener('input', e => {
   }
 });
 document.addEventListener('change', e => {
-  if (e.target.id === 'mult') { S.mult = clampCalcMult(parseInt(e.target.value, 10) || 1); openPlanSheet(); }
-  if (e.target.id === 'calcMultInp') {
-    S.calcMult = clampCalcMult(parseInt(e.target.value, 10) || 1);
-    if (calcSubmitSheetOpen()) openCalcSubmitSheet();
-    else renderCalcBar();
-  }
-  if (e.target.id === 'calcbarMultInp') {
-    S.calcMult = clampCalcMult(parseInt(e.target.value, 10) || 1);
-    if (calcSubmitSheetOpen()) openCalcSubmitSheet();
-    else renderCalcBar();
-  }
-  if (e.target.id === 'calcbarTypeSel') {
-    const n = parseInt(e.target.value, 10);
-    if (n > 0) S.calcTypes = [n];
-    if (calcSubmitSheetOpen()) openCalcSubmitSheet();
-    else renderCalcBar();
-  }
   if (e.target.id === 'bonusOptAmtInp') {
     S.bonusOpt.amount = Math.max(2, Math.min(99999, parseInt(e.target.value, 10) || 2));
     const lines = syncBonusOptFromCalc(false);
