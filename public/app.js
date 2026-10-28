@@ -1854,13 +1854,8 @@ function calcFrom(sel, types, mult) {
   const m = mult || 1;
   const stake = 2 * m;
   const lines = expandCalcDanShiLines(sel, nextTypes);
-  const perLine = lines.map(line => lineEstPrize(line, m));
-  let minPrize = 0;
-  for (const p of perLine) if (p > 0 && (!minPrize || p < minPrize)) minPrize = p;
-  const maxParlay = Math.min(...nextTypes);
-  const maxLines = lines.filter(line => line.parlay === maxParlay);
-  const rangeMax = simultaneousWinPrizeRange(maxLines, maxLines.map(() => m));
-  return { n, avail, types: nextTypes, bets, cost: bets * stake, min: minPrize, max: rangeMax.max };
+  const range = slipPrizeRange(lines, lines.map(() => m), nextTypes);
+  return { n, avail, types: nextTypes, bets, cost: bets * stake, min: range.min, max: range.max };
 }
 function calcResolvedTypes(sel, types) {
   const sm = selMatchesFrom(sel);
@@ -2080,6 +2075,36 @@ function simultaneousWinPrizeRange(lines, mults) {
   if (min === Infinity) min = 0;
   return { min, max };
 }
+/** 预测奖金区间：下限=最低单注预估奖金，上限=可同时命中的单式预估奖金之和。 */
+function slipPrizeRange(lines, mults, parlayTypes) {
+  let minPrize = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const m = mults[i] || 0;
+    if (m <= 0) continue;
+    const p = lineEstPrize(lines[i], m);
+    if (p > 0 && (!minPrize || p < minPrize)) minPrize = p;
+  }
+  let maxParlay;
+  if (parlayTypes && parlayTypes.length) {
+    maxParlay = Math.min(...parlayTypes);
+  } else {
+    const parlays = [];
+    for (let i = 0; i < lines.length; i++) {
+      if ((mults[i] || 0) > 0 && lines[i].parlay != null) parlays.push(lines[i].parlay);
+    }
+    maxParlay = parlays.length ? Math.min(...parlays) : 1;
+  }
+  const maxLines = [];
+  const maxMults = [];
+  for (let i = 0; i < lines.length; i++) {
+    if ((mults[i] || 0) > 0 && lines[i].parlay === maxParlay) {
+      maxLines.push(lines[i]);
+      maxMults.push(mults[i] || 0);
+    }
+  }
+  const rangeMax = simultaneousWinPrizeRange(maxLines, maxMults);
+  return { min: minPrize, max: rangeMax.max };
+}
 function bonusOptTotals(lines, mults) {
   let bets = 0, cost = 0;
   for (let i = 0; i < lines.length; i++) {
@@ -2089,7 +2114,7 @@ function bonusOptTotals(lines, mults) {
       cost += m * 2;
     }
   }
-  const range = simultaneousWinPrizeRange(lines, mults);
+  const range = slipPrizeRange(lines, mults);
   return { bets, cost, min: range.min, max: range.max };
 }
 function calcSubmitSheetOpen() {
