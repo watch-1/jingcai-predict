@@ -9185,6 +9185,15 @@ function setNewsTab(tab) {
   S.newsTab = v;
   return v;
 }
+/** Current #/news/:id detail id (empty on list / search routes). Mirrors pageNews routing. */
+function newsRouteDetailId() {
+  const r = route();
+  if (r.name !== 'news') return '';
+  const arg = String(r.arg || '').trim();
+  if (!arg) return '';
+  if (r.query && Object.prototype.hasOwnProperty.call(r.query, 'q')) return '';
+  return arg;
+}
 function skeletonNews(n = 3) {
   return Array.from({ length: n }, () => '<div class="card news-card sk-news"><div class="sk sk-line" style="width:30%;height:12px"></div><div class="sk sk-line" style="width:90%;height:16px;margin-top:8px"></div><div class="sk sk-line" style="width:70%;height:12px;margin-top:8px"></div></div>').join('');
 }
@@ -9286,8 +9295,8 @@ async function fillHomeNews() {
 function pageNews(arg) {
   const r = route();
   // detail when arg is an id (no query-only list)
-  if (arg && !('q' in (r.query || {}))) {
-    return pageNewsDetail(arg);
+  if (newsRouteDetailId()) {
+    return pageNewsDetail(newsRouteDetailId());
   }
   // URL is source of truth — do not fall back to S.newsQ (that broke「清除筛选」)
   const q = String((r.query && r.query.q) || '').trim();
@@ -11395,8 +11404,10 @@ function tabContentSig(name) {
     if (name === 'news') {
       const tab = newsTabOf();
       const q = String((route().query && route().query.q) || S.newsQ || '').trim();
+      const detailId = newsRouteDetailId();
       const n = (S.newsList && S.newsList.items && S.newsList.items.length) || (S.newsCache && S.newsCache.items && S.newsCache.items.length) || 0;
-      return 'news:' + tab + ':' + q + ':' + n;
+      // 1.9.233: list vs article detail must differ — TAB_KEEP was restoring stale 资讯详情 after 头条 / new carousel tap
+      return 'news:' + (detailId ? 'd:' + detailId : 'l') + ':' + tab + ':' + q + ':' + n;
     }
     if (name === 'results') {
       const n = (S.results && S.results.length) || 0;
@@ -11415,6 +11426,8 @@ function saveTabKeep(name, viewEl) {
   try {
     const html = viewEl.innerHTML;
     if (!html || html.length < 120) return;
+    // 1.9.233: never keep-alive article detail DOM on the news tab
+    if (name === 'news' && html.indexOf('id="news-detail"') >= 0 && html.indexOf('id="news-list"') < 0) return;
     // Skip pure-skeleton data shells so we don't "keep" a flash forever
     if (name === 'data' && html.indexOf('sk-card') >= 0 && html.indexOf('dc-table') < 0 && html.indexOf('dc-scorer') < 0 && html.indexOf('dc-mv') < 0) return;
     TAB_KEEP[name] = { html, y: window.scrollY, sig: tabContentSig(name), at: Date.now() };
