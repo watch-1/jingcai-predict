@@ -16,7 +16,8 @@ assert.ok(/calcSubmitSheetOpen\(\)\) return openCalcSubmitSheet/.test(appJs), 'c
 
 assert.ok(/bonus-opt-prize-range/.test(appJs), 'bonus opt footer: prize range markup');
 assert.ok(/totals\.min\.toFixed/.test(appJs) && /totals\.max\.toFixed/.test(appJs), 'bonus opt footer: min/max from totals');
-assert.ok(/simultaneousWinPrizeRange/.test(appJs), 'predicted prize range uses simultaneous-win sums');
+assert.ok(/function slipPrizeRange/.test(appJs), 'predicted prize range helper');
+assert.ok(/slipPrizeRange/.test(appJs) && /simultaneousWinPrizeRange/.test(appJs), 'max uses simultaneous-win sums');
 
 assert.ok(!/b8d4ff/.test(css), 'calc-card: no harsh blue gradient stop');
 assert.ok(/\.calc-card[\s\S]*?border: 0/.test(css), 'calc-card: no outline border');
