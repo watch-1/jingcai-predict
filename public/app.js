@@ -1991,6 +1991,12 @@ function computeBonusOptMults(mode, lines, amountYuan, baseMult) {
   const weights = lines.map(l => 1 / l.oddsProd);
   return distributeIntegerUnits(weights, units).map(m => Math.max(0, Math.min(9999, m)));
 }
+const CRS_MORE_WIN = [[1, 0], [2, 0], [2, 1], [3, 0], [3, 1], [3, 2], [4, 0], [4, 1], [4, 2], [5, 0], [5, 1], [5, 2]];
+const CRS_MORE_DRAW = [[0, 0], [1, 1], [2, 2], [3, 3]];
+const CRS_MORE_LOSE = [[0, 1], [1, 2], [2, 3], [0, 2], [1, 3], [2, 4], [0, 3], [1, 4], [2, 5], [0, 4], [1, 5], [0, 5]];
+function crsScoreInList(hg, ag, list) {
+  return list.some(([h, a]) => h === hg && a === ag);
+}
 function pickKeyTrueAtScore(key, hg, ag, goalLine) {
   if (key.startsWith('had')) {
     const side = key.slice(3);
@@ -2006,25 +2012,46 @@ function pickKeyTrueAtScore(key, hg, ag, goalLine) {
     if (side === 'd') return adj === 0;
     if (side === 'a') return adj < 0;
   }
+  if (key.startsWith('crs_')) {
+    if (key === 'crs_s1sh') return hg > ag && !crsScoreInList(hg, ag, CRS_MORE_WIN);
+    if (key === 'crs_s1sd') return hg === ag && !crsScoreInList(hg, ag, CRS_MORE_DRAW);
+    if (key === 'crs_s1sa') return hg < ag && !crsScoreInList(hg, ag, CRS_MORE_LOSE);
+    const m = key.slice(4).match(/^s(\d+)s(\d+)$/);
+    if (m) return hg === +m[1] && ag === +m[2];
+    return false;
+  }
+  if (key.startsWith('ttg_')) {
+    const total = hg + ag;
+    if (key === 'ttg_s7') return total >= 7;
+    const tm = key.slice(4).match(/^s(\d+)$/);
+    if (tm) return total === +tm[1];
+    return false;
+  }
   return false;
 }
-/** All subsets of selected keys on one match that can win together (e.g. 胜 + 让胜 when主胜2球+). */
+/** All subsets of selected keys on one match that can win together (e.g. 胜 + 让胜 + 比分3:0). */
 function achievableKeySubsetsForMatch(keys, goalLine) {
   const unique = [...new Set(keys)];
-  const onlyWdl = unique.every(k => k.startsWith('had') || k.startsWith('hhad'));
-  if (!onlyWdl) {
-    return unique.map(k => [k]);
-  }
   const seen = new Set();
   const subsets = [];
+  const appeared = new Set();
   for (let hg = 0; hg <= 12; hg++) {
     for (let ag = 0; ag <= 12; ag++) {
       const active = unique.filter(k => pickKeyTrueAtScore(k, hg, ag, goalLine));
       if (!active.length) continue;
+      active.forEach(k => appeared.add(k));
       const sig = active.slice().sort().join('|');
       if (seen.has(sig)) continue;
       seen.add(sig);
       subsets.push(active);
+    }
+  }
+  for (const k of unique) {
+    if (!appeared.has(k)) {
+      if (!seen.has(k)) {
+        seen.add(k);
+        subsets.push([k]);
+      }
     }
   }
   if (!subsets.length && unique.length) subsets.push(unique.slice(0, 1));
@@ -4639,9 +4666,6 @@ function openCalcSubmitSheet() {
     <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`);
   renderCalcBar();
 }
-const CRS_MORE_WIN = [[1, 0], [2, 0], [2, 1], [3, 0], [3, 1], [3, 2], [4, 0], [4, 1], [4, 2], [5, 0], [5, 1], [5, 2]];
-const CRS_MORE_DRAW = [[0, 0], [1, 1], [2, 2], [3, 3]];
-const CRS_MORE_LOSE = [[0, 1], [1, 2], [2, 3], [0, 2], [1, 3], [2, 4], [0, 3], [1, 4], [2, 5], [0, 4], [1, 5], [0, 5]];
 function calcMorePickCell(mid, key, topLab, oddsVal, closed) {
   if (oddsVal == null || oddsVal === '' || Number(oddsVal) < 1) return '';
   const sel = S.calcSel[mid]?.[key] ? ' sel' : '';

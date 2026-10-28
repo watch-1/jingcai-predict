@@ -10,11 +10,11 @@ const swJs = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.238/.test(ver));
-assert.ok(/VERSION_CODE=275/.test(ver));
-assert.ok(/jc-v1\.9\.238/.test(swJs), 'SW VER 1.9.238');
+assert.ok(/VERSION=1\.9\.239/.test(ver));
+assert.ok(/VERSION_CODE=276/.test(ver));
+assert.ok(/jc-v1\.9\.239/.test(swJs), 'SW VER 1.9.239');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.238');
+assert.strictEqual(pkg.version, '1.9.239');
 
 assert.ok(
   /function openCalcComboSheet\(\) \{[\s\S]*?openSheetHtml\([\s\S]*?\);\s*renderCalcBar\(\);/.test(appJs),
@@ -93,8 +93,8 @@ assert.strictEqual(ctx.calcTypeBarLabel([2, 3]), '2串1等');
 
 assert.ok(only2.min < only3.min || only2.max !== both.max, 'prize range differs by pass-way set');
 
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.238\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-275\}"/.test(apkSh));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.239\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-276\}"/.test(apkSh));
 
 console.log('ui-236-test OK', {
   only2: { cost: only2.cost, min: only2.min, max: only2.max },
