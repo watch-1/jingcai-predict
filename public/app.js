@@ -4179,12 +4179,15 @@ function scheduleNeedLivePoll(classifiedDay, counts) {
   const now = Date.now();
   return classifiedDay.some(x => x._kind !== 'ft' && now >= kickoff(x));
 }
+/** 当日仍有未完场场次（含未开球）→ 轮询需保持心跳，开球后自动开始刷新。 */
+function scheduleHasPendingLive(classifiedDay) {
+  return (classifiedDay || []).some(x => x._kind !== 'ft');
+}
 function resumeScheduleLivePoll() {
   if (route().name !== 'schedule') return;
   const model = scheduleDayModel();
   if (!model) return;
-  const { classifiedDay, counts } = model;
-  ensureLiveScorePoll(classifiedDay.map(x => String(x.id)), scheduleNeedLivePoll(classifiedDay, counts));
+  ensureLiveScorePoll(scheduleHasPendingLive(model.classifiedDay));
 }
 /** live-scores 回流后刷新赛程 DOM（避开 tabContentSig 相同导致 render no-op）。 */
 function afterScheduleLiveScoresLoaded() {
@@ -4226,22 +4229,33 @@ async function loadLiveScores(ids, { force, bust } = {}) {
   const list = [...new Set((ids || []).map(String).filter(Boolean))];
   if (!list.length) { S.liveScores = S.liveScores || {}; return S.liveScores; }
   if (!force && S.liveScoresAt && Date.now() - S.liveScoresAt < 35000 && S.liveScores) return S.liveScores;
-  if (S.liveScoresLoading) return S.liveScores;
-  S.liveScoresLoading = true;
-  try {
-    // bust (pull-to-refresh): refresh=1 skips the server-side payload cache too.
-    const j = await api('/live-scores?ids=' + encodeURIComponent(list.join(',')) + (bust ? '&refresh=1' : ''), { timeout: 15000 });
-    if (j && j.data && typeof j.data === 'object') {
-      S.liveScores = { ...(S.liveScores || {}), ...j.data };
-      S.liveScoresAt = Date.now();
-      S.liveScoresMeta = { fetchedAt: j.fetchedAt, ttlSec: j.ttlSec, afUsed: j.afUsed, quota: j.quota, cached: j.cached };
-    }
-  } catch (e) {
-    console.warn('live-scores', e.message);
-  } finally {
-    S.liveScoresLoading = false;
+  if (S.liveScoresLoading) {
+    // 1.9.247: a forced refresh (pull-to-refresh / poll) must not be swallowed by an
+    // in-flight plain load returning stale data — wait it out, then fetch fresh.
+    if (!force || !S._liveScoresInflight) return S.liveScores;
+    try { await S._liveScoresInflight; } catch (_) {}
+    if (S.liveScoresLoading) return S.liveScores;
   }
-  return S.liveScores;
+  S.liveScoresLoading = true;
+  const job = (async () => {
+    try {
+      // bust (pull-to-refresh): refresh=1 skips the server-side payload cache too.
+      const j = await api('/live-scores?ids=' + encodeURIComponent(list.join(',')) + (bust ? '&refresh=1' : ''), { timeout: 15000 });
+      if (j && j.data && typeof j.data === 'object') {
+        S.liveScores = { ...(S.liveScores || {}), ...j.data };
+        S.liveScoresAt = Date.now();
+        S.liveScoresMeta = { fetchedAt: j.fetchedAt, ttlSec: j.ttlSec, afUsed: j.afUsed, quota: j.quota, cached: j.cached };
+      }
+    } catch (e) {
+      console.warn('live-scores', e.message);
+    } finally {
+      S.liveScoresLoading = false;
+      S._liveScoresInflight = null;
+    }
+    return S.liveScores;
+  })();
+  S._liveScoresInflight = job;
+  return job;
 }
 /** 1.9.245: 下拉刷新时强制拉取当日实时比分（同时跳过客户端与服务端缓存）。 */
 function pullRefreshScheduleLiveScores() {
@@ -4253,16 +4267,30 @@ function pullRefreshScheduleLiveScores() {
     return loadLiveScores(model.classifiedDay.map(x => String(x.id)), { force: true, bust: true });
   } catch (_) { return Promise.resolve(null); }
 }
-function ensureLiveScorePoll(ids, hasLive) {
+/**
+ * 1.9.247: heartbeat poll while staying on the 赛程/比分 list.
+ * - keepAlive as long as the day still has unfinished matches (even pre-KO, so games
+ *   that kick off while the user stays on the list start refreshing without a re-render);
+ * - ids recomputed each tick (date switch / late schedule rows are never missed);
+ * - force+bust every tick so neither the 35s client TTL nor the ~45s server payload
+ *   cache can hold the list minutes/scores behind match detail (AF upstream caches
+ *   still bound API quota server-side).
+ */
+function ensureLiveScorePoll(keepAlive) {
   stopLiveScorePoll();
-  if (!hasLive) return;
+  if (!keepAlive) return;
   S.liveScorePoll = setInterval(async () => {
     if (document.hidden) return;
     const r = route();
     if (r.name !== 'schedule') { stopLiveScorePoll(); return; }
-    await loadLiveScores(ids, { force: true });
+    const model = scheduleDayModel();
+    if (!model || !model.classifiedDay.length) return;
+    const { classifiedDay, counts } = model;
+    if (!scheduleHasPendingLive(classifiedDay)) { stopLiveScorePoll(); return; }
+    if (!scheduleNeedLivePoll(classifiedDay, counts)) return; // 未开球：待命不请求
+    await loadLiveScores(classifiedDay.map(x => String(x.id)), { force: true, bust: true });
     afterScheduleLiveScoresLoaded();
-  }, 50000);
+  }, 30000);
 }
 
 /** Shared schedule day model (date strip + league chips + list body). */
@@ -13082,7 +13110,14 @@ window.__partnerGateReady.then((ok) => {
   loadMembershipCatalog();
 });
 setInterval(tickClock, 1000);
-addEventListener('visibilitychange', () => { if (!document.hidden) tickClock(); });
+addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  tickClock();
+  // 1.9.247: 回前台立即强刷赛程实时比分（后台期间 interval 不跑，比分/分钟会停滞）
+  if (route().name === 'schedule') {
+    pullRefreshScheduleLiveScores().then(() => { afterScheduleLiveScoresLoaded(); resumeScheduleLivePoll(); }).catch(() => {});
+  }
+});
 if (IS_PARTNER) {
   setInterval(() => { if (!document.hidden && !window.__partnerKilled) checkPartnerGate(); }, 60 * 1000);
 }
