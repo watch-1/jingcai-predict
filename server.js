@@ -23,7 +23,7 @@ const ENDPOINTS = {
   ],
   // Issue list (businessDate + 周几NNN) while Selling. After kickoff sporttery drops the row here
   // (same as calculator). completeSchedule() merges results-window + disk seen-cache so 001…NNN stay.
-  // Predict uses `matches` (calculator + completeMatches backfill of upcoming Selling+odds).
+  // Predict uses `matches` (calculator + completeMatches backfill of upcoming Selling/Define+odds).
   schedule: [
     '/gateway/uniform/football/getMatchListV1.qry?clientCode=3001',
   ],
@@ -589,7 +589,23 @@ async function fillScheduleTimesFromLive(list) {
  * 2) merge unfinished/finished rows from results window (no score filter)
  * 3) persist union; log numbering gaps
  */
-/** Merge calculator gaps: schedule Selling rows with odds whose kickoff is still ahead. */
+/** Issue-list statuses that may backfill calculator gaps when HAD exists and kickoff is ahead. */
+const MATCHES_SCHEDULE_BACKFILL_STATUSES = new Set(['Selling', 'Define', '19']);
+const MATCHES_SCHEDULE_BACKFILL_BLOCKED = /^(Live|Finished|Cached|完场|已结束|Payout)/i;
+
+function scheduleRowEligibleForMatchesBackfill(row, nowMs) {
+  if (!row || row.id == null || row.id === '') return false;
+  const st = String(row.status ?? '');
+  if (MATCHES_SCHEDULE_BACKFILL_BLOCKED.test(st)) return false;
+  if (row.full || row._backfill === 'results') return false;
+  if (!MATCHES_SCHEDULE_BACKFILL_STATUSES.has(st)) return false;
+  if (!row.had || row.had.h == null) return false;
+  const ko = kickoffMs(row.date, row.time);
+  if (!Number.isFinite(ko) || ko <= nowMs) return false;
+  return true;
+}
+
+/** Merge calculator gaps: schedule Selling/Define rows with odds whose kickoff is still ahead. */
 async function completeMatches(calcList) {
   const byId = new Map((calcList || []).map(m => [String(m.id), m]));
   const before = byId.size;
@@ -605,10 +621,8 @@ async function completeMatches(calcList) {
   for (const row of schedRows) {
     const id = String(row.id || '');
     if (!id || byId.has(id)) continue;
-    if (String(row.status || '') !== 'Selling') continue;
-    if (!row.had || row.had.h == null) continue;
-    const ko = kickoffMs(row.date, row.time);
-    if (!Number.isFinite(ko) || ko <= now) continue;
+    if (!scheduleRowEligibleForMatchesBackfill(row, now)) continue;
+    const st = String(row.status || '');
     byId.set(id, {
       id,
       num: row.num,
@@ -628,7 +642,7 @@ async function completeMatches(calcList) {
       awayTeamId: row.awayTeamId || '',
       had: row.had,
       hhad: row.hhad,
-      status: 'Selling',
+      status: st === '19' ? 'Define' : (st || 'Selling'),
     });
     added++;
   }
@@ -743,7 +757,7 @@ async function getData(kind) {
       }
       // Calculator (getMatchCalculatorV1) sometimes omits Selling rows that still appear on the
       // issue list with HAD/HHAD (e.g. 周三001/007/014). Predict/home use `matches`, so merge
-      // upcoming Selling+odds from schedule without resurrecting already-kicked-off seen rows.
+      // upcoming Selling/Define+odds from schedule without resurrecting already-kicked-off seen rows.
       if (kind === 'matches') {
         try {
           const done = await completeMatches(data);
@@ -937,7 +951,7 @@ async function fetchNewsImage(target) {
   return null;
 }
 
-module.exports = { normalizeMatches, normalizeResults, normalizeSchedule, issueDateFromNum, teamLogo, safeLogoTarget, safeNewsImageTarget, detectMatchNumGaps, resultRowToSchedule, completeSchedule, completeMatches, reloadCrestMaps, crestUsable };
+module.exports = { normalizeMatches, normalizeResults, normalizeSchedule, issueDateFromNum, teamLogo, safeLogoTarget, safeNewsImageTarget, detectMatchNumGaps, resultRowToSchedule, completeSchedule, completeMatches, scheduleRowEligibleForMatchesBackfill, reloadCrestMaps, crestUsable };
 if (require.main !== module) return;
 const app = express();
 app.disable('x-powered-by');

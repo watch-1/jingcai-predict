@@ -9,11 +9,11 @@ const swJs = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.240/.test(ver));
-assert.ok(/VERSION_CODE=277/.test(ver));
-assert.ok(/jc-v1\.9\.240/.test(swJs), 'SW VER 1.9.240');
+assert.ok(/VERSION=1\.9\.241/.test(ver));
+assert.ok(/VERSION_CODE=278/.test(ver));
+assert.ok(/jc-v1\.9\.241/.test(swJs), 'SW VER 1.9.241');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.240');
+assert.strictEqual(pkg.version, '1.9.241');
 
 assert.ok(/function newsRouteDetailId/.test(appJs), 'news detail id helper');
 const sigBlock = appJs.match(/if \(name === 'news'\) \{[\s\S]*?\n    \}/)?.[0] || '';
@@ -22,7 +22,7 @@ assert.ok(/detailId \? 'd:' \+ detailId : 'l'/.test(sigBlock), 'tabContentSig us
 const saveKeep = appJs.match(/function saveTabKeep[\s\S]*?^}/m)?.[0] || '';
 assert.ok(/never keep-alive article detail/.test(saveKeep), 'saveTabKeep skips news detail DOM');
 
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.240\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-277\}"/.test(apkSh));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.241\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-278\}"/.test(apkSh));
 
 console.log('ui-233-test OK');
