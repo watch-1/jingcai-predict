@@ -8094,7 +8094,10 @@ function eventsTabHtml(x, live) {
     </div>`);
   }
   const finished = isMatchFinished(x) || (live.status && /^(FT|AET|PEN)$/.test(String(live.status.short || '')));
-  const eventsGap = !rows.length && liveStatsNeedsEventsRetry(live, x);
+  const eventsGap = liveStatsNeedsEventsRetry(live, x);
+  const gapHint = eventsGap && rows.length
+    ? `<p class="note ev-gap-hint" style="text-align:center;margin:8px 12px 0">进球事件同步中…</p>`
+    : '';
   const empty = !rows.length
     ? (eventsGap
       ? `<div class="ev-empty"><div class="spinner"></div><p class="note" style="text-align:center">事件加载中…</p></div>`
@@ -8115,8 +8118,9 @@ function eventsTabHtml(x, live) {
       ${empty || rows.join('')}
       <div class="ev-end"><span class="ev-whistle" title="${finished ? '完场' : '进行中'}">${finished ? '终' : '…'}</span></div>
     </div>
+    ${gapHint}
     ${legend}
-    <p class="note" style="margin:8px 12px 0">${esc(live.noteZh || '事件可能存在短暂延迟。')}${live.live ? ' · 比赛进行中将自动刷新' : ''}</p>
+    <p class="note" style="margin:8px 12px 0">${esc(live.noteZh || '事件可能存在短暂延迟。')}${eventsGap && finished && !live.live ? ' 部分进球事件暂未从数据源同步，请以头部比分为准。' : ''}${live.live ? ' · 比赛进行中将自动刷新' : ''}</p>
   </div>`;
   return `<div class="events-chat-stack">${tree}${chatBelow()}</div>`;
 }
@@ -8308,9 +8312,45 @@ async function waitForLiveStatsNetworkReady() {
     await new Promise((r) => setTimeout(r, 450));
   }
 }
+function liveStatsGoalCountFromEvents(events) {
+  let h = 0, a = 0;
+  for (const e of events || []) {
+    if (e.kind !== 'goal') continue;
+    const gk = e.goalKind || eventGoalKind(e);
+    if (gk === 'missed_pen') continue;
+    if (/Disallowed|Cancelled|Canceled/i.test(String(e.detail || ''))) continue;
+    if (gk === 'own') {
+      if (e.side === 'home') a++;
+      else if (e.side === 'away') h++;
+    } else {
+      if (e.side === 'home') h++;
+      else if (e.side === 'away') a++;
+    }
+  }
+  return { home: h, away: a };
+}
+function liveStatsEventsBehindScore(live, x) {
+  if (!live || !live.ok) return false;
+  let curH = live.score && live.score.home != null ? Number(live.score.home) : null;
+  let curA = live.score && live.score.away != null ? Number(live.score.away) : null;
+  if ((curH == null || curA == null) && x) {
+    curH = x.homeScore != null ? Number(x.homeScore) : (x.homeGoals != null ? Number(x.homeGoals) : curH);
+    curA = x.awayScore != null ? Number(x.awayScore) : (x.awayGoals != null ? Number(x.awayGoals) : curA);
+    if (curH == null || curA == null) {
+      const sc = String(x.score || x.full || '').match(/(\d+)\s*[:：\-]\s*(\d+)/);
+      if (sc) { curH = Number(sc[1]); curA = Number(sc[2]); }
+    }
+  }
+  if (curH == null || curA == null) return false;
+  if (curH + curA <= 0) return false;
+  const ev = liveStatsGoalCountFromEvents(live.events || []);
+  return ev.home + ev.away < curH + curA;
+}
 function liveStatsNeedsEventsRetry(live, x) {
   if (!live || !live.ok) return false;
-  if ((live.events || []).length) return false;
+  if (live.eventsError) return true;
+  if (live.eventsScoreGap) return true;
+  if ((live.events || []).length) return liveStatsEventsBehindScore(live, x);
   const h = live.score && live.score.home != null ? Number(live.score.home) : null;
   const a = live.score && live.score.away != null ? Number(live.score.away) : null;
   if (h != null && a != null && h + a > 0) return true;
@@ -8323,7 +8363,7 @@ function liveStatsNeedsEventsRetry(live, x) {
   }
   const st = live.status || {};
   if (live.live && st.elapsed != null && Number(st.elapsed) >= 5) return true;
-  return !!live.eventsError;
+  return false;
 }
 function patchEventsTabIfVisible(x) {
   if (!x) return;

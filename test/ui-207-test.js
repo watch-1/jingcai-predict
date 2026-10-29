@@ -18,7 +18,8 @@ assert.ok(/cache: 'force-cache'/.test(appJs), 'boot force-cache first paint');
 assert.ok(/bootPack: !!payload.bootPack/.test(appJs), 'persist bootPack flag');
 
 assert.ok(/function liveEventsLikelyMissing/.test(liveJs), 'server events gap');
-assert.ok(/EVENTS_EMPTY_LIVE_MS/.test(liveJs), 'short TTL for empty live events');
+assert.ok(/EVENTS_SCORE_GAP_MS/.test(liveJs), 'short TTL when score ahead of events');
+assert.ok(/function eventsScoreBehindFixture/.test(liveJs), 'partial events gap detector');
 
 const boot = JSON.parse(bootJs);
 assert.ok(boot.slices['epl:topassists'] && boot.slices['epl:topassists'].rows.length >= 10, 'epl assists boot');
