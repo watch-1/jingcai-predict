@@ -1036,11 +1036,15 @@ body.me-drawer-on { overflow: hidden; }
   overscroll-behavior-x: none;
   background: transparent;
 }
+/* 1.9.246: 复盘统一 16px 水平留白（--pmr-gutter），正文/标题/卡片不再顶格 */
+.view.sub.md-wrap--review .detail-pane--review {
+  --pmr-gutter: 16px;
+}
 .view.sub.md-wrap--review .detail-pane--review > .dsec {
   margin-left: 0;
   margin-right: 0;
-  padding-left: 12px;
-  padding-right: 12px;
+  padding-left: var(--pmr-gutter, 16px);
+  padding-right: var(--pmr-gutter, 16px);
   border-radius: 0;
   box-shadow: none !important;
   border: 0;
@@ -1048,7 +1052,7 @@ body.me-drawer-on { overflow: hidden; }
   overflow: visible;
 }
 .view.sub.md-wrap--review .detail-pane--review .pr-src-bar {
-  margin: 8px 12px 0;
+  margin: 8px var(--pmr-gutter, 16px) 0;
 }
 .pmr-report .pmr-wrap {
   margin: 0;
@@ -1077,6 +1081,29 @@ html[data-theme="pitch"] .pmr-report .pmr-wrap {
 .view.sub.md-wrap--review .detail-pane--review .pmr-table th:last-child,
 .view.sub.md-wrap--review .detail-pane--review .pmr-table td:last-child {
   padding-right: 8px;
+}
+/* 1.9.246: 带底色的小节卡片不再用负外边距贴边，卡片与屏幕之间保留整条 16px 留白 */
+.view.sub.md-wrap--review .detail-pane--review .pmr-sec.pmr-feedback,
+.view.sub.md-wrap--review .detail-pane--review .pmr-sec.pmr-main {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+/* 1.9.246: 硬仗检验卡片同样回到留白内；内层说明/表格有自己的内边距 */
+.view.sub.md-wrap--review .detail-pane--review .pmr-hard {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+.view.sub.md-wrap--review .detail-pane--review .pmr-hard-side {
+  padding: 12px;
+}
+/* 1.9.246: 复盘标签条按钮左右加宽，「赛后复盘」不再贴条边 */
+.view.sub.md-wrap--review .dtabs button {
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 /* ---------- detail ---------- */

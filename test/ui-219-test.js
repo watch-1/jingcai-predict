@@ -22,17 +22,17 @@ assert.ok(/data-act="calcSubmit"/.test(appJs), 'calc: submit action');
 assert.ok(/id="calcbar"/.test(html), 'index: calcbar mount');
 assert.ok(/\.calcbar/.test(css) && /\.calc-card/.test(css), 'calc UI styles');
 
-assert.ok(/jc-v1\.9\.245/.test(swJs), 'SW VER 1.9.245');
+assert.ok(/jc-v1\.9\.246/.test(swJs), 'SW VER 1.9.246');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.245');
+assert.strictEqual(pkg.version, '1.9.246');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.245/.test(ver));
-assert.ok(/VERSION_CODE=282/.test(ver));
+assert.ok(/VERSION=1\.9\.246/.test(ver));
+assert.ok(/VERSION_CODE=283/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.strictEqual(cfg.version, '1.9.245');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.245\}"/.test(apkSh), 'build-apk default VERSION_NAME');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-282\}"/.test(apkSh), 'build-apk default VERSION_CODE');
+assert.strictEqual(cfg.version, '1.9.246');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.246\}"/.test(apkSh), 'build-apk default VERSION_NAME');
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-283\}"/.test(apkSh), 'build-apk default VERSION_CODE');
 
 assert.ok(/simultaneousWinPrizeRange/.test(appJs), 'calc: predicted prize uses simultaneous-win totals');
 assert.ok(/bets \+= c\.reduce/.test(appJs), 'calc: expands note count');
