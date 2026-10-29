@@ -1105,6 +1105,14 @@ html[data-theme="pitch"] .pmr-report .pmr-wrap {
   padding-left: 12px;
   padding-right: 12px;
 }
+/* 1.9.247: 复盘容器带 .pr-report 类，全局「.pr-report { padding: 0 !important }」
+   （v1.8.3 赛前简报 flatten）会吃掉 1.9.246 的 16px 留白 → 指标对照/硬仗检验仍顶格。
+   这里以同等 !important 恢复复盘页左右内边距（仅限复盘面板，赛前简报不受影响）。 */
+.view.sub.md-wrap--review .detail-pane--review > .dsec,
+.view.sub.md-wrap--review .detail-pane--review > .dsec.pr-report {
+  padding-left: var(--pmr-gutter, 16px) !important;
+  padding-right: var(--pmr-gutter, 16px) !important;
+}
 
 /* ---------- detail ---------- */
 .hero { background: var(--pri-g); color: #fff; padding: 6px 16px 22px; text-align: center; }
