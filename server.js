@@ -718,7 +718,18 @@ async function getData(kind) {
     const ep = typeof e0 === 'function' ? e0() : e0;
     try {
       const j = await fetchJson(BASE + ep);
-      let data = kind === 'matches' ? normalizeMatches(j) : kind === 'schedule' ? normalizeSchedule(j) : normalizeResults(j);
+      let data;
+      if (kind === 'matches') {
+        // Sale-stop / pool pause: calculator JSON succeeds but matchInfoList is empty; schedule may still have Selling+odds.
+        try {
+          data = normalizeMatches(j);
+        } catch (e) {
+          if (e.message !== 'API返回空赛程') throw e;
+          data = [];
+        }
+      } else {
+        data = kind === 'schedule' ? normalizeSchedule(j) : normalizeResults(j);
+      }
       let metaExtra = {};
       if (kind === 'schedule') {
         try {
@@ -741,6 +752,10 @@ async function getData(kind) {
         } catch (e) {
           lastError.matchesComplete = [e.message];
           console.warn('[matches] completeMatches failed', e.message);
+        }
+        if (!data.length) {
+          errors.push(`${ep.split('?')[0]}: API返回空赛程`);
+          continue;
         }
       }
       if (kind === 'results') {
@@ -780,6 +795,34 @@ async function getData(kind) {
     } catch (e) { errors.push(`${ep.split('?')[0]}: ${e.message}`); }
   }
   lastError[kind] = errors;
+  // 1.9.240: all calculator endpoints empty/unreachable — still serve live rows from getMatchListV1 when available
+  if (kind === 'matches') {
+    try {
+      const done = await completeMatches([]);
+      const salvaged = done.data || [];
+      if (salvaged.length) {
+        const byBiz = summarizeByBusinessDate(salvaged);
+        console.log('[matches] live from schedule salvage', salvaged.length, JSON.stringify(byBiz));
+        const payload = {
+          source: 'live',
+          sourceUrl: BASE + ENDPOINTS.schedule[0],
+          fetchedAt: new Date().toISOString(),
+          data: salvaged,
+          meta: {
+            total: salvaged.length,
+            byBusinessDate: byBiz,
+            ...(done.metaExtra || {}),
+            calculatorEmpty: true,
+            calculatorErrors: errors.slice(),
+          },
+        };
+        cache[kind] = { at: Date.now(), payload };
+        return payload;
+      }
+    } catch (e) {
+      console.warn('[matches] schedule salvage before sample failed', e.message);
+    }
+  }
   // Fallback: clearly labeled sample data (cached shorter so live is retried soon)
   let sampleData = kind === 'results' ? sample.results() : sample.matches();
   if (kind === 'results') {
