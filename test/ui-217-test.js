@@ -17,16 +17,16 @@ assert.ok(/homeAttitudeFeedStillSkeleton/.test(appJs), 'skeleton must not hang f
 assert.ok(/function ensureHomeLiveScorePoll/.test(appJs), 'home live score poll while in-play');
 assert.ok(/const live = pool\.find\(m => classifyScoreRow\(m\)\._kind === 'live'\)/.test(appJs), 'banner prefers live');
 
-assert.ok(/jc-v1\.9\.23\d/.test(swJs), 'SW VER current');
+assert.ok(/jc-v1\.9\.24\d/.test(swJs), 'SW VER current');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.ok(/^1\.9\.23\d/.test(pkg.version), 'package version 1.9.23x');
+assert.ok(/^1\.9\.24\d/.test(pkg.version), 'package version 1.9.24x');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.23\d/.test(ver));
+assert.ok(/VERSION=1\.9\.24\d/.test(ver));
 assert.ok(/VERSION_CODE=27\d/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.ok(/^1\.9\.23\d/.test(cfg.version), 'config version');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.23/.test(apkSh), 'build-apk default VERSION_NAME');
+assert.ok(/^1\.9\.24\d/.test(cfg.version), 'config version');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.24/.test(apkSh), 'build-apk default VERSION_NAME');
 assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-27/.test(apkSh), 'build-apk default VERSION_CODE');
 
 console.log('ui-217-test OK');

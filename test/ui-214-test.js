@@ -21,16 +21,16 @@ assert.ok(/\.view \.ls-list/.test(css) && /margin-left: 0/.test(css), 'schedule 
 assert.ok(/\.daysum b \{[^}]*font-size: 14px/.test(css), 'smaller daysum hit ratio');
 assert.ok(/1\.9\.213 compact/.test(css), 'keep 1.9.213 compact match typography');
 
-assert.ok(/jc-v1\.9\.23\d/.test(swJs), 'SW VER current');
+assert.ok(/jc-v1\.9\.24\d/.test(swJs), 'SW VER current');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.ok(/^1\.9\.23\d/.test(pkg.version), 'package version');
+assert.ok(/^1\.9\.24\d/.test(pkg.version), 'package version');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.23\d/.test(ver));
+assert.ok(/VERSION=1\.9\.24\d/.test(ver));
 assert.ok(/VERSION_CODE=27\d/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.ok(/^1\.9\.23\d/.test(cfg.version), 'config version');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.23/.test(apkSh), 'build-apk default VERSION_NAME');
+assert.ok(/^1\.9\.24\d/.test(cfg.version), 'config version');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.24/.test(apkSh), 'build-apk default VERSION_NAME');
 assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-27/.test(apkSh), 'build-apk default VERSION_CODE');
 
 console.log('ui-214-test OK');
