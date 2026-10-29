@@ -10,11 +10,11 @@ const swJs = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.246/.test(ver));
-assert.ok(/VERSION_CODE=283/.test(ver));
-assert.ok(/jc-v1\.9\.246/.test(swJs), 'SW VER 1.9.246');
+assert.ok(/VERSION=1\.9\.247/.test(ver));
+assert.ok(/VERSION_CODE=284/.test(ver));
+assert.ok(/jc-v1\.9\.247/.test(swJs), 'SW VER 1.9.247');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.246');
+assert.strictEqual(pkg.version, '1.9.247');
 
 assert.ok(/function slipPrizeRange/.test(appJs), 'shared slip prize range helper');
 assert.ok(/bonusOptTotals[\s\S]*?slipPrizeRange/.test(appJs), 'bonus opt footer uses slipPrizeRange');
@@ -91,8 +91,8 @@ assert.ok(Math.abs(calc.max - totals.max) < 0.02, 'calcbar and bonus-opt footer 
 assert.ok(Math.abs(totals.max - 2369) < 1, `max ~2369 got ${totals.max}`);
 assert.ok(totals.min < 200, `footer min must not use simultaneous min (~751) got ${totals.min}`);
 
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.246\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-283\}"/.test(apkSh));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.247\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-284\}"/.test(apkSh));
 
 console.log('ui-237-test OK', {
   calc: { min: calc.min, max: calc.max },
