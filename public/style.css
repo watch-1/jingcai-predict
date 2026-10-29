@@ -22,7 +22,10 @@ body {
     "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
   color: var(--t1); background: var(--bg, #F5F7FB); -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: contain; letter-spacing: .01em;
+  /* 1.9.244: 页面不横滑；禁横向 overscroll 拉伸（Android 12+ stretch 效果会让画面"膨胀"） */
+  overscroll-behavior-x: none;
 }
+html { overscroll-behavior-x: none; }
 button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
 input { font: inherit; color: inherit; }
 a { color: var(--pri); text-decoration: none; }
@@ -1010,6 +1013,8 @@ body.me-drawer-on { overflow: hidden; }
   overflow-x: auto;
   overflow-y: hidden;
   isolation: isolate;
+  /* 1.9.244: 标签条横滑到头不把拉伸传给页面 */
+  overscroll-behavior-x: contain;
 }
 .view.sub.md-wrap--review .dtabs button {
   background-color: #fff;
@@ -1017,12 +1022,18 @@ body.me-drawer-on { overflow: hidden; }
 .view.sub.md-wrap--review .dtabs button.on {
   background-color: #fff7f0;
 }
+/* 1.9.244: 复盘页横向拖动不膨胀 — 根与内容面板都裁掉横向溢出、不做横向 overscroll */
+.view.sub.md-wrap--review {
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
 .view.sub.md-wrap--review .detail-pane--review {
   position: relative;
   z-index: 0;
   padding: 4px 0 16px;
   min-height: 40vh;
-  overflow-x: visible;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
   background: transparent;
 }
 .view.sub.md-wrap--review .detail-pane--review > .dsec {
@@ -1053,10 +1064,19 @@ html[data-theme="pitch"] .pmr-report .pmr-wrap {
   box-shadow: none !important;
   border: 0 !important;
 }
+/* 1.9.244: 指标对照不再用负外边距贴边；首尾列加内边距，数字离屏幕边缘有呼吸感 */
 .view.sub.md-wrap--review .detail-pane--review .pmr-table-wrap {
-  margin-left: -4px;
-  margin-right: -4px;
+  margin-left: 0;
+  margin-right: 0;
   max-width: none;
+}
+.view.sub.md-wrap--review .detail-pane--review .pmr-table th:first-child,
+.view.sub.md-wrap--review .detail-pane--review .pmr-table td:first-child {
+  padding-left: 8px;
+}
+.view.sub.md-wrap--review .detail-pane--review .pmr-table th:last-child,
+.view.sub.md-wrap--review .detail-pane--review .pmr-table td:last-child {
+  padding-right: 8px;
 }
 
 /* ---------- detail ---------- */
@@ -3421,7 +3441,8 @@ button.det-fx-go:focus-visible { outline: 2px solid var(--pri, #2F6FED); outline
 .pmr-tag.ht-na { background: #e2e8f0; color: #475569; } /* 非硬仗样本 — muted grey */
 .pmr-sec h4 { margin: 0 0 6px; font-size: 14px; font-weight: 700; }
 .pmr-sec p { margin: 0; font-size: 13px; line-height: 1.7; color: var(--t1); }
-.pmr-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 4px; }
+/* 1.9.244: 宽表自身横滑，但到头不向页面链式 overscroll（否则整页被拉伸"膨胀"） */
+.pmr-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 4px; overscroll-behavior-x: contain; touch-action: pan-x pan-y; }
 .pmr-table { width: 100%; border-collapse: collapse; font-size: 11px; min-width: 480px; }
 .pmr-table th, .pmr-table td { padding: 6px 4px; border-top: 1px dashed var(--line); text-align: center; }
 .pmr-table th { color: var(--t3); font-weight: 500; background: #f7f9fc; border-top: 0; white-space: nowrap; }
