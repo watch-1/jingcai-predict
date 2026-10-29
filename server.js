@@ -1085,12 +1085,36 @@ app.get('/api/live-scores', async (req, res) => {
       } catch (_) { ids = []; }
     }
     if (ids.length > 80) ids = ids.slice(0, 80);
+    // 1.9.245: pull-to-refresh busts the server payload cache (refresh=1) and we
+    // hand match meta over so live-but-unmapped fixtures can be resolved for the
+    // AF overlay without requiring an enter-detail round trip.
+    const force = req.query.refresh === '1' || req.query.force === '1';
+    const resolveMeta = {};
+    try {
+      const wantIds = new Set(ids.map(String));
+      for (const kind of ['schedule', 'matches']) {
+        if (!wantIds.size) break;
+        const payload = await getData(kind);
+        for (const m of payload.data || []) {
+          const mid = String(m.id);
+          if (!wantIds.has(mid)) continue;
+          wantIds.delete(mid);
+          resolveMeta[mid] = {
+            homeTeamId: m.homeTeamId || '', awayTeamId: m.awayTeamId || '',
+            home: m.home || '', away: m.away || '',
+            date: m.date || '', time: m.time || '', businessDate: m.businessDate || '',
+          };
+        }
+      }
+    } catch (_) { /* resolveMeta is best-effort */ }
     const liveScores = require('./lib/live-scores');
     const payload = await liveScores.getLiveScores({
       ids,
       fetchJson,
       base: BASE,
       withAf: req.query.af !== '0',
+      force,
+      resolveMeta,
     });
     res.json(payload);
   } catch (e) {
