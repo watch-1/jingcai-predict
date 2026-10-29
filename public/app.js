@@ -4222,14 +4222,15 @@ function softPatchScheduleLiveRows() {
     return n > 0;
   } catch (_) { return false; }
 }
-async function loadLiveScores(ids, { force } = {}) {
+async function loadLiveScores(ids, { force, bust } = {}) {
   const list = [...new Set((ids || []).map(String).filter(Boolean))];
   if (!list.length) { S.liveScores = S.liveScores || {}; return S.liveScores; }
   if (!force && S.liveScoresAt && Date.now() - S.liveScoresAt < 35000 && S.liveScores) return S.liveScores;
   if (S.liveScoresLoading) return S.liveScores;
   S.liveScoresLoading = true;
   try {
-    const j = await api('/live-scores?ids=' + encodeURIComponent(list.join(',')), { timeout: 15000 });
+    // bust (pull-to-refresh): refresh=1 skips the server-side payload cache too.
+    const j = await api('/live-scores?ids=' + encodeURIComponent(list.join(',')) + (bust ? '&refresh=1' : ''), { timeout: 15000 });
     if (j && j.data && typeof j.data === 'object') {
       S.liveScores = { ...(S.liveScores || {}), ...j.data };
       S.liveScoresAt = Date.now();
@@ -4241,6 +4242,16 @@ async function loadLiveScores(ids, { force } = {}) {
     S.liveScoresLoading = false;
   }
   return S.liveScores;
+}
+/** 1.9.245: 下拉刷新时强制拉取当日实时比分（同时跳过客户端与服务端缓存）。 */
+function pullRefreshScheduleLiveScores() {
+  try {
+    if (route().name !== 'schedule') return Promise.resolve(null);
+    const model = scheduleDayModel();
+    if (!model || !model.classifiedDay.length) return Promise.resolve(null);
+    S.liveScoresAt = 0;
+    return loadLiveScores(model.classifiedDay.map(x => String(x.id)), { force: true, bust: true });
+  } catch (_) { return Promise.resolve(null); }
 }
 function ensureLiveScorePoll(ids, hasLive) {
   stopLiveScorePoll();
@@ -12058,7 +12069,7 @@ document.addEventListener('click', async e => {
       const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
       const dayRows = [...(ms || []).filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)), ...dayRes];
       toast('正在刷新比分…');
-      Promise.all([reloadData(true), loadLiveScores(dayRows.map(x => String(x.id)), { force: true })]).then(() => {
+      Promise.all([reloadData(true), loadLiveScores(dayRows.map(x => String(x.id)), { force: true, bust: true })]).then(() => {
         render();
         toast('比分已更新');
       }).catch(() => { render(); toast('刷新失败，请稍后再试'); });
@@ -12970,7 +12981,8 @@ document.addEventListener('submit', async e => {
     if (d <= 60) { ptr.style.transform = ''; return; }
     busy = true; ptr.classList.add('loading'); ptr.style.transform = 'translate(-50%, 14px)'; txt('正在刷新…');
     try {
-      const work = Promise.all([reloadData(true), refreshAccount()]);
+      // 1.9.245: 赛程页下拉刷新必须同步强刷实时比分（此前只刷新赛程列表，比分沿用旧缓存）
+      const work = Promise.all([reloadData(true), refreshAccount(), pullRefreshScheduleLiveScores()]);
       const timed = new Promise((resolve) => setTimeout(resolve, 12000));
       await Promise.race([work, timed]);
       invalidateTabKeep();
