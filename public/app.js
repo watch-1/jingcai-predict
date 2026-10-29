@@ -8361,8 +8361,9 @@ function liveStatsNeedsEventsRetry(live, x) {
     const sc = String(x.score || x.full || '').match(/(\d+)\s*[:：\-]\s*(\d+)/);
     if (sc && Number(sc[1]) + Number(sc[2]) > 0) return true;
   }
-  const st = live.status || {};
-  if (live.live && st.elapsed != null && Number(st.elapsed) >= 5) return true;
+  // 1.9.243: a successful live payload with empty events and no score gap is a
+  // legit empty state (e.g. live 0-0, no cards/subs yet) — show 暂无事件 instead
+  // of a perpetual spinner. Background polling still refreshes live matches.
   return false;
 }
 function patchEventsTabIfVisible(x) {

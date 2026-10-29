@@ -12,13 +12,13 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=1\.9\.242/.test(ver));
-assert.ok(/VERSION_CODE=279/.test(ver));
-assert.ok(/jc-v1\.9\.242/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.242');
-assert.strictEqual(cfg.version, '1.9.242');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.242\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-279\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.243/.test(ver));
+assert.ok(/VERSION_CODE=280/.test(ver));
+assert.ok(/jc-v1\.9\.243/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.243');
+assert.strictEqual(cfg.version, '1.9.243');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.243\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-280\}"/.test(apkSh));
 
 assert.ok(/Define/.test(serverJs.match(/MATCHES_SCHEDULE_BACKFILL_STATUSES[\s\S]*?\);/)?.[0] || ''), 'allow Define status in schedule salvage');
 assert.ok(/scheduleRowEligibleForMatchesBackfill/.test(serverJs), 'exported eligibility helper');
