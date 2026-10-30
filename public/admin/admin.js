@@ -7,6 +7,71 @@
   };
   const STATE = { page: 'dashboard', token: localStorage.getItem(TOKEN_KEY) || '', users: null, orders: null };
 
+  const SVG_ICO = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+  const NAV_ICONS = {
+    dashboard: `<svg ${SVG_ICO}><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>`,
+    pageviews: `<svg ${SVG_ICO}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.5"/></svg>`,
+    'match-health': `<svg ${SVG_ICO}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
+    'data-browser': `<svg ${SVG_ICO}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"/></svg>`,
+    backup: `<svg ${SVG_ICO}><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 15v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>`,
+    users: `<svg ${SVG_ICO}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+    orders: `<svg ${SVG_ICO}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+    membership: `<svg ${SVG_ICO}><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></svg>`,
+    column: `<svg ${SVG_ICO}><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>`,
+    'news-covers': `<svg ${SVG_ICO}><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="m21 17-5-5L5 21"/></svg>`,
+    flags: `<svg ${SVG_ICO}><path d="M12 3v18"/><path d="M12 3c2.5 2 5.5 2 8 0v9c-2.5-2-5.5-2-8 0"/><path d="M5 7v11"/></svg>`,
+    audit: `<svg ${SVG_ICO}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h6"/></svg>`,
+  };
+  const KPI_ICONS = {
+    'ic-users': `<svg ${SVG_ICO}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>`,
+    'ic-orders': `<svg ${SVG_ICO}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,
+    'ic-pv': `<svg ${SVG_ICO}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.5"/></svg>`,
+    'ic-column': `<svg ${SVG_ICO}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>`,
+  };
+  const LOGO_MARK = `<svg ${SVG_ICO} class="logo-mark"><path d="M12 2 4 6v6c0 5 3.5 9.5 8 10 4.5-.5 8-5 8-10V6Z"/><path d="m9 12 2 2 4-4"/></svg>`;
+
+  function alertIcon(title) {
+    const t = String(title || '');
+    if (/API-Football|AF 配额/.test(t)) {
+      return `<svg ${SVG_ICO} class="chip-ico"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z"/></svg>`;
+    }
+    if (/在售场次|赛程/.test(t)) {
+      return `<svg ${SVG_ICO} class="chip-ico"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg>`;
+    }
+    if (/事件/.test(t)) {
+      return `<svg ${SVG_ICO} class="chip-ico"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`;
+    }
+    if (/备份|SQLite/.test(t)) {
+      return `<svg ${SVG_ICO} class="chip-ico"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/></svg>`;
+    }
+    if (/DeepSeek/.test(t)) {
+      return `<svg ${SVG_ICO} class="chip-ico"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/><path d="m2 18 10 5 10-5"/></svg>`;
+    }
+    if (/待支付|订单/.test(t)) {
+      return `<svg ${SVG_ICO} class="chip-ico"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`;
+    }
+    if (/会员|到期/.test(t)) {
+      return `<svg ${SVG_ICO} class="chip-ico"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>`;
+    }
+    return `<svg ${SVG_ICO} class="chip-ico"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>`;
+  }
+
+  function decorateNav() {
+    document.querySelectorAll('.nav-item[data-page]').forEach((btn) => {
+      const page = btn.getAttribute('data-page');
+      const ico = NAV_ICONS[page];
+      if (!ico || btn.querySelector('.nav-ico')) return;
+      const label = btn.textContent.trim();
+      btn.innerHTML = `<span class="nav-ico">${ico}</span><span class="nav-text">${esc(label)}</span>`;
+    });
+    const logos = document.querySelectorAll('.logo-mark-wrap');
+    logos.forEach((el) => {
+      if (!el.querySelector('svg')) el.innerHTML = LOGO_MARK;
+    });
+  }
+
+  const chartSmooth = () => window.AdminChartSmooth;
+
   const $ = (id) => document.getElementById(id);
   const loginView = $('login-view');
   const shell = $('shell');
@@ -56,6 +121,8 @@
   }
 
   function renderSparkline(values, color) {
+    const CS = chartSmooth();
+    if (CS && CS.renderSparklineSvg) return CS.renderSparklineSvg(values, color);
     const vals = (values || []).map((v) => Number(v) || 0);
     if (!vals.length) return '';
     const w = 132;
@@ -83,6 +150,7 @@
   function renderStackedTrendChart(series) {
     const rows = series || [];
     if (!rows.length) return '<p class="muted">暂无趋势数据</p>';
+    const CS = chartSmooth();
     const W = 640;
     const H = 220;
     const padL = 36;
@@ -95,15 +163,21 @@
     const signups = normalizeArr(rows.map((r) => r.signups));
     const paid = normalizeArr(rows.map((r) => r.paid));
     const layers = [
-      { key: 'views', vals: views, color: '#6366f1', label: '浏览量' },
-      { key: 'signups', vals: signups, color: '#14b8a6', label: '新增用户' },
-      { key: 'paid', vals: paid, color: '#f59e0b', label: '付费笔数' },
+      { key: 'views', vals: views, color: '#6366f1', color2: '#a78bfa', label: '浏览量' },
+      { key: 'signups', vals: signups, color: '#14b8a6', color2: '#2dd4bf', label: '新增用户' },
+      { key: 'paid', vals: paid, color: '#f59e0b', color2: '#fbbf24', label: '付费笔数' },
     ];
     const n = rows.length;
     const xAt = (i) => padL + (i / Math.max(1, n - 1)) * innerW;
     const yAt = (v) => padT + (1 - v) * innerH;
+    const uid = (p) => `${p}-${Math.random().toString(36).slice(2, 8)}`;
 
-    function areaPath(cumulativeTop, cumulativeBottom) {
+    function bandPaths(cumulativeTop, cumulativeBottom) {
+      const topPts = cumulativeTop.map((v, i) => ({ x: xAt(i), y: yAt(v) }));
+      const botPts = cumulativeBottom.map((v, i) => ({ x: xAt(i), y: yAt(v) }));
+      if (CS && CS.smoothAreaBetween) {
+        return CS.smoothAreaBetween(topPts, botPts);
+      }
       let d = '';
       for (let i = 0; i < n; i++) {
         const x = xAt(i);
@@ -113,22 +187,36 @@
       for (let i = n - 1; i >= 0; i--) {
         d += ` L ${xAt(i)} ${yAt(cumulativeBottom[i])}`;
       }
-      d += ' Z';
-      return d;
+      return d + ' Z';
     }
 
     const cum0 = rows.map(() => 0);
     let cumBottom = cum0.slice();
     let svgLayers = '';
-    for (const layer of layers) {
+    let strokeLines = '';
+    const defs = layers.map((layer) => {
+      const gid = uid('tg');
+      return { layer, gid, strokeId: uid('ts') };
+    }).map(({ layer, gid, strokeId }, idx) => {
       const cumTop = cumBottom.map((b, i) => b + layer.vals[i]);
-      svgLayers += `<path d="${areaPath(cumTop, cumBottom)}" fill="${layer.color}" fill-opacity=".72"/>`;
+      const d = bandPaths(cumTop, cumBottom);
+      const topLine = cumTop.map((v, i) => ({ x: xAt(i), y: yAt(v) }));
+      const lineD = CS && CS.smoothPathThrough ? CS.smoothPathThrough(topLine) : '';
       cumBottom = cumTop;
-    }
+      svgLayers += `<path d="${d}" fill="url(#${gid})" class="chart-layer"/>`;
+      if (lineD) {
+        strokeLines += `<path d="${lineD}" fill="none" stroke="${layer.color2}" stroke-width="4" stroke-opacity=".15" stroke-linecap="round"/>`;
+        strokeLines += `<path d="${lineD}" fill="none" stroke="${layer.color2}" stroke-width="1.5" stroke-linecap="round" class="chart-stroke"/>`;
+      }
+      return `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${layer.color}" stop-opacity=".55"/>
+        <stop offset="100%" stop-color="${layer.color}" stop-opacity=".08"/>
+      </linearGradient>`;
+    }).join('');
 
-    const grid = [0, 0.5, 1].map((t) => {
+    const grid = [0, 0.25, 0.5, 0.75, 1].map((t) => {
       const y = yAt(t);
-      return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" class="chart-grid"/>`;
+      return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" class="chart-grid" stroke-dasharray="4 6"/>`;
     }).join('');
 
     const labels = rows.map((r, i) => {
@@ -137,13 +225,24 @@
       return `<text x="${xAt(i)}" y="${H - 6}" class="chart-axis">${day}</text>`;
     }).join('');
 
+    const hoverZones = rows.map((r, i) => {
+      const x = xAt(i);
+      const w = innerW / Math.max(1, n - 1);
+      const tip = `${r.day || ''}\n浏览 ${r.views || 0} · 注册 ${r.signups || 0} · 付费 ${r.paid || 0}`;
+      return `<rect class="chart-hover" x="${x - w / 2}" y="${padT}" width="${w}" height="${innerH}" data-tip="${esc(tip)}"><title>${esc(tip.replace(/\n/g, ' · '))}</title></rect>`;
+    }).join('');
+
     const legend = layers.map((l) =>
-      `<span class="chart-legend-item"><i style="background:${l.color}"></i>${l.label}</span>`).join('');
+      `<span class="chart-legend-item"><i style="background:linear-gradient(180deg,${l.color2},${l.color})"></i>${l.label}</span>`).join('');
 
     return `<div class="chart-head"><div><strong>运营趋势</strong><span class="muted">近 14 日 · 各指标按峰值归一化叠加</span></div><div class="chart-legend">${legend}</div></div>
+      <div class="chart-wrap">
       <svg class="chart-area" viewBox="0 0 ${W} ${H}" role="img" aria-label="近14日浏览量、新增用户与付费笔数趋势">
-        ${grid}${svgLayers}${labels}
-      </svg>`;
+        <defs>${defs}</defs>
+        ${grid}${svgLayers}${strokeLines}${hoverZones}${labels}
+      </svg>
+      <div class="chart-tooltip hidden" id="chart-tip"></div>
+      </div>`;
   }
 
   function renderDonut(segments) {
@@ -180,7 +279,7 @@
     const foot = linkPage
       ? `<button type="button" class="kpi-link" data-go-page="${esc(linkPage)}">查看详情</button>` : '';
     return `<article class="kpi-card">
-      <div class="kpi-top"><span class="kpi-icon ${iconClass || ''}"></span><span class="kpi-label">${esc(label)}</span></div>
+      <div class="kpi-top"><span class="kpi-icon ${iconClass || ''}">${KPI_ICONS[iconClass] || ''}</span><span class="kpi-label">${esc(label)}</span></div>
       <div class="kpi-metric">${renderDelta(delta)}<span class="kpi-value">${esc(value)}</span></div>
       <div class="kpi-sub">${esc(sub || '')}</div>
       ${renderSparkline(sparkValues, sparkColor || '#60a5fa')}
@@ -205,8 +304,28 @@
   function renderAlertStrip(alerts) {
     return `<div class="alert-strip">${(alerts || []).map((a) => {
       const cnt = a.count != null && a.count !== '' ? `<span class="cnt">${esc(a.count)}</span>` : '';
-      return `<button type="button" class="alert-chip ${esc(a.severity || 'yellow')}" data-go-page="${esc(a.page || 'dashboard')}">${esc(a.title)} ${cnt}</button>`;
+      return `<button type="button" class="alert-chip ${esc(a.severity || 'yellow')}" data-go-page="${esc(a.page || 'dashboard')}"><span class="chip-ico-wrap">${alertIcon(a.title)}</span><span>${esc(a.title)}</span> ${cnt}</button>`;
     }).join('')}</div>`;
+  }
+
+  function bindChartTooltip(root) {
+    const wrap = (root || content).querySelector('.chart-wrap');
+    if (!wrap) return;
+    const tip = wrap.querySelector('.chart-tooltip');
+    if (!tip) return;
+    wrap.querySelectorAll('.chart-hover').forEach((rect) => {
+      rect.addEventListener('mouseenter', () => {
+        const raw = rect.getAttribute('data-tip') || '';
+        tip.textContent = raw.replace(/\n/g, ' · ');
+        tip.classList.remove('hidden');
+      });
+      rect.addEventListener('mousemove', (ev) => {
+        const b = wrap.getBoundingClientRect();
+        tip.style.left = `${ev.clientX - b.left + 10}px`;
+        tip.style.top = `${ev.clientY - b.top - 28}px`;
+      });
+      rect.addEventListener('mouseleave', () => tip.classList.add('hidden'));
+    });
   }
 
   function bindAlertNav(root) {
@@ -242,6 +361,7 @@
   function showShell() {
     loginView.classList.add('hidden');
     shell.classList.remove('hidden');
+    decorateNav();
   }
 
   function logout(callApi) {
@@ -384,6 +504,7 @@
         </section>
       </div>`;
     bindAlertNav(content);
+    bindChartTooltip(content);
   }
 
   async function renderPageviews() {
@@ -914,6 +1035,7 @@
   }, 1000);
 
   (async () => {
+    decorateNav();
     const ok = await ensureAuth();
     if (ok) await go('dashboard');
   })();
