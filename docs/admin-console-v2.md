@@ -44,11 +44,11 @@
 
 ## 数据库迁移（部署时自动 `db.js` 执行）
 
-- `app_page_views(day, path, views, uniques, …)`
+- `app_page_views(day, path, views, uniques, updated_at)` — 若线上仍为旧表 `(day, path, count)`，启动时会 **ADD COLUMN** 并 `count → views`，保留 `count` 列与历史数据；索引 `idx_page_views_day` 在列就绪后创建。
 - `admin_audit_log(…)`
 - `news_cover_assets(slug, variant, file_path, status, …)`
 
-无需手工 SQL；首次启动新版本 Node 进程即可建表。
+无需手工 SQL；首次启动新版本 Node 进程即可建表或就地升级。
 
 ## 审计埋点
 
@@ -64,6 +64,7 @@
 
 ```bash
 node test/admin-251-test.js
+node test/admin-250-test.js
 node test/admin-249-test.js
 ```
 
