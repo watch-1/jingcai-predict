@@ -32,7 +32,7 @@ ok(spark.includes('linearGradient') && spark.includes('spark-baseline'), 'sparkl
 ok(spark.includes(' C '), 'sparkline smooth stroke');
 
 const flatSpark = smooth.renderSparklineSvg([3, 3, 3, 3], '#6366f1');
-ok(!flatSpark.includes('持平') && flatSpark.includes('sparkline--quiet'), 'flat sparkline quiet track without label');
+ok(flatSpark === '' && !flatSpark.includes('持平'), 'flat series returns empty SVG (CSS empty in admin)');
 
 const adminJs = fs.readFileSync(path.join(__dirname, '../public/admin/admin.js'), 'utf8');
 ok(adminJs.includes('NAV_ICONS') && adminJs.includes('nav-ico'), 'admin.js nav icon set');

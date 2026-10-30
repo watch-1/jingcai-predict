@@ -75,6 +75,32 @@
     return nums.every((v) => v === nums[0]);
   }
 
+  /** Stacked normalized layers: cumulative peak + headroom for spline overshoot. */
+  function stackedTrendYExtents(layerValueArrays, opts) {
+    const headroom = (opts && opts.headroom) || 1.18;
+    const bottomPad = (opts && opts.bottomPad) || 0.1;
+    const layers = layerValueArrays || [];
+    const n = layers[0] ? layers[0].length : 0;
+    if (!n) return { yMax: 1.18, yMin: -0.1, maxCum: 1 };
+    let cum = new Array(n).fill(0);
+    let maxCum = 0;
+    for (const vals of layers) {
+      cum = cum.map((c, i) => c + (Number(vals[i]) || 0));
+      maxCum = Math.max(maxCum, ...cum);
+    }
+    maxCum = Math.max(maxCum, 1e-6);
+    const yMax = maxCum * headroom;
+    const yMin = -maxCum * bottomPad;
+    return { yMax, yMin, maxCum };
+  }
+
+  function valueToChartY(v, yMin, yMax, padT, innerH) {
+    const span = yMax - yMin || 1;
+    const t = (Number(v) - yMin) / span;
+    const clamped = Math.min(1.08, Math.max(-0.08, t));
+    return padT + (1 - clamped) * innerH;
+  }
+
   function uid(prefix) {
     return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
   }
@@ -85,19 +111,13 @@
     const stroke = color || '#60a5fa';
     const vals = values || [];
     if (!vals.length) return '';
-    const baselineY = h - 8;
     const flat = seriesIsFlat(vals);
-
-    if (flat) {
-      return `<svg class="sparkline sparkline--quiet" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-        <line x1="4" y1="${baselineY}" x2="${w - 4}" y2="${baselineY}" class="spark-track"/>
-        <line x1="4" y1="${baselineY}" x2="${w - 4}" y2="${baselineY}" class="spark-baseline"/>
-      </svg>`;
-    }
+    if (flat) return '';
 
     const pts = valuesToPoints(vals, w, h, { t: 8, r: 4, b: 8, l: 4 });
     const gradId = uid('spark-grad');
     const glowId = uid('spark-glow');
+    const baselineY = h - 8;
     const areaD = smoothAreaToBaseline(pts, baselineY);
     const lineD = smoothPathThrough(pts);
     return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
@@ -124,6 +144,8 @@
     smoothAreaToBaseline,
     valuesToPoints,
     seriesIsFlat,
+    stackedTrendYExtents,
+    valueToChartY,
     renderSparklineSvg,
   };
 });

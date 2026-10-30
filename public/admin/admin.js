@@ -123,7 +123,15 @@
 
   function renderSparkline(values, color) {
     const CS = chartSmooth();
-    if (CS && CS.renderSparklineSvg) return CS.renderSparklineSvg(values, color);
+    const vals = values || [];
+    if (CS && CS.seriesIsFlat && CS.seriesIsFlat(vals)) {
+      return `<div class="spark-empty"><span class="spark-empty-line" aria-hidden="true"></span><span class="spark-empty-hint">近14日无波动</span></div>`;
+    }
+    if (CS && CS.renderSparklineSvg) {
+      const svg = CS.renderSparklineSvg(vals, color);
+      if (svg) return svg;
+      return `<div class="spark-empty"><span class="spark-empty-line" aria-hidden="true"></span><span class="spark-empty-hint">近14日无波动</span></div>`;
+    }
     const vals = (values || []).map((v) => Number(v) || 0);
     if (!vals.length) return '';
     const w = 132;
@@ -156,13 +164,18 @@
     const H = 220;
     const padL = 36;
     const padR = 12;
-    const padT = 16;
+    const padT = 22;
     const padB = 28;
     const innerW = W - padL - padR;
     const innerH = H - padT - padB;
     const views = normalizeArr(rows.map((r) => r.views));
     const signups = normalizeArr(rows.map((r) => r.signups));
     const paid = normalizeArr(rows.map((r) => r.paid));
+    const layerVals = [views, signups, paid];
+    const yExt = CS && CS.stackedTrendYExtents
+      ? CS.stackedTrendYExtents(layerVals, { headroom: 1.18, bottomPad: 0.1 })
+      : { yMax: 1.18, yMin: -0.1, maxCum: 1 };
+    const { yMax, yMin } = yExt;
     const layers = [
       { key: 'views', vals: views, color: '#6366f1', color2: '#a78bfa', label: '浏览量' },
       { key: 'signups', vals: signups, color: '#14b8a6', color2: '#2dd4bf', label: '新增用户' },
@@ -170,7 +183,9 @@
     ];
     const n = rows.length;
     const xAt = (i) => padL + (i / Math.max(1, n - 1)) * innerW;
-    const yAt = (v) => padT + (1 - v) * innerH;
+    const yAt = (v) => (CS && CS.valueToChartY
+      ? CS.valueToChartY(v, yMin, yMax, padT, innerH)
+      : padT + (1 - v) * innerH);
     const uid = (p) => `${p}-${Math.random().toString(36).slice(2, 8)}`;
 
     function bandPaths(cumulativeTop, cumulativeBottom) {
@@ -215,9 +230,9 @@
       </linearGradient>`;
     }).join('');
 
-    const grid = [0, 0.25, 0.5, 0.75, 1].map((t) => {
-      const y = yAt(t);
-      return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" class="chart-grid" stroke-dasharray="4 6"/>`;
+    const grid = [0.35, 0.65].map((frac) => {
+      const y = padT + frac * innerH;
+      return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" class="chart-grid"/>`;
     }).join('');
 
     const labels = rows.map((r, i) => {
@@ -238,9 +253,9 @@
 
     return `<div class="chart-head"><div><strong>运营趋势</strong><span class="muted">近 14 日 · 各指标按峰值归一化叠加</span></div><div class="chart-legend">${legend}</div></div>
       <div class="chart-wrap">
-      <svg class="chart-area" viewBox="0 0 ${W} ${H}" role="img" aria-label="近14日浏览量、新增用户与付费笔数趋势">
+      <svg class="chart-area" viewBox="0 0 ${W} ${H}" role="img" aria-label="近14日浏览量、新增用户与付费笔数趋势" overflow="visible">
         <defs>${defs}</defs>
-        ${grid}${svgLayers}${strokeLines}${hoverZones}${labels}
+        <g class="chart-plot" style="overflow:visible">${grid}${svgLayers}${strokeLines}${hoverZones}${labels}</g>
       </svg>
       <div class="chart-tooltip hidden" id="chart-tip"></div>
       </div>`;
