@@ -1,0 +1,32 @@
+{
+  "noteZh": "生产环境将 ~78 组 A/B 卡通封面放入 public/news-covers/assets/{联赛}/ 或在此 manifest 声明 variants URL。",
+  "items": [
+    {
+      "slug": "epl-demo-clasico",
+      "league": "英超",
+      "title": "示例：焦点战卡通封面",
+      "variants": {
+        "A": "/news-covers/assets/英超/demo-clasico-a.jpg",
+        "B": "/news-covers/assets/英超/demo-clasico-b.jpg"
+      }
+    },
+    {
+      "slug": "laliga-demo-derby",
+      "league": "西甲",
+      "title": "示例：德比卡通封面",
+      "variants": {
+        "A": "/banners/slide-hot-match.jpg",
+        "B": "/banners/slide-contra.jpg"
+      }
+    },
+    {
+      "slug": "bundes-demo-top",
+      "league": "德甲",
+      "title": "示例：榜首对决",
+      "variants": {
+        "A": "/banners/banner-hot.jpg",
+        "B": "/banners/banner-predict.jpg"
+      }
+    }
+  ]
+}

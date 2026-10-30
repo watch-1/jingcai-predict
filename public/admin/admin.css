@@ -131,6 +131,33 @@ tr:hover td { background: rgba(59,130,246,.06); }
 }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; }
 
+.nav-group { margin-bottom: 12px; }
+.nav-label { font-size: 11px; color: var(--muted); padding: 4px 12px 6px; text-transform: none; letter-spacing: .04em; }
+
+.alert-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.alert-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; border: 1px solid var(--line); cursor: pointer; text-decoration: none; color: inherit;
+}
+.alert-chip.red { background: #450a0a; border-color: #991b1b; color: #fecaca; }
+.alert-chip.yellow { background: #422006; border-color: #b45309; color: #fde68a; }
+.alert-chip.green { background: #052e16; border-color: #166534; color: #bbf7d0; }
+.alert-chip .cnt { opacity: .85; font-weight: 700; }
+
+.panel-block { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.panel-block h3 { margin: 0 0 10px; font-size: 15px; }
+.todo-list { margin: 0; padding-left: 18px; line-height: 1.8; font-size: 13px; }
+
+.chart-bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding-top: 8px; }
+.bar-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+.bar-col .bar { width: 100%; max-width: 28px; background: linear-gradient(180deg, #60a5fa, #2563eb); border-radius: 4px 4px 0 0; min-height: 2px; }
+.bar-col span { font-size: 10px; color: var(--muted); }
+
+.cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.cover-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.cover-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.cover-pair img { width: 100%; aspect-ratio: 16/10; object-fit: cover; border-radius: 8px; background: var(--bg2); }
+
 @media (max-width: 860px) {
   .shell { grid-template-columns: 1fr; }
   .side { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
