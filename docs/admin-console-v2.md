@@ -1,6 +1,8 @@
-# 运营后台 Admin Console v2（1.9.249）
+# 运营后台 Admin Console v2（1.9.251）
 
 在 v1.9.72 控制台基础上扩展 **监控 / 数据 / 运营 / 系统** 分组导航与五项 P0 能力。入口仍为 `/admin`，鉴权 `ADMIN_PASSWORD` / `ADMIN_TOKEN`。
+
+**1.9.251** 总览页视觉升级：三栏密集布局、KPI 卡片（ sparkline + 周环比 delta ）、归一化叠加面积趋势图、订单构成环形图、告警 chip 与侧栏 active 态 polish；数据仍来自 `/api/admin/dashboard`（新增 `charts.series14d` / `charts.deltas`）。
 
 ## 地址
 
@@ -12,7 +14,7 @@
 
 | 分组 | 页面 | 说明 |
 | --- | --- | --- |
-| 监控 | 总览 | KPI 卡片 + **健康告警条** + **今日待办** + 14 日 PV 柱图 |
+| 监控 | 总览 | KPI 卡片 + **健康告警条** + **今日待办** + 14 日趋势（面积/柱/环） |
 | 监控 | 浏览量 | `app_page_views` 汇总与 Top 路径 |
 | 监控 | 赛事健康 | 今日/live 场次、事件滞后、AF 映射样本、球员库缺口 |
 | 数据 | 数据浏览 | SQLite 各表行数只读 |
@@ -27,7 +29,7 @@
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/api/admin/dashboard` | 增加 `health`、`pageViews.series14d` |
+| GET | `/api/admin/dashboard` | `health`、`pageViews.series14d`、`charts`（14 日合并序列与周环比 delta） |
 | GET | `/api/admin/pageviews` | `?day=YYYY-MM-DD` |
 | GET/POST | `/api/admin/backups` | 列表 / 创建备份 |
 | GET | `/api/admin/data-browser` | 表行数 |
@@ -61,6 +63,7 @@
 ## 测试
 
 ```bash
+node test/admin-251-test.js
 node test/admin-249-test.js
 ```
 
