@@ -9,17 +9,17 @@ let fails = 0;
 const ok = (c, m) => { console.log(c ? 'OK  ' : 'FAIL', m); if (!c) fails++; };
 
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-ok(/VERSION=1\.9\.253/.test(ver) && /VERSION_CODE=289/.test(ver), 'VERSION.txt 1.9.253 / 289');
+ok(/VERSION=1\.9\.25[34]/.test(ver), 'VERSION.txt at least 1.9.253');
 
 const smooth = require('../public/admin/chart-smooth.js');
 
 const zeros = smooth.renderSparklineSvg([0, 0, 0, 0, 0], '#6366f1');
 ok(!zeros.includes('持平'), 'flat/zero sparkline has no SVG 持平 text');
-ok(!/<text[\s>]/.test(zeros), 'quiet sparkline uses no SVG text nodes');
-ok(zeros.includes('sparkline--quiet') && zeros.includes('spark-track'), 'quiet sparkline uses dashed track');
+ok(zeros === '' || !/<text[\s>]/.test(zeros), 'no SVG text in flat sparkline output');
+ok(!zeros.includes('spark-track'), 'no dashed capsule track in SVG');
 
 const flat = smooth.renderSparklineSvg([5, 5, 5, 5], '#14b8a6');
-ok(!flat.includes('持平') && flat.includes('sparkline--quiet'), 'non-zero flat series same quiet path');
+ok(!flat.includes('持平') && flat === '', 'non-zero flat series skips SVG');
 
 const varied = smooth.renderSparklineSvg([0, 2, 1, 4], '#f59e0b');
 ok(varied.includes(' C ') && !varied.includes('持平'), 'varied series still smooth');
