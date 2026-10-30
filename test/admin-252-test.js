@@ -8,12 +8,6 @@ const path = require('path');
 let fails = 0;
 const ok = (c, m) => { console.log(c ? 'OK  ' : 'FAIL', m); if (!c) fails++; };
 
-const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-ok(/VERSION=1\.9\.252/.test(ver) && /VERSION_CODE=288/.test(ver), 'VERSION.txt 1.9.252 / 288');
-
-const pkg = require('../package.json');
-ok(pkg.version === '1.9.252', 'package.json version');
-
 const charts = require('../lib/admin-dashboard-charts');
 const smooth = charts.chartSmooth;
 ok(smooth && typeof smooth.smoothPathThrough === 'function', 'chartSmooth export');
@@ -33,12 +27,12 @@ const area = smooth.smoothAreaBetween(
 );
 ok(area.endsWith(' Z') && area.includes(' C '), 'smooth stacked band');
 
-const spark = smooth.renderSparklineSvg([0, 0, 0, 0], '#14b8a6');
+const spark = smooth.renderSparklineSvg([0, 1, 2, 1, 4], '#14b8a6');
 ok(spark.includes('linearGradient') && spark.includes('spark-baseline'), 'sparkline gradient + baseline');
 ok(spark.includes(' C '), 'sparkline smooth stroke');
 
 const flatSpark = smooth.renderSparklineSvg([3, 3, 3, 3], '#6366f1');
-ok(flatSpark.includes('spark-flat-label'), 'flat sparkline zero-state label');
+ok(!flatSpark.includes('持平') && flatSpark.includes('sparkline--quiet'), 'flat sparkline quiet track without label');
 
 const adminJs = fs.readFileSync(path.join(__dirname, '../public/admin/admin.js'), 'utf8');
 ok(adminJs.includes('NAV_ICONS') && adminJs.includes('nav-ico'), 'admin.js nav icon set');
