@@ -81,20 +81,25 @@
 
   function renderSparklineSvg(values, color, opts) {
     const w = (opts && opts.w) || 132;
-    const h = (opts && opts.h) || 40;
+    const h = (opts && opts.h) || 48;
     const stroke = color || '#60a5fa';
     const vals = values || [];
     if (!vals.length) return '';
+    const baselineY = h - 8;
     const flat = seriesIsFlat(vals);
-    const pts = valuesToPoints(vals, w, h, { t: 6, r: 2, b: 6, l: 2 });
-    const baselineY = h - 6;
+
+    if (flat) {
+      return `<svg class="sparkline sparkline--quiet" viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <line x1="4" y1="${baselineY}" x2="${w - 4}" y2="${baselineY}" class="spark-track"/>
+        <line x1="4" y1="${baselineY}" x2="${w - 4}" y2="${baselineY}" class="spark-baseline"/>
+      </svg>`;
+    }
+
+    const pts = valuesToPoints(vals, w, h, { t: 8, r: 4, b: 8, l: 4 });
     const gradId = uid('spark-grad');
     const glowId = uid('spark-glow');
     const areaD = smoothAreaToBaseline(pts, baselineY);
     const lineD = smoothPathThrough(pts);
-    const flatNote = flat
-      ? `<text x="${w / 2}" y="${h / 2 + 4}" class="spark-flat-label" text-anchor="middle">持平</text>`
-      : '';
     return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
@@ -106,11 +111,10 @@
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
       </defs>
-      <line x1="2" y1="${baselineY}" x2="${w - 2}" y2="${baselineY}" class="spark-baseline"/>
+      <line x1="4" y1="${baselineY}" x2="${w - 4}" y2="${baselineY}" class="spark-baseline"/>
       <path d="${areaD}" fill="url(#${gradId})"/>
-      <path d="${lineD}" fill="none" stroke="${stroke}" stroke-width="3" stroke-opacity=".22" stroke-linecap="round"/>
-      <path d="${lineD}" fill="none" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round" filter="url(#${glowId})"/>
-      ${flatNote}
+      <path d="${lineD}" fill="none" stroke="${stroke}" stroke-width="3" stroke-opacity=".22" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+      <path d="${lineD}" fill="none" stroke="${stroke}" stroke-width="1.6" stroke-linecap="round" filter="url(#${glowId})" vector-effect="non-scaling-stroke"/>
     </svg>`;
   }
 

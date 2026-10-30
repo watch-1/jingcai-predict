@@ -115,7 +115,8 @@
   function renderDelta(pct) {
     if (pct == null || !Number.isFinite(Number(pct))) return '';
     const n = Number(pct);
-    const cls = n >= 0 ? 'up' : 'down';
+    if (n === 0) return '<span class="delta flat">0%</span>';
+    const cls = n > 0 ? 'up' : 'down';
     const sign = n > 0 ? '+' : '';
     return `<span class="delta ${cls}">${sign}${n}%</span>`;
   }
@@ -282,7 +283,7 @@
       <div class="kpi-top"><span class="kpi-icon ${iconClass || ''}">${KPI_ICONS[iconClass] || ''}</span><span class="kpi-label">${esc(label)}</span></div>
       <div class="kpi-metric">${renderDelta(delta)}<span class="kpi-value">${esc(value)}</span></div>
       <div class="kpi-sub">${esc(sub || '')}</div>
-      ${renderSparkline(sparkValues, sparkColor || '#60a5fa')}
+      <div class="kpi-spark-wrap">${renderSparkline(sparkValues, sparkColor || '#60a5fa')}</div>
       ${foot}
     </article>`;
   }
@@ -290,6 +291,13 @@
   function renderBarChart(series, valueKey, accent) {
     const key = valueKey || 'views';
     const vals = (series || []).map((s) => Number(s[key]) || 0);
+    const total = vals.reduce((s, v) => s + v, 0);
+    if (!series || !series.length || total === 0) {
+      return `<div class="chart-bars-empty" role="img" aria-label="暂无数据">
+        <div class="chart-empty-ghost" aria-hidden="true"></div>
+        <p class="muted">暂无数据</p>
+      </div>`;
+    }
     const max = Math.max(1, ...vals);
     const grad = accent || '';
     return `<div class="chart-bars${grad ? ' pro' : ''}">${(series || []).map((s, i) => {
