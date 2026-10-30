@@ -123,24 +123,24 @@
 
   function renderSparkline(values, color) {
     const CS = chartSmooth();
-    const vals = values || [];
-    if (CS && CS.seriesIsFlat && CS.seriesIsFlat(vals)) {
+    const rawVals = values || [];
+    if (CS && CS.seriesIsFlat && CS.seriesIsFlat(rawVals)) {
       return `<div class="spark-empty"><span class="spark-empty-line" aria-hidden="true"></span><span class="spark-empty-hint">近14日无波动</span></div>`;
     }
     if (CS && CS.renderSparklineSvg) {
-      const svg = CS.renderSparklineSvg(vals, color);
+      const svg = CS.renderSparklineSvg(rawVals, color);
       if (svg) return svg;
       return `<div class="spark-empty"><span class="spark-empty-line" aria-hidden="true"></span><span class="spark-empty-hint">近14日无波动</span></div>`;
     }
-    const vals = (values || []).map((v) => Number(v) || 0);
-    if (!vals.length) return '';
+    const fallbackVals = rawVals.map((v) => Number(v) || 0);
+    if (!fallbackVals.length) return '';
     const w = 132;
     const h = 40;
-    const max = Math.max(1, ...vals);
-    const min = Math.min(0, ...vals);
+    const max = Math.max(1, ...fallbackVals);
+    const min = Math.min(0, ...fallbackVals);
     const span = max - min || 1;
-    const pts = vals.map((v, i) => {
-      const x = (i / Math.max(1, vals.length - 1)) * w;
+    const pts = fallbackVals.map((v, i) => {
+      const x = (i / Math.max(1, fallbackVals.length - 1)) * w;
       const y = h - 4 - ((v - min) / span) * (h - 8);
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
