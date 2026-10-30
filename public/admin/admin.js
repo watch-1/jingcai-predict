@@ -1,6 +1,10 @@
 (() => {
   const TOKEN_KEY = 'jingcai_admin_token';
-  const TITLES = { dashboard: '总览监控', users: '用户管理', orders: '会员订单', column: '专栏管理', flags: '功能开关' };
+  const TITLES = {
+    dashboard: '总览', pageviews: '浏览量', 'match-health': '赛事健康', 'data-browser': '数据浏览',
+    backup: '备份', users: '用户', orders: '订单', membership: '经营', column: '专栏',
+    'news-covers': '头条封面', flags: '功能开关', audit: '审计日志',
+  };
   const STATE = { page: 'dashboard', token: localStorage.getItem(TOKEN_KEY) || '', users: null, orders: null };
 
   const $ = (id) => document.getElementById(id);
@@ -35,6 +39,31 @@
     };
     const lab = { paid: '已支付', pending: '待支付', cancelled: '已取消', failed: '失败', refunded: '已退款' };
     return `<span class="badge ${map[st] || ''}">${esc(lab[st] || st)}</span>`;
+  }
+
+  function renderBarChart(series, valueKey) {
+    const key = valueKey || 'views';
+    const vals = (series || []).map((s) => Number(s[key]) || 0);
+    const max = Math.max(1, ...vals);
+    return `<div class="chart-bars">${(series || []).map((s, i) => {
+      const v = vals[i];
+      const h = Math.round((v / max) * 100);
+      const day = esc(String(s.day || '').slice(5));
+      return `<div class="bar-col" title="${esc(s.day)}: ${v}"><div class="bar" style="height:${h}%"></div><span>${day}</span></div>`;
+    }).join('')}</div>`;
+  }
+
+  function renderAlertStrip(alerts) {
+    return `<div class="alert-strip">${(alerts || []).map((a) => {
+      const cnt = a.count != null && a.count !== '' ? `<span class="cnt">${esc(a.count)}</span>` : '';
+      return `<button type="button" class="alert-chip ${esc(a.severity || 'yellow')}" data-go-page="${esc(a.page || 'dashboard')}">${esc(a.title)} ${cnt}</button>`;
+    }).join('')}</div>`;
+  }
+
+  function bindAlertNav(root) {
+    (root || content).querySelectorAll('[data-go-page]').forEach((btn) => {
+      btn.onclick = () => go(btn.getAttribute('data-go-page'));
+    });
   }
 
   async function api(path, opts = {}) {
@@ -99,25 +128,237 @@
     const af = d.apiFootball || {};
     const pdb = d.playerDb || {};
     const orders = d.orders || {};
+    const health = d.health || {};
+    const pv = d.pageViews || {};
     content.innerHTML = `
+      ${renderAlertStrip(health.alerts)}
+      <div class="panel-block">
+        <h3>今日待办</h3>
+        ${(health.todos || []).length ? `<ol class="todo-list">${health.todos.map((t) =>
+          `<li><button type="button" class="btn ghost sm" data-go-page="${esc(t.page)}">${esc(t.text)}</button></li>`).join('')}</ol>`
+          : '<p class="muted">暂无待办 · 系统状态良好</p>'}
+      </div>
       <div class="cards">
         <div class="card"><div class="k">服务版本</div><div class="v">${esc(d.version)}</div><div class="s">运行 ${esc(fmtUptime(d.uptimeSec))} · Asia/Shanghai</div></div>
         <div class="card"><div class="k">用户 / 会员 / 封禁</div><div class="v">${d.users.total} / ${d.users.membersActive} / ${d.users.banned}</div><div class="s">注册用户总数</div></div>
         <div class="card"><div class="k">订单（已付/待付）</div><div class="v">${orders.paid || 0} / ${orders.pending || 0}</div><div class="s">取消 ${orders.cancelled || 0} · 退款 ${orders.refunded || 0}</div></div>
-        <div class="card"><div class="k">专栏帖子</div><div class="v">${(d.column && d.column.posts) || 0}</div><div class="s">作者 ${(d.column && d.column.authors) || 0} · 战绩仅完场结算</div></div>
-        <div class="card"><div class="k">AF 配额剩余</div><div class="v">${af.remaining == null ? '—' : af.remaining}</div><div class="s">限额 ${af.limit == null ? '—' : af.limit} · 采样 ${af.at ? fmtTime(af.at) : '尚未请求'}</div></div>
-        <div class="card"><div class="k">球员库缺口</div><div class="v">${pdb.playerGapJingcai == null ? '—' : pdb.playerGapJingcai}</div><div class="s">竞彩场 ${pdb.jingcaiMatches || 0} · 球员行 ${pdb.playerRows || 0}</div></div>
-        <div class="card"><div class="k">最近入库</div><div class="v" style="font-size:15px">${esc(pdb.lastFetchedAt ? fmtTime(Date.parse(pdb.lastFetchedAt)) : '—')}</div><div class="s">库文件 ${pdb.fileMtime ? fmtTime(Date.parse(pdb.fileMtime)) : '—'}</div></div>
+        <div class="card"><div class="k">专栏帖子</div><div class="v">${(d.column && d.column.posts) || 0}</div><div class="s">作者 ${(d.column && d.column.authors) || 0}</div></div>
+        <div class="card"><div class="k">AF 配额剩余</div><div class="v">${af.remaining == null ? '—' : af.remaining}</div><div class="s">限额 ${af.limit == null ? '—' : af.limit}</div></div>
+        <div class="card"><div class="k">球员库缺口</div><div class="v">${pdb.playerGapJingcai == null ? '—' : pdb.playerGapJingcai}</div><div class="s">竞彩场 ${pdb.jingcaiMatches || 0}</div></div>
+        <div class="card"><div class="k">今日 PV</div><div class="v">${(pv.today && pv.today.views) || 0}</div><div class="s">路径聚合 · 见浏览量页</div></div>
+      </div>
+      <div class="panel-block">
+        <h3>近 14 日浏览量</h3>
+        ${renderBarChart(pv.series14d || [], 'views')}
       </div>
       <div class="card">
         <div class="k">能力配置</div>
         <div class="s" style="font-size:13px;line-height:1.7;color:var(--text)">
           DeepSeek：${d.deepseekConfigured ? '<span class="badge ok">已配置</span>' : '<span class="badge bad">未配置</span>'}
           &nbsp; API-Football Key：${d.afKeyConfigured ? '<span class="badge ok">已配置</span>' : '<span class="badge bad">未配置</span>'}
-          &nbsp; 开关：${(d.flags || []).map((f) => `${esc(f.label)} ${f.on ? '开' : '关'}`).join(' · ')}
+          &nbsp; 赛程源：${esc(health.scheduleSource || '—')} · 今日在售 ${health.sellingToday != null ? health.sellingToday : '—'}
         </div>
         ${pdb.error ? `<p class="err">${esc(pdb.error)}</p>` : ''}
       </div>`;
+    bindAlertNav(content);
+  }
+
+  async function renderPageviews() {
+    content.innerHTML = '<p class="muted">加载中…</p>';
+    const d = await api('/admin/pageviews');
+    content.innerHTML = `
+      <p class="muted">聚合表 app_page_views · 客户端可 POST /api/analytics/page-view</p>
+      <div class="cards">
+        <div class="card"><div class="k">${esc(d.day)} PV</div><div class="v">${d.totals.views}</div></div>
+        <div class="card"><div class="k">UV（近似）</div><div class="v">${d.totals.uniques}</div></div>
+      </div>
+      <div class="panel-block"><h3>近 14 日趋势</h3>${renderBarChart(d.series14d)}</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>路径</th><th>浏览</th><th>UV</th></tr></thead>
+        <tbody>${(d.topPaths || []).map((r) => `<tr><td>${esc(r.path)}</td><td>${r.views}</td><td>${r.uniques}</td></tr>`).join('')
+          || '<tr><td colspan="3" class="muted">暂无数据</td></tr>'}</tbody>
+      </table></div>`;
+  }
+
+  async function renderMatchHealth() {
+    content.innerHTML = '<p class="muted">加载中…</p>';
+    const d = await api('/admin/match-health');
+    content.innerHTML = `
+      <p class="muted">${esc(d.noteZh || '')} · 数据源 ${esc(d.scheduleSource || '')}</p>
+      <div class="cards">
+        <div class="card"><div class="k">今日场次</div><div class="v">${d.todayCount}</div></div>
+        <div class="card"><div class="k">进行中</div><div class="v">${d.liveCount}</div></div>
+        <div class="card"><div class="k">未完结</div><div class="v">${d.unfinished}</div></div>
+        <div class="card"><div class="k">事件滞后</div><div class="v">${d.eventsLagCount}</div></div>
+        <div class="card"><div class="k">球员库缺口</div><div class="v">${d.playerGapJingcai == null ? '—' : d.playerGapJingcai}</div></div>
+      </div>
+      <div class="panel-block"><h3>事件滞后样本</h3>
+        <div class="table-wrap"><table><thead><tr><th>场次</th><th>说明</th><th>原因</th></tr></thead><tbody>
+        ${(d.eventsLagSamples || []).map((x) => `<tr><td>${esc(x.matchId)}</td><td>${esc(x.label)}</td><td>${esc(x.reason)}</td></tr>`).join('')
+          || '<tr><td colspan="3" class="muted">无滞后样本</td></tr>'}</tbody></table></div>
+      </div>
+      <div class="panel-block"><h3>AF 未映射样本（竞彩→AF）</h3>
+        <div class="table-wrap"><table><thead><tr><th>matchId</th><th>对阵</th></tr></thead><tbody>
+        ${(d.afUnmappedSamples || []).map((x) => `<tr><td>${esc(x.matchId)}</td><td>${esc(x.sporttery)}</td></tr>`).join('')
+          || '<tr><td colspan="2" class="muted">无样本或映射齐全</td></tr>'}</tbody></table></div>
+      </div>`;
+  }
+
+  async function renderDataBrowser() {
+    content.innerHTML = '<p class="muted">加载中…</p>';
+    const d = await api('/admin/data-browser');
+    content.innerHTML = `
+      <p class="muted">SQLite 表行数只读快照（${esc(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }))}）</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>表名</th><th>行数</th></tr></thead>
+        <tbody>${(d.tables || []).map((t) => `<tr><td>${esc(t.name)}</td><td>${t.count == null ? '—' : t.count}</td></tr>`).join('')}</tbody>
+      </table></div>`;
+  }
+
+  async function renderBackup() {
+    content.innerHTML = '<p class="muted">加载中…</p>';
+    const d = await api('/admin/backups');
+    content.innerHTML = `
+      <div class="toolbar">
+        <button type="button" class="btn primary" id="bk-create">立即备份 jingcai.db</button>
+        <span class="muted">目录 ${esc(d.dir || '')}${d.latest ? ` · 最近 ${esc(d.latest.name)}` : ' · 尚无备份'}</span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>文件</th><th>大小</th><th>时间</th></tr></thead>
+        <tbody>${(d.files || []).map((f) => `<tr><td>${esc(f.name)}</td><td>${Math.round(f.sizeBytes / 1024)} KB</td><td>${fmtTime(f.mtimeMs)}</td></tr>`).join('')
+          || '<tr><td colspan="3" class="muted">暂无备份文件</td></tr>'}</tbody>
+      </table></div>`;
+    $('bk-create').onclick = async () => {
+      if (!confirm('确认复制当前 SQLite 到 data/backups/？')) return;
+      try {
+        await api('/admin/backups', { method: 'POST', body: { label: 'admin' } });
+        await renderBackup();
+      } catch (e) { alert(e.message); }
+    };
+  }
+
+  async function renderMembership() {
+    content.innerHTML = '<p class="muted">加载中…</p>';
+    const d = await api('/admin/membership');
+    const f = d.funnel || {};
+    content.innerHTML = `
+      <p class="muted">${esc(f.noteZh || '')}</p>
+      <div class="cards">
+        <div class="card"><div class="k">注册用户</div><div class="v">${f.registered}</div></div>
+        <div class="card"><div class="k">曾付费</div><div class="v">${f.everPaid}</div></div>
+        <div class="card"><div class="k">当前会员</div><div class="v">${f.activeMember}</div></div>
+        <div class="card"><div class="k">流失（估算）</div><div class="v">${f.churned}</div></div>
+        <div class="card"><div class="k">近30天退款</div><div class="v">${d.refunds30d}</div></div>
+      </div>
+      ${(d.revenue || []).map((w) => `
+        <div class="panel-block"><h3>${esc(w.label)} 收入</h3>
+          <p>订单 ${w.orderCount} 笔 · 合计 ¥${esc(w.revenueYuan)}</p>
+          <div class="table-wrap"><table><thead><tr><th>套餐</th><th>笔数</th><th>金额</th></tr></thead><tbody>
+          ${(w.byPlan || []).map((p) => `<tr><td>${esc(p.planName)}</td><td>${p.count}</td><td>¥${esc(p.yuan)}</td></tr>`).join('')
+            || '<tr><td colspan="3" class="muted">无已付订单</td></tr>'}</tbody></table></div>
+        </div>`).join('')}
+      <div class="panel-block"><h3>7 日内到期会员</h3>
+        <div class="table-wrap"><table><thead><tr><th>ID</th><th>昵称</th><th>手机</th><th>到期</th><th></th></tr></thead><tbody>
+        ${(d.expiring7 || []).map((u) => `<tr><td>${u.id}</td><td>${esc(u.nickname)}</td><td>${esc(u.phoneMask)}</td><td>${fmtTime(u.memberUntil)}</td>
+          <td><button type="button" class="btn sm" data-go-page="users">用户</button></td></tr>`).join('')
+          || '<tr><td colspan="5" class="muted">无</td></tr>'}</tbody></table></div>
+      </div>`;
+    bindAlertNav(content);
+  }
+
+  async function renderNewsCovers() {
+    content.innerHTML = '<p class="muted">加载中…</p>';
+    const d = await api('/admin/news-covers');
+    content.innerHTML = `
+      <p class="muted">${esc(d.noteZh || '')} · 共 ${d.total} 组 · 公开预览 <a href="/news-covers/" target="_blank" rel="noopener">/news-covers/</a></p>
+      <div class="cover-grid">
+        ${(d.items || []).map((it) => {
+          const st = it.status || 'pending';
+          const a = (it.variants && it.variants.A) || '';
+          const b = (it.variants && it.variants.B) || '';
+          return `<div class="cover-card">
+            <div class="muted">${esc(it.league)} · <span class="badge ${st === 'approved' ? 'ok' : st === 'rejected' ? 'bad' : 'warn'}">${esc(st)}</span></div>
+            <strong>${esc(it.title || it.slug)}</strong>
+            <div class="cover-pair"><div><div class="muted">A</div><img src="${esc(a)}" alt="A"/></div>
+              <div><div class="muted">B</div><img src="${esc(b)}" alt="B"/></div></div>
+            <div class="actions">
+              <button type="button" class="btn ok sm" data-lock="${esc(it.slug)}" data-var="A">锁定 A</button>
+              <button type="button" class="btn ok sm" data-lock="${esc(it.slug)}" data-var="B">锁定 B</button>
+              <button type="button" class="btn sm" data-reject="${esc(it.slug)}">驳回</button>
+              <button type="button" class="btn sm" data-hide="${esc(it.slug)}">隐藏</button>
+            </div>
+          </div>`;
+        }).join('') || '<p class="muted">暂无封面，请将素材放入 public/news-covers/assets/ 或 manifest</p>'}
+      </div>`;
+    content.onclick = async (ev) => {
+      const lock = ev.target.closest('[data-lock]');
+      const rej = ev.target.closest('[data-reject]');
+      const hid = ev.target.closest('[data-hide]');
+      try {
+        if (lock) {
+          const slug = lock.getAttribute('data-lock');
+          const variant = lock.getAttribute('data-var') || 'A';
+          if (!confirm(`确认锁定 ${slug} 变体 ${variant} 入库？`)) return;
+          await api('/admin/news-covers/' + encodeURIComponent(slug) + '/lock', { method: 'POST', body: { variant } });
+          await renderNewsCovers();
+        }
+        if (rej) {
+          if (!confirm('确认驳回？')) return;
+          await api('/admin/news-covers/' + encodeURIComponent(rej.getAttribute('data-reject')) + '/reject', { method: 'POST', body: {} });
+          await renderNewsCovers();
+        }
+        if (hid) {
+          await api('/admin/news-covers/' + encodeURIComponent(hid.getAttribute('data-hide')) + '/hide', { method: 'POST', body: {} });
+          await renderNewsCovers();
+        }
+      } catch (e) { alert(e.message); }
+    };
+  }
+
+  async function renderAudit() {
+    content.innerHTML = `
+      <div class="toolbar">
+        <select id="au-action"><option value="">全部动作</option></select>
+        <input id="au-from" type="date" />
+        <input id="au-to" type="date" />
+        <button class="btn primary" id="au-search">筛选</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>时间</th><th>动作</th><th>目标</th><th>摘要</th><th>IP</th></tr></thead>
+        <tbody id="au-body"><tr><td colspan="5" class="muted">加载中…</td></tr></tbody>
+      </table></div>
+      <div class="pager"><button class="btn sm" id="au-prev">上一页</button><span class="muted" id="au-page"></span><button class="btn sm" id="au-next">下一页</button></div>`;
+    let offset = 0;
+    const limit = 50;
+    const load = async () => {
+      const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+      const act = $('au-action').value;
+      if (act) qs.set('action', act);
+      if ($('au-from').value) qs.set('from', $('au-from').value + 'T00:00:00+08:00');
+      if ($('au-to').value) qs.set('to', $('au-to').value + 'T23:59:59+08:00');
+      const data = await api('/admin/audit?' + qs);
+      const sel = $('au-action');
+      if (sel.options.length <= 1 && (data.actions || []).length) {
+        data.actions.forEach((a) => {
+          const o = document.createElement('option');
+          o.value = a; o.textContent = a; sel.appendChild(o);
+        });
+      }
+      $('au-page').textContent = `${offset + 1}-${Math.min(offset + limit, data.total)} / ${data.total}`;
+      $('au-prev').disabled = offset <= 0;
+      $('au-next').disabled = offset + limit >= data.total;
+      $('au-body').innerHTML = (data.logs || []).map((r) => `<tr>
+        <td>${esc(r.tzLabel || fmtTime(r.createdAt))}</td>
+        <td>${esc(r.action)}</td>
+        <td>${esc(r.targetType || '')}${r.targetId ? ' #' + esc(r.targetId) : ''}</td>
+        <td>${esc(r.summary)}</td>
+        <td>${esc(r.ip || '')}</td>
+      </tr>`).join('') || '<tr><td colspan="5" class="muted">无记录</td></tr>';
+    };
+    $('au-search').onclick = () => { offset = 0; load().catch(alert); };
+    $('au-prev').onclick = () => { offset = Math.max(0, offset - limit); load().catch(alert); };
+    $('au-next').onclick = () => { offset += limit; load().catch(alert); };
+    await load();
   }
 
   async function renderUsers() {
@@ -400,6 +641,13 @@
     $('page-title').textContent = TITLES[page] || page;
     try {
       if (page === 'dashboard') await renderDashboard();
+      else if (page === 'pageviews') await renderPageviews();
+      else if (page === 'match-health') await renderMatchHealth();
+      else if (page === 'data-browser') await renderDataBrowser();
+      else if (page === 'backup') await renderBackup();
+      else if (page === 'membership') await renderMembership();
+      else if (page === 'news-covers') await renderNewsCovers();
+      else if (page === 'audit') await renderAudit();
       else if (page === 'users') await renderUsers();
       else if (page === 'orders') await renderOrders();
       else if (page === 'column') await renderColumn();

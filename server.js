@@ -2055,6 +2055,16 @@ app.get('/api/news/:id', async (req, res) => {
   }
 });
 
+// 1.9.249: lightweight page-view beacon (aggregated in app_page_views)
+app.post('/api/analytics/page-view', express.json({ limit: '4kb' }), (req, res) => {
+  try {
+    const pv = require('./lib/page-views');
+    res.json(pv.record(req.body && req.body.path, req.ip));
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // Tribe image upload sends base64 JSON (~2.8MB max); auth router JSON limit is 256kb — parse upload here first.
 app.use('/api/tribe/upload', express.json({ limit: '3mb' }));
 app.use('/api', require('./lib/admin'));
@@ -2155,6 +2165,9 @@ app.use('/api', (req, res) => res.status(404).json({ error: '接口不存在' })
 // 1.9.72: operator admin console (separate from App「我的」)
 app.get(['/admin', '/admin/'], (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html'));
+});
+app.get(['/news-covers', '/news-covers/'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'news-covers', 'index.html'));
 });
 app.use('/admin', express.static(path.join(__dirname, 'public', 'admin'), {
   setHeaders: (res, p) => { if (/\.(html|js|css)$/.test(p)) res.set('Cache-Control', 'no-cache'); },

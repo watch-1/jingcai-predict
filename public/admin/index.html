@@ -22,7 +22,7 @@
         <input type="password" id="login-pw" name="password" placeholder="ADMIN_PASSWORD / ADMIN_TOKEN" required autofocus />
         <button type="submit" class="btn primary block">登 录</button>
         <p id="login-err" class="err"></p>
-        <p class="hint">密码存于服务器环境变量，首次部署见 docs/admin-console-1.9.72.md</p>
+        <p class="hint">密码存于服务器环境变量，见 docs/admin-console-v2.md</p>
       </form>
     </div>
 
@@ -30,11 +30,30 @@
       <aside class="side">
         <div class="side-brand"><span class="logo sm">竞</span><strong>运营后台</strong></div>
         <nav id="nav">
-          <button type="button" data-page="dashboard" class="nav-item active">总览监控</button>
-          <button type="button" data-page="users" class="nav-item">用户管理</button>
-          <button type="button" data-page="orders" class="nav-item">会员订单</button>
-          <button type="button" data-page="column" class="nav-item">专栏管理</button>
-          <button type="button" data-page="flags" class="nav-item">功能开关</button>
+          <div class="nav-group">
+            <div class="nav-label">监控</div>
+            <button type="button" data-page="dashboard" class="nav-item active">总览</button>
+            <button type="button" data-page="pageviews" class="nav-item">浏览量</button>
+            <button type="button" data-page="match-health" class="nav-item">赛事健康</button>
+          </div>
+          <div class="nav-group">
+            <div class="nav-label">数据</div>
+            <button type="button" data-page="data-browser" class="nav-item">数据浏览</button>
+            <button type="button" data-page="backup" class="nav-item">备份</button>
+          </div>
+          <div class="nav-group">
+            <div class="nav-label">运营</div>
+            <button type="button" data-page="users" class="nav-item">用户</button>
+            <button type="button" data-page="orders" class="nav-item">订单</button>
+            <button type="button" data-page="membership" class="nav-item">经营</button>
+            <button type="button" data-page="column" class="nav-item">专栏</button>
+            <button type="button" data-page="news-covers" class="nav-item">头条封面</button>
+          </div>
+          <div class="nav-group">
+            <div class="nav-label">系统</div>
+            <button type="button" data-page="flags" class="nav-item">功能开关</button>
+            <button type="button" data-page="audit" class="nav-item">审计日志</button>
+          </div>
         </nav>
         <div class="side-foot">
           <div id="side-ver" class="muted"></div>
@@ -43,7 +62,7 @@
       </aside>
       <main class="main">
         <header class="top">
-          <h2 id="page-title">总览监控</h2>
+          <h2 id="page-title">总览</h2>
           <div class="top-right"><span id="clock" class="muted"></span></div>
         </header>
         <div id="content" class="content"></div>

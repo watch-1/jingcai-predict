@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>头条封面 A/B 预览</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #0b1220; color: #e8eefc; padding: 20px; }
+    h1 { font-size: 20px; }
+    .muted { color: #8b9bb8; font-size: 13px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 20px; }
+    .card { background: #151f36; border: 1px solid #243355; border-radius: 12px; padding: 12px; }
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    img { width: 100%; aspect-ratio: 16/10; object-fit: cover; border-radius: 8px; background: #111; }
+    .tag { font-size: 11px; color: #93c5fd; }
+  </style>
+</head>
+<body>
+  <h1>头条封面 A/B 画廊</h1>
+  <p class="muted">原创卡通素材预览 · 正式审核请使用 <a href="/admin/" style="color:#60a5fa">运营后台 → 头条封面</a></p>
+  <div id="grid" class="grid"><p class="muted">加载中…</p></div>
+  <script>
+    fetch('/api/admin/meta').catch(() => ({}));
+    fetch('/admin/news-covers', { headers: { Accept: 'application/json' } }).catch(() => null);
+    (async () => {
+      const el = document.getElementById('grid');
+      try {
+        const token = localStorage.getItem('jingcai_admin_token');
+        const headers = { Accept: 'application/json' };
+        if (token) headers.Authorization = 'Bearer ' + token;
+        const res = await fetch('/api/admin/news-covers', { headers, credentials: 'same-origin' });
+        if (!res.ok) throw new Error('需要运营登录后查看完整列表，或使用后台菜单');
+        const data = await res.json();
+        el.innerHTML = (data.items || []).map((it) => {
+          const a = (it.variants && it.variants.A) || '';
+          const b = (it.variants && it.variants.B) || '';
+          return `<div class="card"><div class="tag">${it.league || ''} · ${it.status || 'pending'}</div>
+            <strong>${it.title || it.slug}</strong>
+            <div class="pair"><div><div class="muted">A</div><img src="${a}" alt="A"/></div>
+            <div><div class="muted">B</div><img src="${b}" alt="B"/></div></div></div>`;
+        }).join('') || '<p class="muted">暂无封面条目</p>';
+      } catch (e) {
+        el.innerHTML = `<p class="muted">${e.message}。请打开 <a href="/admin/" style="color:#60a5fa">/admin</a> 登录后在「头条封面」管理。</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>
