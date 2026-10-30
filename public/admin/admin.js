@@ -41,15 +41,164 @@
     return `<span class="badge ${map[st] || ''}">${esc(lab[st] || st)}</span>`;
   }
 
-  function renderBarChart(series, valueKey) {
+  function fmtMetric(n) {
+    const v = Number(n) || 0;
+    if (v >= 10000) return (v / 10000).toFixed(1).replace(/\.0$/, '') + '万';
+    return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  function renderDelta(pct) {
+    if (pct == null || !Number.isFinite(Number(pct))) return '';
+    const n = Number(pct);
+    const cls = n >= 0 ? 'up' : 'down';
+    const sign = n > 0 ? '+' : '';
+    return `<span class="delta ${cls}">${sign}${n}%</span>`;
+  }
+
+  function renderSparkline(values, color) {
+    const vals = (values || []).map((v) => Number(v) || 0);
+    if (!vals.length) return '';
+    const w = 132;
+    const h = 40;
+    const max = Math.max(1, ...vals);
+    const min = Math.min(0, ...vals);
+    const span = max - min || 1;
+    const pts = vals.map((v, i) => {
+      const x = (i / Math.max(1, vals.length - 1)) * w;
+      const y = h - 4 - ((v - min) / span) * (h - 8);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const fillPts = `0,${h} ${pts} ${w},${h}`;
+    return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+      <polygon class="spark-fill" fill="${color}" fill-opacity=".18" points="${fillPts}"/>
+      <polyline fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" points="${pts}"/>
+    </svg>`;
+  }
+
+  function normalizeArr(vals) {
+    const max = Math.max(1, ...(vals || []).map((v) => Number(v) || 0));
+    return (vals || []).map((v) => (Number(v) || 0) / max);
+  }
+
+  function renderStackedTrendChart(series) {
+    const rows = series || [];
+    if (!rows.length) return '<p class="muted">暂无趋势数据</p>';
+    const W = 640;
+    const H = 220;
+    const padL = 36;
+    const padR = 12;
+    const padT = 16;
+    const padB = 28;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+    const views = normalizeArr(rows.map((r) => r.views));
+    const signups = normalizeArr(rows.map((r) => r.signups));
+    const paid = normalizeArr(rows.map((r) => r.paid));
+    const layers = [
+      { key: 'views', vals: views, color: '#6366f1', label: '浏览量' },
+      { key: 'signups', vals: signups, color: '#14b8a6', label: '新增用户' },
+      { key: 'paid', vals: paid, color: '#f59e0b', label: '付费笔数' },
+    ];
+    const n = rows.length;
+    const xAt = (i) => padL + (i / Math.max(1, n - 1)) * innerW;
+    const yAt = (v) => padT + (1 - v) * innerH;
+
+    function areaPath(cumulativeTop, cumulativeBottom) {
+      let d = '';
+      for (let i = 0; i < n; i++) {
+        const x = xAt(i);
+        const y = yAt(cumulativeTop[i]);
+        d += i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`;
+      }
+      for (let i = n - 1; i >= 0; i--) {
+        d += ` L ${xAt(i)} ${yAt(cumulativeBottom[i])}`;
+      }
+      d += ' Z';
+      return d;
+    }
+
+    const cum0 = rows.map(() => 0);
+    let cumBottom = cum0.slice();
+    let svgLayers = '';
+    for (const layer of layers) {
+      const cumTop = cumBottom.map((b, i) => b + layer.vals[i]);
+      svgLayers += `<path d="${areaPath(cumTop, cumBottom)}" fill="${layer.color}" fill-opacity=".72"/>`;
+      cumBottom = cumTop;
+    }
+
+    const grid = [0, 0.5, 1].map((t) => {
+      const y = yAt(t);
+      return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" class="chart-grid"/>`;
+    }).join('');
+
+    const labels = rows.map((r, i) => {
+      if (i % 2 !== 0 && i !== n - 1) return '';
+      const day = esc(String(r.day || '').slice(5));
+      return `<text x="${xAt(i)}" y="${H - 6}" class="chart-axis">${day}</text>`;
+    }).join('');
+
+    const legend = layers.map((l) =>
+      `<span class="chart-legend-item"><i style="background:${l.color}"></i>${l.label}</span>`).join('');
+
+    return `<div class="chart-head"><div><strong>运营趋势</strong><span class="muted">近 14 日 · 各指标按峰值归一化叠加</span></div><div class="chart-legend">${legend}</div></div>
+      <svg class="chart-area" viewBox="0 0 ${W} ${H}" role="img" aria-label="近14日浏览量、新增用户与付费笔数趋势">
+        ${grid}${svgLayers}${labels}
+      </svg>`;
+  }
+
+  function renderDonut(segments) {
+    const items = (segments || []).filter((s) => (Number(s.value) || 0) > 0);
+    const total = items.reduce((s, x) => s + (Number(x.value) || 0), 0) || 1;
+    const cx = 54;
+    const cy = 54;
+    const r = 42;
+    const ri = 26;
+    let angle = -Math.PI / 2;
+    const paths = items.map((seg) => {
+      const frac = (Number(seg.value) || 0) / total;
+      const sweep = frac * Math.PI * 2;
+      const x1 = cx + r * Math.cos(angle);
+      const y1 = cy + r * Math.sin(angle);
+      const x2 = cx + r * Math.cos(angle + sweep);
+      const y2 = cy + r * Math.sin(angle + sweep);
+      const xi1 = cx + ri * Math.cos(angle + sweep);
+      const yi1 = cy + ri * Math.sin(angle + sweep);
+      const xi2 = cx + ri * Math.cos(angle);
+      const yi2 = cy + ri * Math.sin(angle);
+      const large = sweep > Math.PI ? 1 : 0;
+      const d = `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${xi1} ${yi1} A ${ri} ${ri} 0 ${large} 0 ${xi2} ${yi2} Z`;
+      angle += sweep;
+      return `<path d="${d}" fill="${seg.color}"/>`;
+    }).join('');
+    const list = items.map((seg) =>
+      `<div class="donut-row"><span class="dot" style="background:${seg.color}"></span><span>${esc(seg.label)}</span><strong>${seg.value}</strong></div>`).join('');
+    return `<div class="donut-wrap"><svg viewBox="0 0 108 108" class="donut">${paths}<text x="${cx}" y="${cy}" class="donut-center">${total}</text></svg><div class="donut-list">${list}</div></div>`;
+  }
+
+  function renderKpiTile(opts) {
+    const { iconClass, label, value, sub, delta, sparkValues, sparkColor, linkPage } = opts;
+    const foot = linkPage
+      ? `<button type="button" class="kpi-link" data-go-page="${esc(linkPage)}">查看详情</button>` : '';
+    return `<article class="kpi-card">
+      <div class="kpi-top"><span class="kpi-icon ${iconClass || ''}"></span><span class="kpi-label">${esc(label)}</span></div>
+      <div class="kpi-metric">${renderDelta(delta)}<span class="kpi-value">${esc(value)}</span></div>
+      <div class="kpi-sub">${esc(sub || '')}</div>
+      ${renderSparkline(sparkValues, sparkColor || '#60a5fa')}
+      ${foot}
+    </article>`;
+  }
+
+  function renderBarChart(series, valueKey, accent) {
     const key = valueKey || 'views';
     const vals = (series || []).map((s) => Number(s[key]) || 0);
     const max = Math.max(1, ...vals);
-    return `<div class="chart-bars">${(series || []).map((s, i) => {
+    const grad = accent || '';
+    return `<div class="chart-bars${grad ? ' pro' : ''}">${(series || []).map((s, i) => {
       const v = vals[i];
       const h = Math.round((v / max) * 100);
       const day = esc(String(s.day || '').slice(5));
-      return `<div class="bar-col" title="${esc(s.day)}: ${v}"><div class="bar" style="height:${h}%"></div><span>${day}</span></div>`;
+      const style = grad ? ` style="height:${h}%;background:${grad}"` : ` style="height:${h}%"`;
+      return `<div class="bar-col" title="${esc(s.day)}: ${v}"><div class="bar"${style}></div><span>${day}</span></div>`;
     }).join('')}</div>`;
   }
 
@@ -123,6 +272,7 @@
   }
 
   async function renderDashboard() {
+    content.classList.add('content--dashboard');
     content.innerHTML = '<p class="muted">加载中…</p>';
     const d = await api('/admin/dashboard');
     const af = d.apiFootball || {};
@@ -130,35 +280,108 @@
     const orders = d.orders || {};
     const health = d.health || {};
     const pv = d.pageViews || {};
+    const charts = d.charts || {};
+    const series = charts.series14d || [];
+    const deltas = charts.deltas || {};
+    const revenue14 = series.reduce((s, r) => s + (Number(r.revenueFen) || 0), 0);
+    const orderDonut = [
+      { label: '已支付', value: orders.paid || 0, color: '#22c55e' },
+      { label: '待支付', value: orders.pending || 0, color: '#f59e0b' },
+      { label: '已取消', value: orders.cancelled || 0, color: '#64748b' },
+      { label: '已退款', value: orders.refunded || 0, color: '#ef4444' },
+      { label: '失败', value: orders.failed || 0, color: '#a855f7' },
+    ];
+    const todoBlock = (health.todos || []).length
+      ? `<ol class="todo-list">${health.todos.map((t) =>
+        `<li><button type="button" class="btn ghost sm" data-go-page="${esc(t.page)}">${esc(t.text)}</button></li>`).join('')}</ol>`
+      : '<p class="muted calm">暂无待办 · 系统状态良好</p>';
     content.innerHTML = `
       ${renderAlertStrip(health.alerts)}
-      <div class="panel-block">
-        <h3>今日待办</h3>
-        ${(health.todos || []).length ? `<ol class="todo-list">${health.todos.map((t) =>
-          `<li><button type="button" class="btn ghost sm" data-go-page="${esc(t.page)}">${esc(t.text)}</button></li>`).join('')}</ol>`
-          : '<p class="muted">暂无待办 · 系统状态良好</p>'}
-      </div>
-      <div class="cards">
-        <div class="card"><div class="k">服务版本</div><div class="v">${esc(d.version)}</div><div class="s">运行 ${esc(fmtUptime(d.uptimeSec))} · Asia/Shanghai</div></div>
-        <div class="card"><div class="k">用户 / 会员 / 封禁</div><div class="v">${d.users.total} / ${d.users.membersActive} / ${d.users.banned}</div><div class="s">注册用户总数</div></div>
-        <div class="card"><div class="k">订单（已付/待付）</div><div class="v">${orders.paid || 0} / ${orders.pending || 0}</div><div class="s">取消 ${orders.cancelled || 0} · 退款 ${orders.refunded || 0}</div></div>
-        <div class="card"><div class="k">专栏帖子</div><div class="v">${(d.column && d.column.posts) || 0}</div><div class="s">作者 ${(d.column && d.column.authors) || 0}</div></div>
-        <div class="card"><div class="k">AF 配额剩余</div><div class="v">${af.remaining == null ? '—' : af.remaining}</div><div class="s">限额 ${af.limit == null ? '—' : af.limit}</div></div>
-        <div class="card"><div class="k">球员库缺口</div><div class="v">${pdb.playerGapJingcai == null ? '—' : pdb.playerGapJingcai}</div><div class="s">竞彩场 ${pdb.jingcaiMatches || 0}</div></div>
-        <div class="card"><div class="k">今日 PV</div><div class="v">${(pv.today && pv.today.views) || 0}</div><div class="s">路径聚合 · 见浏览量页</div></div>
-      </div>
-      <div class="panel-block">
-        <h3>近 14 日浏览量</h3>
-        ${renderBarChart(pv.series14d || [], 'views')}
-      </div>
-      <div class="card">
-        <div class="k">能力配置</div>
-        <div class="s" style="font-size:13px;line-height:1.7;color:var(--text)">
-          DeepSeek：${d.deepseekConfigured ? '<span class="badge ok">已配置</span>' : '<span class="badge bad">未配置</span>'}
-          &nbsp; API-Football Key：${d.afKeyConfigured ? '<span class="badge ok">已配置</span>' : '<span class="badge bad">未配置</span>'}
-          &nbsp; 赛程源：${esc(health.scheduleSource || '—')} · 今日在售 ${health.sellingToday != null ? health.sellingToday : '—'}
-        </div>
-        ${pdb.error ? `<p class="err">${esc(pdb.error)}</p>` : ''}
+      <div class="dash-grid">
+        <section class="dash-col dash-col-left">
+          <div class="surface panel-block">
+            <div class="panel-head"><h3>今日待办</h3><span class="muted">${(health.todos || []).length} 项</span></div>
+            ${todoBlock}
+          </div>
+          <div class="surface panel-block compact">
+            <div class="panel-head"><h3>服务状态</h3></div>
+            <div class="stat-lines">
+              <div><span class="muted">版本</span><strong>v${esc(d.version)}</strong></div>
+              <div><span class="muted">运行</span><strong>${esc(fmtUptime(d.uptimeSec))}</strong></div>
+              <div><span class="muted">AF 配额</span><strong>${af.remaining == null ? '—' : af.remaining}/${af.limit == null ? '—' : af.limit}</strong></div>
+              <div><span class="muted">球员库缺口</span><strong>${pdb.playerGapJingcai == null ? '—' : pdb.playerGapJingcai}</strong></div>
+            </div>
+          </div>
+        </section>
+        <section class="dash-col dash-col-main">
+          <div class="kpi-grid">
+            ${renderKpiTile({
+              iconClass: 'ic-users',
+              label: '注册用户',
+              value: fmtMetric(d.users.total),
+              sub: `会员 ${d.users.membersActive} · 封禁 ${d.users.banned}`,
+              delta: deltas.signups,
+              sparkValues: series.map((r) => r.signups),
+              sparkColor: '#14b8a6',
+              linkPage: 'users',
+            })}
+            ${renderKpiTile({
+              iconClass: 'ic-orders',
+              label: '已付订单',
+              value: fmtMetric(orders.paid || 0),
+              sub: `待付 ${orders.pending || 0} · 近14日收入 ¥${(revenue14 / 100).toFixed(0)}`,
+              delta: deltas.paid,
+              sparkValues: series.map((r) => r.paid),
+              sparkColor: '#f59e0b',
+              linkPage: 'orders',
+            })}
+            ${renderKpiTile({
+              iconClass: 'ic-pv',
+              label: '今日浏览量',
+              value: fmtMetric((pv.today && pv.today.views) || 0),
+              sub: `UV 近似 ${fmtMetric((pv.today && pv.today.uniques) || 0)}`,
+              delta: deltas.views,
+              sparkValues: series.map((r) => r.views),
+              sparkColor: '#6366f1',
+              linkPage: 'pageviews',
+            })}
+            ${renderKpiTile({
+              iconClass: 'ic-column',
+              label: '专栏内容',
+              value: fmtMetric((d.column && d.column.posts) || 0),
+              sub: `作者 ${(d.column && d.column.authors) || 0} 人`,
+              sparkValues: [],
+              sparkColor: '#38bdf8',
+              linkPage: 'column',
+            })}
+          </div>
+          <div class="surface panel-block chart-panel">
+            ${renderStackedTrendChart(series)}
+          </div>
+          <div class="kpi-grid kpi-grid-secondary">
+            <div class="mini-card"><div class="k">今日在售场次</div><div class="v">${health.sellingToday != null ? health.sellingToday : '—'}</div><div class="s">赛程源 ${esc(health.scheduleSource || '—')}</div></div>
+            <div class="mini-card"><div class="k">竞彩覆盖场次</div><div class="v">${pdb.jingcaiMatches || 0}</div><div class="s">球员库同步</div></div>
+            <div class="mini-card"><div class="k">功能开关</div><div class="v">${(d.flags || []).filter((f) => f.on).length}/${(d.flags || []).length}</div><div class="s">已启用 / 总数</div></div>
+          </div>
+        </section>
+        <section class="dash-col dash-col-right">
+          <div class="surface panel-block">
+            <div class="panel-head"><h3>订单构成</h3><button type="button" class="kpi-link" data-go-page="orders">订单列表</button></div>
+            ${renderDonut(orderDonut)}
+          </div>
+          <div class="surface panel-block">
+            <div class="panel-head"><h3>近 14 日浏览量</h3><button type="button" class="kpi-link" data-go-page="pageviews">浏览量页</button></div>
+            ${renderBarChart(pv.series14d || [], 'views', 'linear-gradient(180deg, #c084fc, #7c3aed)')}
+          </div>
+          <div class="surface panel-block">
+            <div class="panel-head"><h3>能力配置</h3><button type="button" class="kpi-link" data-go-page="flags">功能开关</button></div>
+            <div class="cap-badges">
+              DeepSeek ${d.deepseekConfigured ? '<span class="badge ok">已配置</span>' : '<span class="badge bad">未配置</span>'}
+              API-Football ${d.afKeyConfigured ? '<span class="badge ok">Key 已配置</span>' : '<span class="badge bad">Key 未配置</span>'}
+            </div>
+            ${pdb.error ? `<p class="err">${esc(pdb.error)}</p>` : ''}
+          </div>
+        </section>
       </div>`;
     bindAlertNav(content);
   }
@@ -639,6 +862,7 @@
       el.classList.toggle('active', el.getAttribute('data-page') === page);
     });
     $('page-title').textContent = TITLES[page] || page;
+    content.classList.toggle('content--dashboard', page === 'dashboard');
     try {
       if (page === 'dashboard') await renderDashboard();
       else if (page === 'pageviews') await renderPageviews();
