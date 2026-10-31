@@ -50,6 +50,8 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> filePathCallback;
     private String pendingOpenHash;
     private boolean pageReady;
+    /** Session-level: only show the system POST_NOTIFICATIONS sheet once. */
+    private boolean notifyPermAsked;
     private final Handler bgHandler = new Handler(Looper.getMainLooper());
     private final Runnable bgFavGoalTick = new Runnable() {
         @Override public void run() {
@@ -109,6 +111,8 @@ public class MainActivity extends Activity {
                 pageReady = true;
                 injectSafeAreaTop();
                 injectOpenHash();
+                // 1.9.265: system notify dialog on first paint, even if JS boot is slow
+                requestGoalNotifyPermission();
             }
 
             @Override
@@ -244,6 +248,8 @@ public class MainActivity extends Activity {
     void requestGoalNotifyPermission() {
         if (Build.VERSION.SDK_INT < 33) return;
         if (hasGoalNotifyPermission()) return;
+        if (notifyPermAsked) return;
+        notifyPermAsked = true;
         requestPermissions(new String[]{ Manifest.permission.POST_NOTIFICATIONS }, REQ_POST_NOTIF);
     }
 
