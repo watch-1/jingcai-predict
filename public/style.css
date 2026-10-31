@@ -710,9 +710,10 @@ body.me-drawer-on { overflow: hidden; }
 .mc-top .fav-on { color: var(--gold); }
 .mc-teams { display: grid; grid-template-columns: minmax(0, 1fr) var(--match-mid-col) minmax(0, 1fr); align-items: center; gap: 3px 10px; margin: 0 0 1px; }
 .mc-teams .t { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.mc-teams .t.h { justify-content: flex-start; }
-.mc-teams .t.a { justify-content: flex-end; }
-.mc-teams .t .n { font-weight: 700; font-size: 13.5px; line-height: 1.2; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
+/* 1.9.261: team block hugs the mid column (懂球帝-style), not the card edges */
+.mc-teams .t.h { justify-content: flex-end; }
+.mc-teams .t.a { justify-content: flex-start; }
+.mc-teams .t .n { font-weight: 700; font-size: 13.5px; line-height: 1.2; color: var(--t1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; }
 .mc-teams .t .rk { display: none; } /* 1.9.95: ranks demoted; full name preferred */
 .mc-teams .badge { width: 21px; height: 21px; font-size: 9px; flex: none; }
 .mc-teams .badge.sm { width: 21px; height: 21px; font-size: 9px; }
@@ -2838,6 +2839,7 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .ls-st.ns { color: var(--pri); font-variant-numeric: tabular-nums; }
 /* 1.9.213: three-column teams row — same compact scale as mc-teams */
 /* 1.9.259: fixed center track so VS / live score share one width */
+/* 1.9.261: side blocks hug mid (flex-end / flex-start), matching 懂球帝 inset teams */
 .ls-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--match-mid-col) minmax(0, 1fr);
@@ -2847,10 +2849,11 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .ls-body .nm {
   font-weight: 700; font-size: 13.5px; line-height: 1.2; min-width: 0; color: var(--t1);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 0 1 auto;
 }
 .ls-side { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.ls-side.h { justify-content: flex-start; }
-.ls-side.a { justify-content: flex-end; }
+.ls-side.h { justify-content: flex-end; }
+.ls-side.a { justify-content: flex-start; }
 .ls-side .badge { width: 21px; height: 21px; font-size: 9px; flex: none; }
 /* legacy ls-side kept for any residual markup */
 .ls-side.home { display: grid; grid-template-columns: auto 1fr; justify-content: stretch; }
@@ -2858,6 +2861,7 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .ls-side .nm {
   font-weight: 650; font-size: 13.5px; line-height: 1.2; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 0 1 auto;
 }
 .ls-side.home .nm { text-align: right; }
 .ls-side.away .nm { text-align: left; }
