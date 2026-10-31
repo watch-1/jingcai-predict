@@ -14,7 +14,8 @@
   --tab-h: 54px; --top-chrome-h: 48px; --safe-b: env(safe-area-inset-bottom, 0px); --sat: env(safe-area-inset-top, 0px); --maxw: 720px;
   --tab-green: #2BB673;
   --fs: 13.5px; --lh: 1.45;
-  /* 1.9.259–1.9.260: shared 赛程/开奖 center column; 120px gives VS the live-score air gap */
+  /* 1.9.259–1.9.260: shared 赛程/开奖 center column; 120px desktop / tablet */
+  /* 1.9.266: phones shrink this token so team names keep the leftover width */
   --match-mid-col: 120px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -2875,6 +2876,28 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 }
 .ls-side.home .nm { text-align: right; }
 .ls-side.away .nm { text-align: left; }
+/* 1.9.266: prefer full team names on phones — 2-line wrap, ellipsis last resort.
+   Keep 1.9.260 outer align (home flex-start / away flex-end). Do not hug center. */
+.mc-teams .t .n,
+.ls-body .nm,
+.ls-side .nm {
+  font-weight: 700;
+  font-size: clamp(12px, 3.65vw, 13.5px);
+  line-height: 1.25;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-overflow: ellipsis;
+}
+.mc-teams .t.a .n,
+.ls-side.a .nm { text-align: right; }
 .ls-mid { text-align: center; width: 100%; min-width: 0; padding: 0 4px; }
 .ls-mid .score { font-size: 19px; font-weight: 800; color: var(--red); letter-spacing: .03em; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .ls-mid .score.is-live,
@@ -2882,6 +2905,15 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .ls-mid .vs { font-weight: 700; color: var(--t3); font-size: 12px; line-height: 1.15; display: block; }
 .ls-mid .match-st { font-size: 10.5px; margin-bottom: 1px; white-space: nowrap; }
 .ls-mid .match-ht { font-size: 10px; margin-top: 1px; white-space: nowrap; }
+@media (max-width: 479px) {
+  :root { --match-mid-col: clamp(76px, 22vw, 100px); }
+  .mc-teams,
+  .ls-body { column-gap: clamp(6px, 2.2vw, 10px); }
+  .mc-mid .score,
+  .ls-mid .score { font-size: clamp(16px, 4.8vw, 19px); }
+  .match-st,
+  .ls-mid .match-st { font-size: clamp(9.5px, 2.7vw, 10.5px); }
+}
 .ls-score {
   display: flex; align-items: baseline; justify-content: center; gap: 4px;
   font-weight: 800; line-height: 1;
