@@ -13,13 +13,13 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.257/.test(ver));
-assert.ok(/VERSION_CODE=293/.test(ver));
-assert.ok(/jc-v1\.9\.257/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.257');
-assert.strictEqual(cfg.version, '1.9.257');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.257\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-293\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.258/.test(ver));
+assert.ok(/VERSION_CODE=294/.test(ver));
+assert.ok(/jc-v1\.9\.258/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.258');
+assert.strictEqual(cfg.version, '1.9.258');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.258\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-294\}"/.test(apkSh));
 
 const bodyFn = appJs.match(/function scheduleBodyHtml[\s\S]*?^}/m)?.[0] || '';
 assert.ok(!/lg-group/.test(bodyFn), 'no league group headers in schedule body');

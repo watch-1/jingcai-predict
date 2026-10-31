@@ -9,7 +9,7 @@ let fails = 0;
 const ok = (c, m) => { console.log(c ? 'OK  ' : 'FAIL', m); if (!c) fails++; };
 
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-ok(/VERSION=1\.9\.25[34]/.test(ver), 'VERSION.txt at least 1.9.253');
+ok(/VERSION=1\.9\.25[3-9]/.test(ver) || /VERSION=1\.9\.26/.test(ver), 'VERSION.txt at least 1.9.253');
 
 const smooth = require('../public/admin/chart-smooth.js');
 
