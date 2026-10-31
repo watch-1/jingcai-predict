@@ -14,6 +14,8 @@
   --tab-h: 54px; --top-chrome-h: 48px; --safe-b: env(safe-area-inset-bottom, 0px); --sat: env(safe-area-inset-top, 0px); --maxw: 720px;
   --tab-green: #2BB673;
   --fs: 13.5px; --lh: 1.45;
+  /* 1.9.259: shared 赛程/开奖 center column so 未开赛「VS」matches live/FT「3 : 0」width */
+  --match-mid-col: 88px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { background: var(--bg, #F5F7FB); }
@@ -706,7 +708,7 @@ body.me-drawer-on { overflow: hidden; }
 .mc-top { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t3); }
 .mc-top .sp { flex: 1; }
 .mc-top .fav-on { color: var(--gold); }
-.mc-teams { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 3px 10px; margin: 0 0 1px; }
+.mc-teams { display: grid; grid-template-columns: minmax(0, 1fr) var(--match-mid-col) minmax(0, 1fr); align-items: center; gap: 3px 10px; margin: 0 0 1px; }
 .mc-teams .t { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .mc-teams .t.h { justify-content: flex-start; }
 .mc-teams .t.a { justify-content: flex-end; }
@@ -714,12 +716,12 @@ body.me-drawer-on { overflow: hidden; }
 .mc-teams .t .rk { display: none; } /* 1.9.95: ranks demoted; full name preferred */
 .mc-teams .badge { width: 21px; height: 21px; font-size: 9px; flex: none; }
 .mc-teams .badge.sm { width: 21px; height: 21px; font-size: 9px; }
-.mc-mid { text-align: center; min-width: 62px; padding: 0 4px; }
-.mc-mid .vs { font-weight: 700; color: var(--t3); font-size: 12px; line-height: 1.15; }
-.mc-mid .score { font-size: 19px; font-weight: 800; color: var(--red); letter-spacing: .03em; line-height: 1.05; }
-.match-st { font-size: 10.5px; font-weight: 600; color: var(--t3); line-height: 1.15; margin-bottom: 1px; }
+.mc-mid { text-align: center; width: 100%; min-width: 0; padding: 0 4px; }
+.mc-mid .vs { font-weight: 700; color: var(--t3); font-size: 12px; line-height: 1.15; display: block; }
+.mc-mid .score { font-size: 19px; font-weight: 800; color: var(--red); letter-spacing: .03em; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.match-st { font-size: 10.5px; font-weight: 600; color: var(--t3); line-height: 1.15; margin-bottom: 1px; white-space: nowrap; }
 .match-st.red { color: var(--red); }
-.match-ht { font-size: 10px; color: var(--t3); margin-top: 1px; line-height: 1.15; }
+.match-ht { font-size: 10px; color: var(--t3); margin-top: 1px; line-height: 1.15; white-space: nowrap; }
 .mc-mid small { display: block; font-size: 10px; color: var(--t3); }
 .mc-result .rs-tags { margin-top: 4px; gap: 4px; }
 .mc-result .rs-tags span { font-size: 11px; padding: 1px 6px; }
@@ -2835,9 +2837,10 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .ls-st.ft { color: var(--t3); font-weight: 600; }
 .ls-st.ns { color: var(--pri); font-variant-numeric: tabular-nums; }
 /* 1.9.213: three-column teams row — same compact scale as mc-teams */
+/* 1.9.259: fixed center track so VS / live score share one width */
 .ls-body {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) var(--match-mid-col) minmax(0, 1fr);
   align-items: center;
   gap: 3px 10px;
 }
@@ -2858,11 +2861,11 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 }
 .ls-side.home .nm { text-align: right; }
 .ls-side.away .nm { text-align: left; }
-.ls-mid { text-align: center; min-width: 62px; padding: 0 4px; }
-.ls-mid .score { font-size: 19px; font-weight: 800; color: var(--red); letter-spacing: .03em; line-height: 1.05; }
-.ls-mid .vs { font-weight: 700; color: var(--t3); font-size: 12px; line-height: 1.15; }
-.ls-mid .match-st { font-size: 10.5px; margin-bottom: 1px; }
-.ls-mid .match-ht { font-size: 10px; margin-top: 1px; }
+.ls-mid { text-align: center; width: 100%; min-width: 0; padding: 0 4px; }
+.ls-mid .score { font-size: 19px; font-weight: 800; color: var(--red); letter-spacing: .03em; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ls-mid .vs { font-weight: 700; color: var(--t3); font-size: 12px; line-height: 1.15; display: block; }
+.ls-mid .match-st { font-size: 10.5px; margin-bottom: 1px; white-space: nowrap; }
+.ls-mid .match-ht { font-size: 10px; margin-top: 1px; white-space: nowrap; }
 .ls-score {
   display: flex; align-items: baseline; justify-content: center; gap: 4px;
   font-weight: 800; line-height: 1;
