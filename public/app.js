@@ -4351,20 +4351,8 @@ function scheduleBodyHtml(model) {
   const rows = scheduleListRows(modeRows);
   if (!rows.length) {
     h += empty('该日期暂无场次，可切换日期查看。', '', '暂无场次');
-  } else if (S.schLeague === '全部') {
-    const groups = [];
-    const map = new Map();
-    rows.forEach(x => {
-      const lg = x.league || '其他';
-      if (!map.has(lg)) { map.set(lg, []); groups.push(lg); }
-      map.get(lg).push(x);
-    });
-    h += groups.map(lg => {
-      const list = map.get(lg);
-      return `<div class="lg-group ls-group"><div class="lg-head">${homeTheme() === 'pitch' ? `<span class="tag tag-muted">${esc(lg)}</span>` : `<span class="tag" style="background:${esc(list[0].leagueColor || '#2F6FED')}">${esc(lg)}</span>`}<span class="lg-n">${list.length} 场</span></div>
-        <div class="ls-list">${list.map(scoreCard).join('')}</div></div>`;
-    }).join('');
   } else {
+    // 1.9.257: 「全部」与单联赛筛选均按竞彩编号平铺，不再按联赛分块（避免 009→意甲块、010→德甲块打断编号序）
     h += `<div class="ls-list">${rows.map(scoreCard).join('')}</div>`;
   }
   if (typeof console !== 'undefined' && console.debug) {
