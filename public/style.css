@@ -14,8 +14,8 @@
   --tab-h: 54px; --top-chrome-h: 48px; --safe-b: env(safe-area-inset-bottom, 0px); --sat: env(safe-area-inset-top, 0px); --maxw: 720px;
   --tab-green: #2BB673;
   --fs: 13.5px; --lh: 1.45;
-  /* 1.9.259: shared 赛程/开奖 center column so 未开赛「VS」matches live/FT「3 : 0」width */
-  --match-mid-col: 88px;
+  /* 1.9.259–1.9.260: shared 赛程/开奖 center column; 120px gives VS the live-score air gap */
+  --match-mid-col: 120px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { background: var(--bg, #F5F7FB); }
