@@ -57,4 +57,9 @@ arch.recordResultsFromList([{ id: 'new9', businessDate: '2026-10-25', full: '3:3
 const disk = JSON.parse(fs.readFileSync(seenPath, 'utf8'));
 assert.ok(disk.byId.new9 && disk.byId.new9.full === '3:3', 'record persists');
 
+const cup = arch.toHistoryFormRow({
+  id: 'x1', date: '2026-10-29', home: 'H', away: 'A', full: '2:2', homeTeamId: '1', awayTeamId: '2',
+});
+assert.strictEqual(cup.winFlag, 'D', 'winFlag derived from score');
+
 console.log('results-archive-test OK');
