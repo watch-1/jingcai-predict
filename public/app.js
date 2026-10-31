@@ -765,6 +765,7 @@ const S = {
   bonusOpt: { mode: 'avg', amount: 0, mults: [] },
   schHideFinished: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_hide_fin') === '1'),
   liveScores: null, liveScoresAt: 0, liveScorePoll: null, liveScoresLoading: false,
+  favGoalPoll: null, goalAlertSeen: {}, goalAlertWatching: {},
   rsDate: null, rsLeague: '全部', prFilter: '全部', prLane: 'hub', dataLeague: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_lg')) || 'epl', dataKind: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_data_kind')) || 'standings', dataSection: initDataSectionEarly(), bannerIdx: 0, pendingAv: null,
   detailTab: {}, voteCache: {}, statsCache: {}, statsUi: {}, liveStatsCache: {}, livePoll: null, predictCache: {}, reviewCache: {}, reviewListCache: null, usefulness: null, leanByMatch: {},
   chatCache: {}, chatPoll: null, chatEs: null, aiChatCache: {}, pitchAnimSeen: {},
@@ -796,6 +797,18 @@ function persistLists() {
     LS.set('jc_plans_local', S.plans); LS.set('jc_favs_local', S.favs);
     LS.set('jc_tribe_follows_local', S.tribeFollows);
   }
+}
+function loadGoalAlertSeen() {
+  const raw = LS.get('jc_goal_alert_seen', {});
+  S.goalAlertSeen = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+}
+function persistGoalAlertSeen() {
+  const seen = S.goalAlertSeen || {};
+  const keys = Object.keys(seen);
+  if (keys.length > 80) {
+    keys.slice(0, keys.length - 80).forEach(k => { delete seen[k]; });
+  }
+  LS.set('jc_goal_alert_seen', seen);
 }
 function setSession(token, user) {
   S.token = token; S.user = user; LS.set('jc_token', token); LS.set('jc_user', user); LS.set('jc_guest', false); S.guest = false;
@@ -1799,7 +1812,10 @@ async function toggleFav(id) {
     catch (e) { return toast(e.message); }
   }
   S.favs = on ? S.favs.filter(f => f.matchId !== String(m.id)) : [snap, ...S.favs];
-  persistLists(); toast(on ? '已取消关注' : loggedIn() ? '已关注，已同步到账号' : '已关注（本机保存，登录后可同步）'); render();
+  persistLists(); toast(on ? '已取消关注' : loggedIn() ? '已关注，已同步到账号' : '已关注（本机保存，登录后可同步）');
+  if (!on) requestFavGoalNotifyPermission();
+  ensureFavGoalPoll();
+  render();
 }
 async function savePlan() {
   const c = calc(); const sm = selMatches(); if (!sm.length) return;
@@ -4267,9 +4283,11 @@ async function loadLiveScores(ids, { force, bust } = {}) {
       // bust (pull-to-refresh): refresh=1 skips the server-side payload cache too.
       const j = await api('/live-scores?ids=' + encodeURIComponent(list.join(',')) + (bust ? '&refresh=1' : ''), { timeout: 15000 });
       if (j && j.data && typeof j.data === 'object') {
-        S.liveScores = { ...(S.liveScores || {}), ...j.data };
+        const prevScores = S.liveScores || {};
+        S.liveScores = { ...prevScores, ...j.data };
         S.liveScoresAt = Date.now();
         S.liveScoresMeta = { fetchedAt: j.fetchedAt, ttlSec: j.ttlSec, afUsed: j.afUsed, quota: j.quota, cached: j.cached };
+        notifyFavGoalsFromScores(prevScores, S.liveScores);
       }
     } catch (e) {
       console.warn('live-scores', e.message);
@@ -4282,6 +4300,175 @@ async function loadLiveScores(ids, { force, bust } = {}) {
   S._liveScoresInflight = job;
   return job;
 }
+
+/** 1.9.264: 关注场次进球本地通知 — 纯函数，便于单测。 */
+function scorePairKey(homeScore, awayScore) {
+  if (homeScore == null || awayScore == null) return null;
+  const h = Number(homeScore), a = Number(awayScore);
+  if (!Number.isFinite(h) || !Number.isFinite(a)) return null;
+  return h + '-' + a;
+}
+function parseScorePairKey(key) {
+  if (key == null || key === '') return null;
+  const p = String(key).split('-');
+  if (p.length !== 2) return null;
+  const h = Number(p[0]), a = Number(p[1]);
+  if (!Number.isFinite(h) || !Number.isFinite(a)) return null;
+  return { h, a };
+}
+/**
+ * lastNotified: '2-1' or null. alreadyWatching: poller already tracked this live match.
+ * nextLive: { homeScore, awayScore }
+ * action: seed | notify | skip | watch
+ */
+function favGoalAlertDecision(lastNotified, nextLive, alreadyWatching) {
+  const nextKey = nextLive ? scorePairKey(nextLive.homeScore, nextLive.awayScore) : null;
+  if (!nextKey) return { action: 'watch' };
+  if (lastNotified === nextKey) return { action: 'skip', key: nextKey };
+  const nh = Number(nextLive.homeScore), na = Number(nextLive.awayScore);
+  if (lastNotified == null) {
+    if (alreadyWatching && (nh > 0 || na > 0)) {
+      return { action: 'notify', key: nextKey, homeScore: nh, awayScore: na };
+    }
+    return { action: 'seed', key: nextKey };
+  }
+  const last = parseScorePairKey(lastNotified);
+  if (!last) return { action: 'seed', key: nextKey };
+  if (nh > last.h || na > last.a) {
+    return { action: 'notify', key: nextKey, homeScore: nh, awayScore: na };
+  }
+  return { action: 'seed', key: nextKey };
+}
+function buildFavGoalNotifyCopy(home, away, homeScore, awayScore, minute, player) {
+  const h = home || '主队';
+  const a = away || '客队';
+  let body = h + ' ' + homeScore + '-' + awayScore + ' ' + a;
+  if (player) body += ' · ' + player;
+  if (minute != null && Number.isFinite(Number(minute))) body += ' · ' + Number(minute) + "'";
+  return { title: '进球提醒', body };
+}
+function lastCachedGoalHint(liveStats) {
+  const ev = liveStats && Array.isArray(liveStats.events) ? liveStats.events : null;
+  if (!ev || !ev.length) return null;
+  for (let i = ev.length - 1; i >= 0; i--) {
+    const e = ev[i];
+    if (!e || e.kind !== 'goal') continue;
+    return { minute: e.elapsed != null ? Number(e.elapsed) : null, player: e.playerZh || e.player || '' };
+  }
+  return null;
+}
+function favGoalWatchIds(now) {
+  now = now || Date.now();
+  const out = [];
+  for (const f of (S.favs || [])) {
+    const id = String(f.matchId || f.id || '');
+    if (!id) continue;
+    const live = S.liveScores && S.liveScores[id];
+    if (live && live.finished && !live.live) continue;
+    const m = findMatch(id) || scheduleRowSource(id) || (S.results || []).find(x => String(x.id) === id) || f;
+    const ko = m && m.date ? kickoff(m) : NaN;
+    if (Number.isFinite(ko)) {
+      if (now < ko - 90e3) continue;
+      if (now > ko + 3.5 * 3600e3 && !(live && live.live)) continue;
+    } else if (!(live && live.live)) {
+      continue;
+    }
+    out.push(id);
+  }
+  return out;
+}
+function favNotifyMeta(id) {
+  const sid = String(id);
+  const f = (S.favs || []).find(x => String(x.matchId) === sid);
+  const m = findMatch(sid) || scheduleRowSource(sid);
+  return {
+    home: (m && m.home) || (f && f.home) || '主队',
+    away: (m && m.away) || (f && f.away) || '客队',
+  };
+}
+function requestFavGoalNotifyPermission() {
+  try {
+    if (!IS_APP) return;
+    if (window.JingcaiChrome && typeof window.JingcaiChrome.requestNotifyPermission === 'function') {
+      window.JingcaiChrome.requestNotifyPermission();
+    }
+  } catch (_) {}
+}
+function fireFavGoalNotify(payload) {
+  try {
+    if (!IS_APP) return;
+    const bridge = window.JingcaiChrome;
+    if (!bridge || typeof bridge.notifyGoal !== 'function') return;
+    bridge.notifyGoal(JSON.stringify(payload));
+  } catch (_) {}
+}
+function notifyFavGoalsFromScores(prevMap, nextMap) {
+  if (!IS_APP) return;
+  const favs = S.favs || [];
+  if (!favs.length || !nextMap) return;
+  S.goalAlertSeen = S.goalAlertSeen || {};
+  S.goalAlertWatching = S.goalAlertWatching || {};
+  let changed = false;
+  for (const f of favs) {
+    const id = String(f.matchId || f.id || '');
+    if (!id) continue;
+    const next = nextMap[id];
+    if (!next) continue;
+    const last = S.goalAlertSeen[id] || null;
+    const watching = !!S.goalAlertWatching[id];
+    const d = favGoalAlertDecision(last, next, watching);
+    if (d.action === 'watch') {
+      S.goalAlertWatching[id] = true;
+      continue;
+    }
+    if (d.action === 'skip') continue;
+    if (d.key) {
+      S.goalAlertSeen[id] = d.key;
+      changed = true;
+    }
+    if (d.action === 'notify') {
+      const meta = favNotifyMeta(id);
+      const hint = lastCachedGoalHint(S.liveStatsCache && S.liveStatsCache[id]);
+      const minute = (hint && hint.minute != null) ? hint.minute : next.minute;
+      const copy = buildFavGoalNotifyCopy(meta.home, meta.away, d.homeScore, d.awayScore, minute, hint && hint.player);
+      fireFavGoalNotify({
+        matchId: id,
+        title: copy.title,
+        body: copy.body,
+        home: meta.home,
+        away: meta.away,
+        homeScore: d.homeScore,
+        awayScore: d.awayScore,
+      });
+    }
+    S.goalAlertWatching[id] = true;
+  }
+  if (changed) persistGoalAlertSeen();
+}
+function stopFavGoalPoll() {
+  if (S.favGoalPoll) { clearInterval(S.favGoalPoll); S.favGoalPoll = null; }
+}
+async function tickFavGoalPoll() {
+  if (!(S.favs || []).length) { stopFavGoalPoll(); return; }
+  const ids = favGoalWatchIds();
+  if (!ids.length) return;
+  const scheduleCovering = !document.hidden && route().name === 'schedule' && S.liveScorePoll
+    && S.liveScoresAt && Date.now() - S.liveScoresAt < 40000;
+  if (scheduleCovering) {
+    notifyFavGoalsFromScores(S.liveScores || {}, S.liveScores || {});
+    return;
+  }
+  await loadLiveScores(ids, { force: true, bust: true });
+}
+function ensureFavGoalPoll() {
+  if (!IS_APP) { stopFavGoalPoll(); return; }
+  if (!(S.favs || []).length) { stopFavGoalPoll(); return; }
+  if (S.favGoalPoll) return;
+  tickFavGoalPoll();
+  S.favGoalPoll = setInterval(tickFavGoalPoll, 30000);
+}
+try { window.__tickFavGoalPoll = tickFavGoalPoll; } catch (_) {}
+
 /** 1.9.245: 下拉刷新时强制拉取当日实时比分（同时跳过客户端与服务端缓存）。 */
 function pullRefreshScheduleLiveScores() {
   try {
@@ -8329,6 +8516,7 @@ function syncLiveScoreFromStats(matchId, live) {
     source: (prev.source ? prev.source + '+' : '') + 'detail',
     scoreSource: 'detail',
   };
+  notifyFavGoalsFromScores({ [id]: prev }, { [id]: S.liveScores[id] });
   return true;
 }
 function appColdLiveStatsSession() {
@@ -10662,6 +10850,7 @@ function pageFavs() {
   let h = hdr('我的关注');
   if (!S.favs.length) return h + empty('在赛事详情页点击「关注」，即可把场次收藏到这里，方便跟踪。', '<button class="btn pri sm" data-go="#/schedule">去看赛程</button>', '还没有关注') + foot();
   if (!loggedIn()) h += infoBar('当前为游客，关注仅保存在本机。<a href="#/login">登录</a> 后自动同步到账号。');
+  if (IS_APP) h += infoBar('关注场次进行中进球时，将弹出系统通知（需授予通知权限）。');
   h += '<div style="height:10px"></div><div class="grid">' + S.favs.map(f => {
     const m = findMatch(f.matchId); if (m) return matchCard(m, { odds: false });
     const r = (S.results || []).find(x => x.id === f.matchId); if (r) return resultCard(r);
@@ -10740,6 +10929,7 @@ function pageSettings() {
       </button>
     </div>
     <p class="note" style="margin:4px 16px 12px">选择会保存在本机，下次打开仍生效。也可在首页右下角主题条切换。</p>
+    ${IS_APP ? '<p class="note" style="margin:4px 16px 12px">关注场次进行中进球时会弹出系统通知。首次关注或打开应用时将申请通知权限；拒绝后可在系统设置中开启。</p>' : ''}
     <div class="menu">
     <button data-act="clearCache"><span class="mic" style="background:#ff8a1f">${I.refresh}</span><span class="sp">清除缓存</span><span class="val">赛事数据缓存</span>${I.arr}</button>
     <button data-go="#/about"><span class="mic" style="background:#0aa5b8">${I.info}</span><span class="sp">关于</span><span class="val">v${esc(CFG.version)}</span>${I.arr}</button>
@@ -12498,7 +12688,9 @@ document.addEventListener('click', async e => {
     case 'fav': return toggleFav(d.id);
     case 'unfav': {
       if (loggedIn()) { try { await api('/favorites/' + encodeURIComponent(d.id), { method: 'DELETE' }); } catch (er) { return toast(er.message); } }
-      S.favs = S.favs.filter(f => f.matchId !== d.id); persistLists(); toast('已取消关注'); return render();
+      S.favs = S.favs.filter(f => f.matchId !== d.id); persistLists(); toast('已取消关注');
+      ensureFavGoalPoll();
+      return render();
     }
     case 'clearSel': S.sel = {}; S.types = []; S.mult = 1; return render();
     case 'schChannel': {
@@ -13050,6 +13242,7 @@ document.addEventListener('submit', async e => {
 
 // ======================= boot =======================
 loadLocalLists();
+loadGoalAlertSeen();
 hydrateFromCache(); // 1.9.124: JSON lists
 hydrateKbPacksCache(); // 1.9.158: KB list before first /kb paint
 if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.161: idle KB warm; DC queue yields while #/kb or KB in-flight
@@ -13128,18 +13321,28 @@ window.__partnerGateReady.then((ok) => {
       if (r.name === 'home') { try { persistHomeSnap(document.getElementById('view')); persistPredictCache(); } catch (_) {} }
       if (bootShellHeld()) revealBootShell();
     }
+    ensureFavGoalPoll();
   });
-  refreshAccount().then(() => { if (['me', 'plans', 'favs', 'profile', 'membership', 'orders', 'pay'].includes(route().name)) render({ force: true }); });
+  refreshAccount().then(() => {
+    if (['me', 'plans', 'favs', 'profile', 'membership', 'orders', 'pay'].includes(route().name)) render({ force: true });
+    if ((S.favs || []).length) requestFavGoalNotifyPermission();
+    ensureFavGoalPoll();
+  });
   loadMembershipCatalog();
+  ensureFavGoalPoll();
 });
 setInterval(tickClock, 1000);
 addEventListener('visibilitychange', () => {
-  if (document.hidden) return;
+  if (document.hidden) {
+    ensureFavGoalPoll();
+    return;
+  }
   tickClock();
   // 1.9.247: 回前台立即强刷赛程实时比分（后台期间 interval 不跑，比分/分钟会停滞）
   if (route().name === 'schedule') {
     pullRefreshScheduleLiveScores().then(() => { afterScheduleLiveScoresLoaded(); resumeScheduleLivePoll(); }).catch(() => {});
   }
+  ensureFavGoalPoll();
 });
 if (IS_PARTNER) {
   setInterval(() => { if (!document.hidden && !window.__partnerKilled) checkPartnerGate(); }, 60 * 1000);

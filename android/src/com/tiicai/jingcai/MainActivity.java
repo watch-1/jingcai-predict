@@ -1,12 +1,20 @@
 package com.tiicai.jingcai;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -21,6 +29,7 @@ import android.webkit.WebViewClient;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
+import org.json.JSONObject;
 
 /**
  * 竞彩预测: WebView shell. Frontend is bundled in assets/www and served from
@@ -35,8 +44,23 @@ public class MainActivity extends Activity {
     /** CSS --pri-d / theme-color. Used as WebView/window fill while page paints. */
     static final int CHROME = Color.parseColor("#1B2A4A");
     private static final int FILE_CHOOSER_REQUEST = 9101;
+    private static final int REQ_POST_NOTIF = 9102;
+    static final String GOAL_CHANNEL = "goal_alerts";
     private WebView web;
     private ValueCallback<Uri[]> filePathCallback;
+    private String pendingOpenHash;
+    private boolean pageReady;
+    private final Handler bgHandler = new Handler(Looper.getMainLooper());
+    private final Runnable bgFavGoalTick = new Runnable() {
+        @Override public void run() {
+            if (web != null) {
+                web.evaluateJavascript(
+                    "(function(){try{if(window.__tickFavGoalPoll)window.__tickFavGoalPoll();}catch(e){}})();",
+                    null);
+            }
+            bgHandler.postDelayed(this, 30000);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,7 +106,9 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                pageReady = true;
                 injectSafeAreaTop();
+                injectOpenHash();
             }
 
             @Override
@@ -111,6 +137,8 @@ public class MainActivity extends Activity {
         setContentView(web);
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
         else web.loadUrl(START);
+        applyOpenHash(getIntent());
+        ensureGoalChannel();
     }
 
     /**
@@ -181,6 +209,126 @@ public class MainActivity extends Activity {
                 @Override public void run() { injectSafeAreaTop(); }
             });
         }
+
+        /** Android 13+ POST_NOTIFICATIONS. No-op if already granted or older OS. */
+        @JavascriptInterface
+        public void requestNotifyPermission() {
+            runOnUiThread(new Runnable() {
+                @Override public void run() { requestGoalNotifyPermission(); }
+            });
+        }
+
+        @JavascriptInterface
+        public boolean hasNotifyPermission() {
+            return hasGoalNotifyPermission();
+        }
+
+        /**
+         * JSON: { matchId, title, body }. Web-only callers never hit this.
+         * Same score must be de-duplicated in JS before calling.
+         */
+        @JavascriptInterface
+        public void notifyGoal(String json) {
+            final String raw = json;
+            runOnUiThread(new Runnable() {
+                @Override public void run() { showGoalNotification(raw); }
+            });
+        }
+    }
+
+    boolean hasGoalNotifyPermission() {
+        if (Build.VERSION.SDK_INT < 33) return true;
+        return checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    void requestGoalNotifyPermission() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        if (hasGoalNotifyPermission()) return;
+        requestPermissions(new String[]{ Manifest.permission.POST_NOTIFICATIONS }, REQ_POST_NOTIF);
+    }
+
+    void ensureGoalChannel() {
+        if (Build.VERSION.SDK_INT < 26) return;
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm == null) return;
+        NotificationChannel ch = new NotificationChannel(
+            GOAL_CHANNEL, "进球提醒", NotificationManager.IMPORTANCE_HIGH);
+        ch.setDescription("关注场次进球时提醒");
+        ch.enableVibration(true);
+        nm.createNotificationChannel(ch);
+    }
+
+    static boolean validMatchId(String id) {
+        return id != null && id.matches("[A-Za-z0-9:._-]{1,80}");
+    }
+
+    static String jsonEscape(String s) {
+        if (s == null) return "\"\"";
+        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "") + "\"";
+    }
+
+    void applyOpenHash(Intent intent) {
+        if (intent == null) return;
+        String matchId = intent.getStringExtra("match_id");
+        if (validMatchId(matchId)) {
+            pendingOpenHash = "#/match/" + Uri.encode(matchId);
+            intent.removeExtra("match_id");
+            injectOpenHash();
+        }
+    }
+
+    void injectOpenHash() {
+        if (pendingOpenHash == null || web == null || !pageReady) return;
+        final String hash = pendingOpenHash;
+        pendingOpenHash = null;
+        final String js = "(function(){try{location.hash=" + jsonEscape(hash) + ";}catch(e){}})();";
+        web.evaluateJavascript(js, null);
+    }
+
+    void showGoalNotification(String json) {
+        if (!hasGoalNotifyPermission()) return;
+        String title = "进球提醒";
+        String body = "";
+        String matchId = "";
+        try {
+            JSONObject o = new JSONObject(json == null ? "{}" : json);
+            if (o.has("title")) title = o.optString("title", title);
+            if (o.has("body")) body = o.optString("body", "");
+            if (o.has("matchId")) matchId = o.optString("matchId", "");
+        } catch (Exception ignored) {
+            return;
+        }
+        if (title == null || title.length() == 0) title = "进球提醒";
+        if (body == null) body = "";
+        if (title.length() > 40) title = title.substring(0, 40);
+        if (body.length() > 120) body = body.substring(0, 120);
+        if (!validMatchId(matchId)) matchId = "";
+
+        ensureGoalChannel();
+        Intent tap = new Intent(this, MainActivity.class);
+        tap.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        if (matchId.length() > 0) tap.putExtra("match_id", matchId);
+        int nid = matchId.length() > 0 ? matchId.hashCode() : (int) (System.currentTimeMillis() & 0x7fffffff);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent pi = PendingIntent.getActivity(this, nid, tap, flags);
+
+        Notification.Builder b;
+        if (Build.VERSION.SDK_INT >= 26) {
+            b = new Notification.Builder(this, GOAL_CHANNEL);
+        } else {
+            b = new Notification.Builder(this);
+            b.setPriority(Notification.PRIORITY_HIGH);
+        }
+        b.setSmallIcon(R.drawable.ic_notify_goal)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(new Notification.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .setDefaults(Notification.DEFAULT_ALL);
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (nm != null) nm.notify(nid, b.build());
     }
 
     private static WebResourceResponse notFound() {
@@ -220,6 +368,33 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         web.saveState(out);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        applyOpenHash(intent);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Keep WebView JS running for fav-goal poll; native heartbeat in case timers freeze.
+        bgHandler.removeCallbacks(bgFavGoalTick);
+        bgHandler.postDelayed(bgFavGoalTick, 30000);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        bgHandler.removeCallbacks(bgFavGoalTick);
+    }
+
+    @Override
+    protected void onDestroy() {
+        bgHandler.removeCallbacks(bgFavGoalTick);
+        super.onDestroy();
     }
 
     @Override
