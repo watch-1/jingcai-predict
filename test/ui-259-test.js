@@ -14,15 +14,15 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=1\.9\.259/.test(ver));
-assert.ok(/VERSION_CODE=295/.test(ver));
-assert.ok(/jc-v1\.9\.259/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.259');
-assert.strictEqual(cfg.version, '1.9.259');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.259\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-295\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.260/.test(ver));
+assert.ok(/VERSION_CODE=296/.test(ver));
+assert.ok(/jc-v1\.9\.260/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.260');
+assert.strictEqual(cfg.version, '1.9.260');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.260\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-296\}"/.test(apkSh));
 
-assert.ok(/--match-mid-col:\s*88px/.test(css), 'shared center column token');
+assert.ok(/--match-mid-col:\s*120px/.test(css), 'shared center column token');
 
 const mcGrid = css.match(/\.mc-teams \{[^}]+\}/);
 assert.ok(mcGrid, 'mc-teams rule');
