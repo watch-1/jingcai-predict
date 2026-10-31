@@ -13243,6 +13243,8 @@ document.addEventListener('submit', async e => {
 // ======================= boot =======================
 loadLocalLists();
 loadGoalAlertSeen();
+// 1.9.265: first launch must prompt Android POST_NOTIFICATIONS even with zero favs
+if (IS_APP) requestFavGoalNotifyPermission();
 hydrateFromCache(); // 1.9.124: JSON lists
 hydrateKbPacksCache(); // 1.9.158: KB list before first /kb paint
 if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.161: idle KB warm; DC queue yields while #/kb or KB in-flight
@@ -13325,7 +13327,7 @@ window.__partnerGateReady.then((ok) => {
   });
   refreshAccount().then(() => {
     if (['me', 'plans', 'favs', 'profile', 'membership', 'orders', 'pay'].includes(route().name)) render({ force: true });
-    if ((S.favs || []).length) requestFavGoalNotifyPermission();
+    requestFavGoalNotifyPermission();
     ensureFavGoalPoll();
   });
   loadMembershipCatalog();
