@@ -13,13 +13,13 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=1\.9\.262/.test(ver));
-assert.ok(/VERSION_CODE=298/.test(ver));
-assert.ok(/jc-v1\.9\.262/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.262');
-assert.strictEqual(cfg.version, '1.9.262');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.262\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-298\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.263/.test(ver));
+assert.ok(/VERSION_CODE=299/.test(ver));
+assert.ok(/jc-v1\.9\.263/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.263');
+assert.strictEqual(cfg.version, '1.9.263');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.263\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-299\}"/.test(apkSh));
 
 assert.ok(/--match-mid-col:\s*120px/.test(css), 'wider shared center column');
 assert.ok(!/--match-mid-col:\s*88px/.test(css), '88px token retired');
