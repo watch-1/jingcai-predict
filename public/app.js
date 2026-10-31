@@ -315,7 +315,7 @@ function matchScoreColumn(row) {
   } else if (kind === 'live') {
     statusHtml = `<div class="match-st red">${scoreMinuteLab(row)}</div>`;
     scoreMain = row._homeScore != null
-      ? `<div class="score num">${esc(formatScoreSpaced(null, row._homeScore, row._awayScore))}</div>`
+      ? `<div class="score num is-live">${esc(formatScoreSpaced(null, row._homeScore, row._awayScore))}</div>`
       : '<div class="vs">VS</div>';
     if (row._half) footHtml = `<div class="match-ht">上半场 ${esc(row._half)}</div>`;
   } else {
@@ -4378,7 +4378,17 @@ function scheduleBodyHtml(model) {
     h += empty('该日期暂无场次，可切换日期查看。', '', '暂无场次');
   } else {
     // 1.9.257: 「全部」与单联赛筛选均按竞彩编号平铺，不再按联赛分块（避免 009→意甲块、010→德甲块打断编号序）
-    h += `<div class="ls-list">${rows.map(scoreCard).join('')}</div>`;
+    // 1.9.263: 未完场 / 已结束之间加隔断
+    const open = rows.filter(x => x._kind !== 'ft');
+    const done = rows.filter(x => x._kind === 'ft');
+    const list = chunk => `<div class="ls-list">${chunk.map(scoreCard).join('')}</div>`;
+    if (open.length && done.length) {
+      h += list(open);
+      h += `<div class="ls-sec ls-sec-ft" role="separator"><span class="ls-sec-lab">已结束</span></div>`;
+      h += list(done);
+    } else {
+      h += list(rows);
+    }
   }
   if (typeof console !== 'undefined' && console.debug) {
     console.debug('[schedule]', S.schDate, 'shown=', modeRows.length, 'league=', S.schLeague, 'gaps=', gapInfo || null);
