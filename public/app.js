@@ -4175,9 +4175,9 @@ function scoreCard(row) {
   return `<button type="button" class="ls-row ${statusCls}" data-go="#/match/${encodeURIComponent(row.id)}">
     ${matchCardMeta(row, { favSize: 14 })}
     <div class="ls-body">
-      <div class="ls-side h">${badge(row.home, 'sm', row.homeLogo)}<span class="nm">${esc(row.home)}</span></div>
+      <div class="ls-side h">${badge(row.home, 'sm', row.homeLogo)}<span class="nm" title="${esc(row.home)}">${esc(row.home)}</span></div>
       <div class="ls-mid">${midInner}</div>
-      <div class="ls-side a"><span class="nm">${esc(row.away)}</span>${badge(row.away, 'sm', row.awayLogo)}</div>
+      <div class="ls-side a"><span class="nm" title="${esc(row.away)}">${esc(row.away)}</span>${badge(row.away, 'sm', row.awayLogo)}</div>
     </div>
     ${cards}
   </button>`;

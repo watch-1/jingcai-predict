@@ -17,13 +17,13 @@ const mainJava = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai
 const manifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const icon = fs.readFileSync(path.join(root, 'android/res/drawable/ic_notify_goal.xml'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.265/.test(ver));
-assert.ok(/VERSION_CODE=301/.test(ver));
-assert.ok(/jc-v1\.9\.265/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.265');
-assert.strictEqual(cfg.version, '1.9.265');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.265\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-301\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.266/.test(ver));
+assert.ok(/VERSION_CODE=302/.test(ver));
+assert.ok(/jc-v1\.9\.266/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.266');
+assert.strictEqual(cfg.version, '1.9.266');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.266\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-302\}"/.test(apkSh));
 
 // --- native bridge + permission + channel ---
 assert.ok(/POST_NOTIFICATIONS/.test(manifest), 'Android 13 notification permission');
