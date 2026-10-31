@@ -4054,6 +4054,10 @@ function classifyScoreRow(x) {
   } else if (liveFin && homeScore == null) {
     // Officially finished but score not yet in list payload — keep out of「未开始」
     kind = 'ft'; phaseZh = (live && live.phaseZh) || '完场';
+  } else if (live && live.live && now >= ko + 2.5 * 3600e3) {
+    // 1.9.258: sporttery payload still「进行中」long after KO — show FT, keep polling until server reconciles
+    if (homeScore != null) { kind = 'ft'; phaseZh = '完场'; liveFlag = false; }
+    else { kind = 'ns'; phaseZh = '待开奖'; }
   } else if (live && live.live) {
     kind = 'live'; phaseZh = live.phaseZh || '进行中';
     minute = live.minute; minuteExtra = live.minuteExtra; liveFlag = true;
@@ -4176,12 +4180,33 @@ function scheduleRowSource(id) {
 function scheduleNeedLivePoll(classifiedDay, counts) {
   if (!classifiedDay || !classifiedDay.length) return false;
   if (counts && counts.live > 0) return true;
+  if (classifiedDay.some(scheduleLivePayloadStale)) return true;
+  if (classifiedDay.some(scheduleLiveScoreNeedsReconcile)) return true;
   const now = Date.now();
   return classifiedDay.some(x => x._kind !== 'ft' && now >= kickoff(x));
 }
+function scheduleLivePayloadStale(row) {
+  const id = String(row.id);
+  const live = S.liveScores && S.liveScores[id];
+  if (!live || !live.live || live.finished) return false;
+  const ko = kickoff(row);
+  return Number.isFinite(ko) && Date.now() >= ko + 2.5 * 3600e3;
+}
+/** Server list payload may still be sporttery-only long after KO — keep heartbeat until AF/seen merges. */
+function scheduleLiveScoreNeedsReconcile(row) {
+  const id = String(row.id);
+  const live = S.liveScores && S.liveScores[id];
+  if (!live) return false;
+  if (scheduleLivePayloadStale(row)) return true;
+  const ko = kickoff(row);
+  if (!Number.isFinite(ko) || Date.now() < ko + 2 * 3600e3) return false;
+  if (!live.finished) return true;
+  const tag = String(live.source || '') + '|' + String(live.scoreSource || '');
+  return !/\+af|\+seen|detail|results-seen|api-football/i.test(tag);
+}
 /** 当日仍有未完场场次（含未开球）→ 轮询需保持心跳，开球后自动开始刷新。 */
 function scheduleHasPendingLive(classifiedDay) {
-  return (classifiedDay || []).some(x => x._kind !== 'ft');
+  return (classifiedDay || []).some(x => x._kind !== 'ft' || scheduleLivePayloadStale(x) || scheduleLiveScoreNeedsReconcile(x));
 }
 function resumeScheduleLivePoll() {
   if (route().name !== 'schedule') return;
