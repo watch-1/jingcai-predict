@@ -14,7 +14,8 @@ const resultsBody = appJs.match(/function resultsBodyHtml[\s\S]*?^}/m)?.[0] || '
 assert.ok(/matchCard\(x, \{ odds: false \}\)/.test(resultsBody), '开奖: live/upcoming cards without odds grid');
 assert.ok(!/matchCard\(x\)\)/.test(resultsBody.replace(/matchCard\(x, \{ odds: false \}\)/g, '')), '开奖: no bare matchCard with default odds');
 
-assert.ok(/function schChannelsHtml/.test(appJs) && /计算器/.test(appJs.match(/function schChannelsHtml[\s\S]*?^}/m)?.[0] || ''), '赛程: 计算器 tab');
+assert.ok(/function schChannelsHtml/.test(appJs) && /计算器/.test(appJs.match(/function schChannelsHtml[\s\S]*?^}/m)?.[0] || ''), '赛程: 计算器 tab helper');
+assert.ok(/tc-tabs--schedule/.test(appJs) && /data-act="schChannel"/.test(appJs), '赛程: 比分/计算器 in top chrome');
 assert.ok(/function scheduleCalcHtml/.test(appJs) && /function openCalcSubmitSheet/.test(appJs), '赛程: calculator panel + submit');
 assert.ok(/function calcFrom/.test(appJs) && /2 \* \(mult/.test(appJs), 'calc: 2 yuan/note combinatorial math');
 assert.ok(/data-act="calcSubmit"/.test(appJs), 'calc: submit action');

@@ -2753,6 +2753,21 @@ function initSchDateSpindle() {
   rebuildSchDateSpindle(wrap, state);
 }
 function topChromeCenterHtml(rName) {
+  if (rName === 'schedule') {
+    const ch = schChannelOf();
+    const tabs = [
+      ['list', '比分', 'schChannel'],
+      ['calc', '计算器', 'schChannel'],
+      ['results', '开奖', 'go'],
+    ].map(([k, lab, kind]) => {
+      const on = kind === 'schChannel' ? ch === k : false;
+      const act = kind === 'go'
+        ? `data-go="#/${k}"`
+        : `data-act="schChannel" data-ch="${k}"`;
+      return `<button type="button" class="tc-tab${on ? ' on' : ''}" ${act}${on ? ' aria-current="true"' : ''}>${esc(lab)}</button>`;
+    }).join('');
+    return `<nav class="tc-tabs tc-tabs--schedule" aria-label="赛程视图">${tabs}</nav>`;
+  }
   if (rName === 'data') {
     const sec = dataSectionOf();
     const tabs = [['team', '球队'], ['star', '球星']].map(([k, lab]) =>
@@ -5360,12 +5375,11 @@ function pageSchedule() {
   const model = scheduleDayModel();
   if (!model) {
     const today = S.schDate || bjDate(0);
-    return dateStrip([today], today, 'sdate') + schSearchBarHtml() + schChannelsHtml() + skeleton(4);
+    return dateStrip([today], today, 'sdate') + schSearchBarHtml() + skeleton(4);
   }
   const { modeRows, classifiedDay, dates } = model;
   h += dateStrip(dates, S.schDate, 'sdate');
   h += schSearchBarHtml();
-  h += schChannelsHtml();
   if (schChannelOf() === 'calc') {
     h += scheduleCalcHtml(model);
   } else {

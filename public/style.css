@@ -209,6 +209,9 @@ html[data-ready="1"] .app {
   content: ""; position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
   width: 22px; height: 3px; border-radius: 2px; background: var(--tab-green, #2BB673);
 }
+/* 1.9.270: 赛程顶栏 比分 | 计算器 | 开奖 — 三字「计算器」略收左右留白 */
+.tc-tabs--schedule { gap: 2px; }
+.tc-tabs--schedule .tc-tab { padding-left: 10px; padding-right: 10px; }
 /* 1.9.187: 赛程顶栏 — 等宽左右翼 + 日期滚筒屏幕居中 + 点蓝字开日历 */
 .top-chrome--schedule {
   --tc-sch-wing: 72px;
