@@ -115,6 +115,11 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                hideNativeSplashBrand();
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 pageReady = true;
                 injectSafeAreaTop();
@@ -191,7 +196,8 @@ public class MainActivity extends Activity {
 
         final int iconPx = dp(40);
         ImageView icon = new ImageView(this);
-        icon.setImageResource(R.mipmap.ic_launcher);
+        // Same Design G PNG as HTML icon-192 — adaptive ic_launcher has inset and jumps on handoff.
+        icon.setImageResource(R.drawable.splash_brand_icon);
         icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
         LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(iconPx, iconPx);
         icon.setLayoutParams(iconLp);
@@ -207,8 +213,8 @@ public class MainActivity extends Activity {
         TextView name = new TextView(this);
         name.setText("云球迷");
         name.setTextColor(Color.parseColor("#1A1A1A"));
-        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
-        // Match HTML .boot-brand-name (sans-serif 700 / 22px / 0.02em) so the handoff does not shift.
+        // CSS 22px == 22dp (not sp) so user font scale cannot shift the lockup vs HTML.
+        name.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 22);
         name.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
         name.setIncludeFontPadding(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -239,12 +245,10 @@ public class MainActivity extends Activity {
         if (splashBrand == null) return;
         final View brand = splashBrand;
         splashBrand = null;
-        brand.animate().alpha(0f).setDuration(160).withEndAction(new Runnable() {
-            @Override public void run() {
-                ViewGroup parent = (ViewGroup) brand.getParent();
-                if (parent != null) parent.removeView(brand);
-            }
-        }).start();
+        // Instant remove — a 160ms fade of a slightly-offset copy looks like a jump.
+        brand.setVisibility(View.GONE);
+        ViewGroup parent = (ViewGroup) brand.getParent();
+        if (parent != null) parent.removeView(brand);
     }
 
     private int statusBarHeightPx() {
@@ -261,6 +265,7 @@ public class MainActivity extends Activity {
         final String js = "(function(){try{var r=document.documentElement;"
             + "r.style.setProperty('--sat','" + cssPx + "px');"
             + "r.setAttribute('data-edge','1');"
+            + "if(window.syncTopChromeHeight)window.syncTopChromeHeight();"
             + "}catch(e){}})();";
         web.evaluateJavascript(js, null);
     }

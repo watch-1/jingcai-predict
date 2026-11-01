@@ -18,22 +18,22 @@ const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest
 const main = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
 const strings = fs.readFileSync(path.join(root, 'android/res/values/strings.xml'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.272/.test(ver));
-assert.ok(/VERSION_CODE=308/.test(ver));
-assert.ok(/jc-v1\.9\.272/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.272');
-assert.strictEqual(cfg.version, '1.9.272');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.272\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-308\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.273/.test(ver));
+assert.ok(/VERSION_CODE=309/.test(ver));
+assert.ok(/jc-v1\.9\.273/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.273');
+assert.strictEqual(cfg.version, '1.9.273');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.273\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-309\}"/.test(apkSh));
 assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.272.md')));
 assert.ok(/package="com\.tiicai\.jingcai"/.test(androidManifest), 'package id unchanged');
-assert.ok(/android:versionCode="308"/.test(androidManifest));
-assert.ok(/android:versionName="1\.9\.272"/.test(androidManifest));
+assert.ok(/android:versionCode="309"/.test(androidManifest));
+assert.ok(/android:versionName="1\.9\.273"/.test(androidManifest));
 assert.ok(/<string name="app_name">云球迷<\/string>/.test(strings), 'name 云球迷');
 
 // 1) date strip — fluid pills, shared schedule + results
 assert.ok(/--dstrip-pill:\s*clamp\(48px,\s*17vw,\s*64px\)/.test(css), 'fluid pill width');
-assert.ok(/--dstrip-side:\s*max\(10px,\s*env\(safe-area-inset-left/.test(css), 'safe-area side pad');
+assert.ok(/--dstrip-side:\s*max\(12px,\s*env\(safe-area-inset-left/.test(css), 'safe-area side pad');
 assert.ok(/--dstrip-gap:\s*clamp\(4px/.test(css), 'fluid gap');
 assert.ok(/dstrip-wd/.test(appJs) && /dstrip-wd/.test(css), 'weekday wrapper');
 assert.ok(/keep immediate neighbor pills/.test(appJs), 'neighbor-visible scroll');
@@ -56,19 +56,19 @@ assert.ok(/\.mc-mid \.score[\s\S]*font-weight:\s*800/.test(css), 'scores stay 80
 // 3) splash lockup pinned — no late inset / font swap
 const crit = html.match(/<style id="critical-chrome">([\s\S]*?)<\/style>/);
 assert.ok(crit, 'critical chrome');
-assert.ok(/bottom:56px/.test(crit[1]) && /width:40px/.test(crit[1]) && /gap:10px/.test(crit[1]),
+assert.ok(/padding:0 0 56px/.test(crit[1]) && /width:40px/.test(crit[1]) && /gap:10px/.test(crit[1]),
   'critical lockup 40/10/56');
 assert.ok(/data-boot="1"/.test(html), 'data-boot from first paint');
 assert.ok(/decoding="sync"/.test(html) && /fetchpriority="high"/.test(html), 'icon reserved + high priority');
 assert.ok(/icons\/icon-192\.png/.test(html), 'Design G icon-192 unchanged');
-assert.ok(/bottom:56px/.test(css) && /font-synthesis:\s*none/.test(css.match(/\.boot-brand-name\{[\s\S]*?\}/)[0]),
+assert.ok(/padding:0 0 56px/.test(css) && /font-synthesis:\s*none/.test(css.match(/\.boot-brand-name\{[\s\S]*?\}/)[0]),
   'CSS lockup pinned, no synth bold');
 assert.ok(!/env\(safe-area-inset-bottom/.test(css.match(/\.boot-brand\{[\s\S]*?\}/)[0]),
   'splash ignores late bottom inset');
 assert.ok(/sans-serif", Typeface\.BOLD/.test(main), 'native typeface matches HTML sans-serif 700');
 assert.ok(/setLetterSpacing\(0\.02f\)/.test(main), 'native letter-spacing matches CSS');
 assert.ok(/bottomMargin = dp\(56\)/.test(main), 'native bottom 56dp');
-assert.ok(/ic_launcher/.test(main), 'native still uses launcher art');
+assert.ok(/splash_brand_icon/.test(main), 'native splash uses Design G PNG');
 assert.ok(!/JPUSH_APPKEY=/.test(main), 'JPush wiring untouched');
 
 // 271 geometry invariants

@@ -7,10 +7,10 @@
 <style id="critical-chrome">
 html,body{background:#F7F7F8;margin:0}
 html[data-boot="1"] #app.app{min-height:100vh;background:#F7F7F8}
-.boot-shell{position:fixed;inset:0;z-index:10000;background:#F7F7F8;pointer-events:none;display:flex;align-items:flex-end;justify-content:center}
-.boot-brand{position:absolute;left:50%;bottom:56px;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;gap:10px;height:40px;margin:0;padding:0}
-.boot-brand-icon{width:40px;height:40px;border-radius:11px;object-fit:cover;display:block;flex:none}
-.boot-brand-name{font:700 22px/40px sans-serif;letter-spacing:.02em;color:#1A1A1A;height:40px;white-space:nowrap;font-synthesis:none}
+.boot-shell{position:fixed;inset:0;z-index:10000;background:#F7F7F8;pointer-events:none;display:flex;align-items:flex-end;justify-content:center;padding:0 0 56px;box-sizing:border-box}
+.boot-brand{display:flex;align-items:center;justify-content:center;gap:10px;height:40px;margin:0;padding:0;flex:none;position:static;transform:none}
+.boot-brand-icon{width:40px;height:40px;border-radius:11px;object-fit:cover;display:block;flex:none;box-shadow:0 2px 8px rgba(15,23,42,.12)}
+.boot-brand-name{font:700 22px/40px -apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Noto Sans SC","Microsoft YaHei",sans-serif;letter-spacing:.02em;color:#1A1A1A;height:40px;white-space:nowrap;font-synthesis:none;-webkit-text-size-adjust:100%}
 </style>
 <script>
 try {
