@@ -1,5 +1,5 @@
 'use strict';
-// 1.9.271: 云球迷 rename + Dongqiudi-style splash + schedule lottery timeline / team search.
+// 1.9.272: 云球迷 rename + Dongqiudi-style splash + schedule lottery timeline / team search.
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -21,19 +21,19 @@ const styles31 = fs.readFileSync(path.join(root, 'android/res/values-v31/styles.
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const main = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.271/.test(ver));
-assert.ok(/VERSION_CODE=307/.test(ver));
-assert.ok(/jc-v1\.9\.271/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.271');
-assert.strictEqual(cfg.version, '1.9.271');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.271\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-307\}"/.test(apkSh));
-assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.271.md')));
+assert.ok(/VERSION=1\.9\.272/.test(ver));
+assert.ok(/VERSION_CODE=308/.test(ver));
+assert.ok(/jc-v1\.9\.272/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.272');
+assert.strictEqual(cfg.version, '1.9.272');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.272\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-308\}"/.test(apkSh));
+assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.272.md')));
 
 // package id unchanged
 assert.ok(/package="com\.tiicai\.jingcai"/.test(androidManifest), 'package id unchanged');
-assert.ok(/android:versionCode="307"/.test(androidManifest));
-assert.ok(/android:versionName="1\.9\.271"/.test(androidManifest));
+assert.ok(/android:versionCode="308"/.test(androidManifest));
+assert.ok(/android:versionName="1\.9\.272"/.test(androidManifest));
 
 // 1) display name 云球迷
 assert.ok(/<string name="app_name">云球迷<\/string>/.test(strings), 'Android label 云球迷');

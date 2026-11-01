@@ -4033,17 +4033,32 @@ function fillDateStripDays(dates, { padBefore = 7, padAfter = 10 } = {}) {
 
 function dateStrip(dates, cur, key, { light = true } = {}) {
   const cls = 'dstrip' + (light ? ' light' : '');
-  const btns = dates.map(d => `<button type="button" class="${d === cur ? 'on' : ''}" data-${key}="${d}">${dayName(d)}<small>${d.slice(5)}</small></button>`).join('');
+  const btns = dates.map(d => `<button type="button" class="${d === cur ? 'on' : ''}" data-${key}="${d}"><span class="dstrip-wd">${dayName(d)}</span><small>${d.slice(5)}</small></button>`).join('');
   return `<div class="${cls}" id="dstrip"><span class="dstrip-edge" aria-hidden="true"></span>${btns}<span class="dstrip-edge" aria-hidden="true"></span></div>`;
 }
-/** 1.9.214: date strip — keep selected day readable without half-clipped edge cells. */
+/** 1.9.272: center selected day; keep immediate neighbor pills fully in the scrollport. */
 function syncDateStripScroll(nds) {
   if (!nds) return;
   const on = nds.querySelector('button.on');
   if (!on) return;
   const pad = Math.max(10, (nds.clientWidth - on.offsetWidth) / 2);
   const max = Math.max(0, nds.scrollWidth - nds.clientWidth);
-  nds.scrollLeft = Math.max(0, Math.min(on.offsetLeft - pad, max));
+  let left = on.offsetLeft - pad;
+  const inset = 8;
+  const prev = on.previousElementSibling;
+  const next = on.nextElementSibling;
+  if (prev && prev.tagName === 'BUTTON') left = Math.min(left, prev.offsetLeft - inset);
+  if (next && next.tagName === 'BUTTON') {
+    left = Math.max(left, next.offsetLeft + next.offsetWidth + inset - nds.clientWidth);
+  }
+  nds.scrollLeft = Math.max(0, Math.min(left, max));
+}
+if (typeof window !== 'undefined' && !window._dstripResizeBound) {
+  window._dstripResizeBound = true;
+  window.addEventListener('resize', () => {
+    const el = document.getElementById('dstrip');
+    if (el) syncDateStripScroll(el);
+  }, { passive: true });
 }
 /** 热门 = 竞彩常见优先联赛（LEAGUE_PRIO 白名单），不含瑞超/挪超/巴甲等长尾。 */
 function isHotLeague(l) { return prio(l) < 99; }

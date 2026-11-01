@@ -208,8 +208,12 @@ public class MainActivity extends Activity {
         name.setText("云球迷");
         name.setTextColor(Color.parseColor("#1A1A1A"));
         name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
-        name.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        // Match HTML .boot-brand-name (sans-serif 700 / 22px / 0.02em) so the handoff does not shift.
+        name.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
         name.setIncludeFontPadding(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            name.setLetterSpacing(0.02f);
+        }
         LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         nameLp.leftMargin = dp(10);
