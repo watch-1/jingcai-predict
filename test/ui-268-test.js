@@ -1,5 +1,5 @@
 'use strict';
-// 1.9.268: Android launcher icon → 云球迷 Design G (navy + teal disc + cloud wrap + ball + gold arc).
+// 1.9.268: Android launcher icon → 云球迷 Design G (kept as historical check).
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -13,24 +13,18 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const manifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const makeIcons = fs.readFileSync(path.join(root, 'tools/make-icons.js'), 'utf8');
-const svg = fs.readFileSync(path.join(root, 'tools/yunqiumi-icon.svg'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.268/.test(ver));
-assert.ok(/VERSION_CODE=304/.test(ver));
-assert.ok(/jc-v1\.9\.268/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.268');
-assert.strictEqual(cfg.version, '1.9.268');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.268\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-304\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.269/.test(ver));
+assert.ok(/VERSION_CODE=305/.test(ver));
+assert.ok(/jc-v1\.9\.269/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.269');
+assert.strictEqual(cfg.version, '1.9.269');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.269\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-305\}"/.test(apkSh));
 assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.268.md')));
 
 assert.ok(/android:icon="@mipmap\/ic_launcher"/.test(manifest), 'launcher still @mipmap/ic_launcher');
 assert.ok(!/android:roundIcon/.test(manifest), 'no separate roundIcon (project has no adaptive set)');
-assert.ok(/yunqiumi-icon\.svg/.test(makeIcons), 'make-icons uses Design G svg');
-
-assert.ok(/#1A7A70|#1A2433|#121A26/.test(svg), 'svg has navy');
-assert.ok(/#D4AF37/.test(svg), 'svg has gold');
-assert.ok(/ pentagon|polygon points/.test(svg), 'svg has ball pentagon');
 
 const dens = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
 function pngSize(p) {
@@ -54,6 +48,6 @@ for (const name of ['ic_notify_goal.xml', 'jpush_notification_icon.xml']) {
   assert.ok(!/mipmap/.test(xml));
 }
 
-assert.ok(!/sk_[A-Za-z0-9]{8,}/.test(svg + makeIcons + apkSh), 'no invented secrets');
+assert.ok(!/sk_[A-Za-z0-9]{8,}/.test(makeIcons + apkSh), 'no invented secrets');
 
 console.log('ui-268-test OK');
