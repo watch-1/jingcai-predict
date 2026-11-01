@@ -2,10 +2,6 @@ package com.tiicai.jingcai;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -45,7 +41,8 @@ public class MainActivity extends Activity {
     static final int CHROME = Color.parseColor("#1B2A4A");
     private static final int FILE_CHOOSER_REQUEST = 9101;
     private static final int REQ_POST_NOTIF = 9102;
-    static final String GOAL_CHANNEL = "goal_alerts";
+    static final String GOAL_CHANNEL = "goal_alerts"; // 进球提醒
+    private static MainActivity alive;
     private WebView web;
     private ValueCallback<Uri[]> filePathCallback;
     private String pendingOpenHash;
@@ -141,8 +138,10 @@ public class MainActivity extends Activity {
         setContentView(web);
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
         else web.loadUrl(START);
+        alive = this;
         applyOpenHash(getIntent());
-        ensureGoalChannel();
+        GoalNotify.showChannel(this);
+        maybeStartPush();
     }
 
     /**
@@ -228,7 +227,7 @@ public class MainActivity extends Activity {
         }
 
         /**
-         * JSON: { matchId, title, body }. Web-only callers never hit this.
+         * JSON: { matchId, title, body, scoreKey }. Web-only callers never hit this.
          * Same score must be de-duplicated in JS before calling.
          */
         @JavascriptInterface
@@ -237,6 +236,40 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() {
                 @Override public void run() { showGoalNotification(raw); }
             });
+        }
+
+        @JavascriptInterface
+        public void startPush() {
+            runOnUiThread(new Runnable() {
+                @Override public void run() { maybeStartPush(); }
+            });
+        }
+
+        @JavascriptInterface
+        public String getPushRegId() {
+            return PushBootstrap.registrationId(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public String getPushDeviceId() {
+            return PushState.ensureDeviceId(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public String getPushDeviceSecret() {
+            String s = PushState.deviceSecret(MainActivity.this);
+            return s == null ? "" : s;
+        }
+
+        @JavascriptInterface
+        public void setPushDeviceSecret(String secret) {
+            PushState.storeSecret(MainActivity.this, secret);
+        }
+
+        @JavascriptInterface
+        public boolean isPushReady() {
+            String r = PushState.regId(MainActivity.this);
+            return r != null && r.length() > 0 && PushBootstrap.hasAppKey();
         }
     }
 
@@ -254,14 +287,13 @@ public class MainActivity extends Activity {
     }
 
     void ensureGoalChannel() {
-        if (Build.VERSION.SDK_INT < 26) return;
-        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        if (nm == null) return;
-        NotificationChannel ch = new NotificationChannel(
-            GOAL_CHANNEL, "进球提醒", NotificationManager.IMPORTANCE_HIGH);
-        ch.setDescription("关注场次进球时提醒");
-        ch.enableVibration(true);
-        nm.createNotificationChannel(ch);
+        GoalNotify.showChannel(this);
+    }
+
+    void maybeStartPush() {
+        if (!hasGoalNotifyPermission()) return;
+        if (!PushBootstrap.hasAppKey()) return;
+        PushBootstrap.start(this);
     }
 
     static boolean validMatchId(String id) {
@@ -276,6 +308,17 @@ public class MainActivity extends Activity {
     void applyOpenHash(Intent intent) {
         if (intent == null) return;
         String matchId = intent.getStringExtra("match_id");
+        if (!validMatchId(matchId)) {
+            // JPush default tap extra (JSON string)
+            String extra = intent.getStringExtra("cn.jpush.android.EXTRA_EXTRA");
+            if (extra == null) extra = intent.getStringExtra("JMessageExtra");
+            if (extra != null && extra.length() > 2) {
+                try {
+                    JSONObject o = new JSONObject(extra);
+                    matchId = o.optString("matchId", "");
+                } catch (Exception ignored) { }
+            }
+        }
         if (validMatchId(matchId)) {
             pendingOpenHash = "#/match/" + Uri.encode(matchId);
             intent.removeExtra("match_id");
@@ -293,48 +336,34 @@ public class MainActivity extends Activity {
 
     void showGoalNotification(String json) {
         if (!hasGoalNotifyPermission()) return;
-        String title = "进球提醒";
-        String body = "";
-        String matchId = "";
-        try {
-            JSONObject o = new JSONObject(json == null ? "{}" : json);
-            if (o.has("title")) title = o.optString("title", title);
-            if (o.has("body")) body = o.optString("body", "");
-            if (o.has("matchId")) matchId = o.optString("matchId", "");
-        } catch (Exception ignored) {
-            return;
-        }
-        if (title == null || title.length() == 0) title = "进球提醒";
-        if (body == null) body = "";
-        if (title.length() > 40) title = title.substring(0, 40);
-        if (body.length() > 120) body = body.substring(0, 120);
-        if (!validMatchId(matchId)) matchId = "";
+        GoalNotify.showJson(this, json);
+    }
 
-        ensureGoalChannel();
-        Intent tap = new Intent(this, MainActivity.class);
-        tap.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        if (matchId.length() > 0) tap.putExtra("match_id", matchId);
-        int nid = matchId.length() > 0 ? matchId.hashCode() : (int) (System.currentTimeMillis() & 0x7fffffff);
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
-        PendingIntent pi = PendingIntent.getActivity(this, nid, tap, flags);
+    static void deliverPushRegId(final String regId) {
+        final MainActivity a = alive;
+        if (a == null || a.web == null || regId == null) return;
+        a.runOnUiThread(new Runnable() {
+            @Override public void run() {
+                a.web.evaluateJavascript(
+                    "(function(){try{if(window.__onJPushRegId)window.__onJPushRegId("
+                        + jsonEscape(regId) + ");}catch(e){}})();",
+                    null);
+            }
+        });
+    }
 
-        Notification.Builder b;
-        if (Build.VERSION.SDK_INT >= 26) {
-            b = new Notification.Builder(this, GOAL_CHANNEL);
-        } else {
-            b = new Notification.Builder(this);
-            b.setPriority(Notification.PRIORITY_HIGH);
-        }
-        b.setSmallIcon(R.drawable.ic_notify_goal)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(new Notification.BigTextStyle().bigText(body))
-            .setAutoCancel(true)
-            .setContentIntent(pi)
-            .setDefaults(Notification.DEFAULT_ALL);
-        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        if (nm != null) nm.notify(nid, b.build());
+    static void deliverPushGoal(final String matchId, final String scoreKey) {
+        final MainActivity a = alive;
+        if (a == null || a.web == null) return;
+        a.runOnUiThread(new Runnable() {
+            @Override public void run() {
+                a.web.evaluateJavascript(
+                    "(function(){try{if(window.__onJPushGoal)window.__onJPushGoal("
+                        + jsonEscape(matchId) + "," + jsonEscape(scoreKey)
+                        + ");}catch(e){}})();",
+                    null);
+            }
+        });
     }
 
     private static WebResourceResponse notFound() {
@@ -395,11 +424,21 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         bgHandler.removeCallbacks(bgFavGoalTick);
+        maybeStartPush();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_POST_NOTIF && hasGoalNotifyPermission()) {
+            maybeStartPush();
+        }
     }
 
     @Override
     protected void onDestroy() {
         bgHandler.removeCallbacks(bgFavGoalTick);
+        if (alive == this) alive = null;
         super.onDestroy();
     }
 

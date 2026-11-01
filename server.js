@@ -2069,6 +2069,7 @@ app.post('/api/analytics/page-view', express.json({ limit: '4kb' }), (req, res) 
 app.use('/api/tribe/upload', express.json({ limit: '3mb' }));
 app.use('/api', require('./lib/admin'));
 app.use('/api', require('./lib/auth'));
+app.use('/api', require('./lib/push-goals'));
 const kbApi = require('./lib/kb');
 kbApi.configure({
   resolveMatch: async (matchId) => {
@@ -2453,6 +2454,10 @@ try {
     hasUsable: crestUsable,
   });
 } catch (e) { console.warn('[crest-autofill] start failed', e.message); }
+
+try {
+  require('./lib/push-goals').startWorker({ fetchJson, base: BASE });
+} catch (e) { console.warn('[push-goals] start failed', e.message); }
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`竞彩预测 v${require('./package.json').version} running at http://localhost:${PORT} (data: ${require('./lib/db').DATA_DIR})`);

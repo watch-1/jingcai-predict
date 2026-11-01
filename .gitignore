@@ -15,4 +15,6 @@ server.log
 .env.*
 android/build/
 android/.gradle/
+android/libs/*.aar
+android/libs/*.aar.part
 data/market-value/

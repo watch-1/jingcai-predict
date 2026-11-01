@@ -14,16 +14,17 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const mainJava = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
+const goalNotifyJava = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/GoalNotify.java'), 'utf8');
 const manifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const icon = fs.readFileSync(path.join(root, 'android/res/drawable/ic_notify_goal.xml'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.266/.test(ver));
-assert.ok(/VERSION_CODE=302/.test(ver));
-assert.ok(/jc-v1\.9\.266/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.266');
-assert.strictEqual(cfg.version, '1.9.266');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.266\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-302\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.267/.test(ver));
+assert.ok(/VERSION_CODE=303/.test(ver));
+assert.ok(/jc-v1\.9\.267/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.267');
+assert.strictEqual(cfg.version, '1.9.267');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.267\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-303\}"/.test(apkSh));
 
 // --- native bridge + permission + channel ---
 assert.ok(/POST_NOTIFICATIONS/.test(manifest), 'Android 13 notification permission');
@@ -34,9 +35,9 @@ assert.ok(/requestNotifyPermission/.test(mainJava), 'JS → request permission')
 assert.ok(/hasNotifyPermission/.test(mainJava), 'JS → permission probe');
 assert.ok(/void notifyGoal\(String json\)/.test(mainJava), 'JS → local notify');
 assert.ok(/__tickFavGoalPoll/.test(mainJava), 'native bg heartbeat pokes JS poll');
-assert.ok(/R\.drawable\.ic_notify_goal/.test(mainJava), 'small icon');
+assert.ok(/R\.drawable\.ic_notify_goal/.test(goalNotifyJava) || /R\.drawable\.ic_notify_goal/.test(mainJava), 'small icon');
 assert.ok(/vector/.test(icon), 'notification icon drawable');
-assert.ok(/putExtra\("match_id"/.test(mainJava), 'tap extra for match');
+assert.ok(/putExtra\("match_id"/.test(goalNotifyJava) || /putExtra\("match_id"/.test(mainJava), 'tap extra for match');
 assert.ok(/location\.hash=/.test(mainJava), 'tap navigates WebView hash');
 assert.ok(/if \(!hasGoalNotifyPermission\(\)\) return;/.test(mainJava), 'denied permission is graceful no-op');
 

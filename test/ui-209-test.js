@@ -26,6 +26,6 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 assert.ok(/^1\.9\.2\d\d$/.test(pkg.version), 'package 1.9.2xx');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
 assert.ok(/VERSION=1\.9\.2\d\d/.test(ver));
-assert.ok(/VERSION_CODE=2[5-8]\d/.test(ver));
+assert.ok(/VERSION_CODE=2[5-8]\d/.test(ver) || /VERSION_CODE=30\d/.test(ver));
 
 console.log('ui-209-test OK');

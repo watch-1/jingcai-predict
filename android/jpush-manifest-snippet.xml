@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Injected by android/build-apk.sh when JPush AARs are present.
+     ${JPUSH_APPKEY} / ${JPUSH_CHANNEL} are replaced at build time.
+     AAR application components are merged separately. -->
+<permission
+    android:name="com.tiicai.jingcai.permission.JPUSH_MESSAGE"
+    android:protectionLevel="signature" />
+<uses-permission android:name="com.tiicai.jingcai.permission.JPUSH_MESSAGE" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+<uses-permission android:name="android.permission.VIBRATE" />
+<uses-permission android:name="android.permission.RECEIVE_USER_PRESENT" />
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />

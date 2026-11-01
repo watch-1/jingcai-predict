@@ -14,19 +14,20 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const mainJava = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.266/.test(ver));
-assert.ok(/VERSION_CODE=302/.test(ver));
-assert.ok(/jc-v1\.9\.266/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.266');
-assert.strictEqual(cfg.version, '1.9.266');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.266\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-302\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.267/.test(ver));
+assert.ok(/VERSION_CODE=303/.test(ver));
+assert.ok(/jc-v1\.9\.267/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.267');
+assert.strictEqual(cfg.version, '1.9.267');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.267\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-303\}"/.test(apkSh));
 
 // Boot / first paint: request even with zero favs (must not be gated on S.favs.length)
 const bootIdx = appJs.indexOf('loadLocalLists();\nloadGoalAlertSeen();');
 assert.ok(bootIdx > 0, 'boot still hydrates lists first');
 const bootSlice = appJs.slice(bootIdx, bootIdx + 280);
-assert.ok(/if \(IS_APP\) requestFavGoalNotifyPermission\(\);/.test(bootSlice),
+assert.ok(/if \(IS_APP\) \{ requestFavGoalNotifyPermission\(\); syncPushRegistration\(\); \}/.test(bootSlice)
+  || /if \(IS_APP\) requestFavGoalNotifyPermission\(\);/.test(bootSlice),
   'cold start requests system notify permission without waiting for favs');
 assert.ok(!/S\.favs/.test(bootSlice), 'first-launch request is not gated on favorites');
 
