@@ -2753,21 +2753,20 @@ function initSchDateSpindle() {
   rebuildSchDateSpindle(wrap, state);
 }
 function topChromeCenterHtml(rName) {
-  if (rName === 'schedule' || rName === 'results') {
+  if (rName === 'schedule') {
     const ch = schChannelOf();
-    const onResults = rName === 'results';
     const tabs = [
       ['list', '比分', 'schChannel'],
       ['calc', '计算器', 'schChannel'],
       ['results', '开奖', 'go'],
     ].map(([k, lab, kind]) => {
-      const on = kind === 'go' ? onResults : (!onResults && ch === k);
+      const on = kind === 'schChannel' ? ch === k : false;
       const act = kind === 'go'
         ? `data-go="#/${k}"`
         : `data-act="schChannel" data-ch="${k}"`;
       return `<button type="button" class="tc-tab${on ? ' on' : ''}" ${act}${on ? ' aria-current="true"' : ''}>${esc(lab)}</button>`;
     }).join('');
-    return `<nav class="tc-tabs tc-tabs--schedule tc-tabs--modes" aria-label="赛程视图">${tabs}</nav>`;
+    return `<nav class="tc-tabs tc-tabs--schedule" aria-label="赛程视图">${tabs}</nav>`;
   }
   if (rName === 'data') {
     const sec = dataSectionOf();
@@ -2797,7 +2796,6 @@ function syncTopChrome(rName) {
   el.classList.toggle('hidden', !show);
   app.classList.toggle('has-top-chrome', show);
   el.classList.toggle('top-chrome--schedule', false);
-  el.classList.toggle('top-chrome--modes', show && (rName === 'schedule' || rName === 'results'));
   el.classList.toggle('top-chrome--data', show && rName === 'data');
   el.classList.toggle('top-chrome--tribe', show && rName === 'tribe');
   if (!show) return;
@@ -4010,6 +4008,21 @@ function pageTribePost(id) {
   return h;
 }
 
+/** Expand match/result dates into a contiguous calendar window so the dstrip has enough pills to fill the viewport. */
+function fillDateStripDays(dates, { padBefore = 7, padAfter = 10 } = {}) {
+  const today = bjDate(0);
+  const src = (dates || []).filter(Boolean).sort();
+  let start = src[0] || today;
+  let end = src[src.length - 1] || today;
+  const minStart = shiftIssueDate(today, -padBefore);
+  const minEnd = shiftIssueDate(today, padAfter);
+  if (start > minStart) start = minStart;
+  if (end < minEnd) end = minEnd;
+  const out = [];
+  for (let d = start; d <= end; d = shiftIssueDate(d, 1)) out.push(d);
+  return out;
+}
+
 function dateStrip(dates, cur, key, { light = true } = {}) {
   const cls = 'dstrip' + (light ? ' light' : '');
   const btns = dates.map(d => `<button type="button" class="${d === cur ? 'on' : ''}" data-${key}="${d}">${dayName(d)}<small>${d.slice(5)}</small></button>`).join('');
@@ -4728,11 +4741,12 @@ function scheduleDayModel() {
   const ms = (S.schedule && S.schedule.length) ? S.schedule : S.matches;
   const rs = S.results;
   if (!ms) return null;
-  const dates = [...new Set([...(rs || []).map(issueDate), ...ms.map(issueDate)])].sort();
+  const srcDates = [...new Set([...(rs || []).map(issueDate), ...ms.map(issueDate)])].sort();
   const today = bjDate(0);
   if (!S.schDate) {
-    S.schDate = dates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || dates.find(d => d >= today) || dates[dates.length - 1];
+    S.schDate = srcDates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || srcDates.find(d => d >= today) || srcDates[srcDates.length - 1];
   }
+  const dates = fillDateStripDays(srcDates);
   const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
   const dayAll = [...ms.filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)).map(m => ({ ...m, _t: 'm' })), ...dayRes.map(r => ({ ...r, _t: 'r' }))];
   const classifiedDay = dayAll.map(classifyScoreRow);
@@ -6862,12 +6876,13 @@ function resultsDayModel() {
   const sched = (S.schedule && S.schedule.length) ? S.schedule : [];
   const schedById = new Map(sched.map(m => [String(m.id), m]));
   const today = bjDate(0);
-  const dates = [...new Set([...rs.map(issueDate), ...sched.filter(m => issueDate(m) <= today).map(issueDate)])].sort();
-  if (!dates.length) return { emptyAll: true, dates };
+  const srcDates = [...new Set([...rs.map(issueDate), ...sched.filter(m => issueDate(m) <= today).map(issueDate)])].sort();
+  if (!srcDates.length) return { emptyAll: true, dates: srcDates };
+  const dates = fillDateStripDays(srcDates);
   if (!S.rsDate || !dates.includes(S.rsDate)) {
-    const withScores = dates.filter(d => rs.some(r => issueDate(r) === d && r.full && d <= today)
+    const withScores = srcDates.filter(d => rs.some(r => issueDate(r) === d && r.full && d <= today)
       || sched.some(m => issueDate(m) === d && m.full && d <= today));
-    S.rsDate = withScores[withScores.length - 1] || [...dates].reverse().find(d => d <= today) || dates[dates.length - 1];
+    S.rsDate = withScores[withScores.length - 1] || [...srcDates].reverse().find(d => d <= today) || srcDates[srcDates.length - 1];
   }
   const dayRes = rs.filter(r => issueDate(r) === S.rsDate).map(r => hydrateResultScores(r, schedById));
   const dayFix = sched
@@ -12960,7 +12975,6 @@ document.addEventListener('click', async e => {
       setSchChannel(d.ch);
       invalidateTabKeep('schedule');
       stopLiveScorePoll();
-      if (route().name !== 'schedule') return go('#/schedule');
       return render({ force: true });
     }
     case 'schSearchClear': {

@@ -209,24 +209,9 @@ html[data-ready="1"] .app {
   content: ""; position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
   width: 22px; height: 3px; border-radius: 2px; background: var(--tab-green, #2BB673);
 }
-/* 1.9.270: 赛程/开奖顶栏三项均分中间槽，计算器右侧不留空洞 */
-.top-chrome--modes {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  column-gap: 0;
-}
-.top-chrome--modes .tc-tabs--modes {
-  width: 100%;
-  justify-self: stretch;
-  justify-content: stretch;
-  gap: 0;
-}
-.top-chrome--modes .tc-tabs--modes .tc-tab {
-  flex: 1 1 0;
-  min-width: 0;
-  text-align: center;
-  padding-left: 2px;
-  padding-right: 2px;
-}
+/* 1.9.270: 赛程顶栏 比分 | 计算器 | 开奖 — 紧凑排列，不均分铺满 */
+.tc-tabs--schedule { gap: 2px; }
+.tc-tabs--schedule .tc-tab { padding-left: 10px; padding-right: 10px; }
 /* 1.9.187: 赛程顶栏 — 等宽左右翼 + 日期滚筒屏幕居中 + 点蓝字开日历 */
 .top-chrome--schedule {
   --tc-sch-wing: 72px;
