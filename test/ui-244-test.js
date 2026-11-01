@@ -12,13 +12,13 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=1\.9\.270/.test(ver));
-assert.ok(/VERSION_CODE=306/.test(ver));
-assert.ok(/jc-v1\.9\.270/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.270');
-assert.strictEqual(cfg.version, '1.9.270');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.270\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-306\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.271/.test(ver));
+assert.ok(/VERSION_CODE=307/.test(ver));
+assert.ok(/jc-v1\.9\.271/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.271');
+assert.strictEqual(cfg.version, '1.9.271');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.271\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-307\}"/.test(apkSh));
 
 // --- 1.9.244 赛后复盘: horizontal pan must not stretch/expand the page ---
 

@@ -12,11 +12,11 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=1\.9\.270/.test(ver));
-assert.ok(/VERSION_CODE=306/.test(ver));
-assert.ok(/jc-v1\.9\.270/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.270');
-assert.strictEqual(cfg.version, '1.9.270');
+assert.ok(/VERSION=1\.9\.271/.test(ver));
+assert.ok(/VERSION_CODE=307/.test(ver));
+assert.ok(/jc-v1\.9\.271/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.271');
+assert.strictEqual(cfg.version, '1.9.271');
 
 assert.ok(/function liveStatsEventsBehindScore/.test(appJs), 'client partial events gap');
 assert.ok(/function liveStatsGoalCountFromEvents/.test(appJs), 'client goal tally');

@@ -298,10 +298,13 @@ function formatScoreSpaced(full, homeScore, awayScore) {
   return String(full);
 }
 function matchCardMeta(m, { favSize = 14 } = {}) {
-  const tail = [];
-  if (m.sample) tail.push('<span class="sample-tag">示例</span>');
-  if (isFav(m.id)) tail.push(`<span class="fav-on" style="width:${favSize}px;height:${favSize}px">${I.star}</span>`);
-  return `<div class="match-meta"><span class="match-meta-l">${esc(m.league || '')} · ${esc(m.num || '')}</span><span class="match-meta-r">${esc(m.time || '--:--')}</span>${tail.join('')}</div>`;
+  const extras = [];
+  if (m.sample) extras.push('<span class="sample-tag">示例</span>');
+  // 1.9.271: always reserve the fav-star column so kickoff time stays right-aligned.
+  const favInner = isFav(m.id)
+    ? `<span class="fav-on" style="width:${favSize}px;height:${favSize}px">${I.star}</span>`
+    : '';
+  return `<div class="match-meta"><span class="match-meta-l">${esc(m.league || '')} · ${esc(m.num || '')}${extras.join('')}</span><span class="match-meta-r"><span class="match-meta-time">${esc(m.time || '--:--')}</span><span class="match-meta-fav" style="width:${favSize}px;height:${favSize}px" aria-hidden="${isFav(m.id) ? 'false' : 'true'}">${favInner}</span></span></div>`;
 }
 function matchScoreColumn(row) {
   const kind = row._kind;
@@ -2505,8 +2508,13 @@ function commitSchDate(next) {
   if (!next || next === S.schDate) return false;
   S.schDate = next;
   invalidateTabKeep('schedule');
-  if (softPatchSchedule()) { syncTopChrome('schedule'); return true; }
+  if (softPatchSchedule()) {
+    syncTopChrome('schedule');
+    kickScheduleLiveRefresh();
+    return true;
+  }
   render({ force: true });
+  kickScheduleLiveRefresh();
   return true;
 }
 function schDateSpindleShort(d) { return String(d).slice(5); }
@@ -4311,6 +4319,31 @@ function resumeScheduleLivePoll() {
   if (!model) return;
   ensureLiveScorePoll(scheduleHasPendingLive(model.classifiedDay));
 }
+function scheduleDayLiveIds(model) {
+  return (model && model.classifiedDay || []).map(x => String(x.id));
+}
+/** Fetch current date's live-scores (used on date change / tab restore / first paint). */
+function refreshScheduleDayLiveScores({ force, bust } = {}) {
+  try {
+    if (route().name !== 'schedule') return Promise.resolve(null);
+    const model = scheduleDayModel();
+    if (!model || !model.classifiedDay.length) return Promise.resolve(null);
+    if (force) S.liveScoresAt = 0;
+    return loadLiveScores(scheduleDayLiveIds(model), { force: !!force, bust: !!bust });
+  } catch (_) { return Promise.resolve(null); }
+}
+function kickScheduleLiveRefresh() {
+  refreshScheduleDayLiveScores({ force: true, bust: true })
+    .then(() => afterScheduleLiveScoresLoaded())
+    .catch(() => {});
+}
+function onScheduleForeground() {
+  if (document.hidden) return;
+  if (route().name !== 'schedule') return;
+  if (S._schFgAt && Date.now() - S._schFgAt < 2000) return;
+  S._schFgAt = Date.now();
+  pullRefreshScheduleLiveScores().then(() => { afterScheduleLiveScoresLoaded(); resumeScheduleLivePoll(); }).catch(() => {});
+}
 /** live-scores 回流后刷新赛程 DOM（避开 tabContentSig 相同导致 render no-op）。 */
 function afterScheduleLiveScoresLoaded() {
   if (route().name !== 'schedule') return;
@@ -4326,6 +4359,7 @@ function softPatchScheduleLiveRows() {
     const nodes = document.querySelectorAll('#schBody .ls-row[data-go], .ls-list .ls-row[data-go]');
     if (!nodes.length) return false;
     let n = 0;
+    let sectionDirty = false;
     nodes.forEach((btn) => {
       const go = btn.getAttribute('data-go') || '';
       const m = /#\/match\/(.+)$/.exec(go);
@@ -4336,6 +4370,9 @@ function softPatchScheduleLiveRows() {
       if (!rowSrc) return;
       const row = classifyScoreRow(rowSrc);
       const kind = row._kind;
+      const prevKind = btn.classList.contains('ft') ? 'ft' : btn.classList.contains('live') ? 'live' : 'ns';
+      // ns↔live↔ft must rebuild 已结束 separator / sort, not only the mid cell.
+      if (prevKind !== kind && (prevKind === 'ft' || kind === 'ft')) sectionDirty = true;
       const statusCls = kind === 'live' ? 'live' : kind === 'ft' ? 'ft' : 'ns';
       const wantCls = 'ls-row ' + statusCls;
       if (btn.className !== wantCls) { btn.className = wantCls; n++; }
@@ -4344,13 +4381,16 @@ function softPatchScheduleLiveRows() {
       const next = matchScoreColumn(row);
       if (mid.innerHTML !== next) { mid.innerHTML = next; n++; }
     });
+    if (sectionDirty) return false;
     return n > 0;
   } catch (_) { return false; }
 }
 async function loadLiveScores(ids, { force, bust } = {}) {
   const list = [...new Set((ids || []).map(String).filter(Boolean))];
   if (!list.length) { S.liveScores = S.liveScores || {}; return S.liveScores; }
-  if (!force && S.liveScoresAt && Date.now() - S.liveScoresAt < 35000 && S.liveScores) return S.liveScores;
+  // 1.9.271: global 35s TTL must not skip a date/tab whose ids are still missing.
+  const missing = list.some(id => !(S.liveScores && S.liveScores[id]));
+  if (!force && !missing && S.liveScoresAt && Date.now() - S.liveScoresAt < 35000 && S.liveScores) return S.liveScores;
   if (S.liveScoresLoading) {
     // 1.9.247: a forced refresh (pull-to-refresh / poll) must not be swallowed by an
     // in-flight plain load returning stale data — wait it out, then fetch fresh.
@@ -4685,8 +4725,12 @@ function pullRefreshScheduleLiveScores() {
  *   still bound API quota server-side).
  */
 function ensureLiveScorePoll(keepAlive) {
-  stopLiveScorePoll();
-  if (!keepAlive) return;
+  if (!keepAlive) {
+    stopLiveScorePoll();
+    return;
+  }
+  // 1.9.271: do not reset the 30s interval on every render/search/date patch.
+  if (S.liveScorePoll) return;
   S.liveScorePoll = setInterval(async () => {
     if (document.hidden) return;
     const r = route();
@@ -5403,10 +5447,11 @@ function pageSchedule() {
     h += `<div id="schBody" class="sch-body">${scheduleBodyHtml(model)}</div>`;
   }
   const allDayIds = classifiedDay.map(x => String(x.id));
-  const needFetch = !S.liveScoresAt || Date.now() - S.liveScoresAt > 35000;
-  if (needFetch && allDayIds.length) {
+  if (allDayIds.length) {
     setTimeout(async () => {
-      await loadLiveScores(allDayIds);
+      const pending = scheduleNeedLivePoll(classifiedDay, model.counts);
+      const missing = allDayIds.some(id => !(S.liveScores && S.liveScores[id]));
+      await loadLiveScores(allDayIds, (pending || missing) ? { force: true, bust: true } : {});
       afterScheduleLiveScoresLoaded();
     }, 0);
   }
@@ -11122,6 +11167,16 @@ function pageFavs() {
   if (!S.favs.length) return h + empty('在赛事详情页点击「关注」，即可把场次收藏到这里，方便跟踪。', '<button class="btn pri sm" data-go="#/schedule">去看赛程</button>', '还没有关注') + foot();
   if (!loggedIn()) h += infoBar('当前为游客，关注仅保存在本机。<a href="#/login">登录</a> 后自动同步到账号。');
   if (IS_APP) h += infoBar('关注场次进行中进球时，将弹出系统通知（需授予通知权限）。');
+  const favIds = (S.favs || []).map(f => String(f.matchId || f.id || '')).filter(Boolean);
+  if (favIds.length && !S._favsLiveKick && (!S.liveScoresAt || Date.now() - S.liveScoresAt > 20000)) {
+    S._favsLiveKick = true;
+    setTimeout(async () => {
+      try {
+        await loadLiveScores(favIds, { force: true, bust: true });
+        if (route().name === 'favs') render({ force: true });
+      } finally { S._favsLiveKick = false; }
+    }, 0);
+  }
   h += '<div style="height:10px"></div><div class="grid">' + S.favs.map(f => {
     const m = findMatch(f.matchId); if (m) return matchCard(m, { odds: false });
     const r = (S.results || []).find(x => x.id === f.matchId); if (r) return resultCard(r);
@@ -12367,8 +12422,11 @@ function render(opts) {
   if (r.name === 'home' && !canRestore) initBanner();
   else if (r.name === 'home' && canRestore && $('#bnTrack')) initBanner();
   if (r.name === 'home') setTimeout(syncHomeAttitudeScroll, 0);
-  if (r.name === 'schedule') resumeScheduleLivePoll();
-  else stopLiveScorePoll();
+  if (r.name === 'schedule') {
+    resumeScheduleLivePoll();
+    // TAB_KEEP restore / tab switch skips pageSchedule() — kick a live fetch so cards catch up.
+    if (switchingTab || canRestore) kickScheduleLiveRefresh();
+  } else stopLiveScorePoll();
   document.title = (TITLES[r.name] ? TITLES[r.name] + ' · ' : '') + '云球迷';
   try { if (window.JCFloatBall) window.JCFloatBall.syncRoute(r.name); } catch (_) {}
   if (r.name === 'predict' || r.name === 'home') {
@@ -13642,12 +13700,12 @@ addEventListener('visibilitychange', () => {
     return;
   }
   tickClock();
-  // 1.9.247: 回前台立即强刷赛程实时比分（后台期间 interval 不跑，比分/分钟会停滞）
-  if (route().name === 'schedule') {
-    pullRefreshScheduleLiveScores().then(() => { afterScheduleLiveScoresLoaded(); resumeScheduleLivePoll(); }).catch(() => {});
-  }
+  // 1.9.247 / 1.9.271: 回前台立即强刷（后台 interval 不跑；部分 WebView 只发 pageshow）
+  onScheduleForeground();
   ensureFavGoalPoll();
 });
+addEventListener('pageshow', () => { onScheduleForeground(); });
+addEventListener('focus', () => { onScheduleForeground(); });
 if (IS_PARTNER) {
   setInterval(() => { if (!document.hidden && !window.__partnerKilled) checkPartnerGate(); }, 60 * 1000);
 }

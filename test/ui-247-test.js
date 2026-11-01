@@ -22,13 +22,13 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
 // --- version pins ---
-assert.ok(/VERSION=1\.9\.270/.test(ver));
-assert.ok(/VERSION_CODE=306/.test(ver));
-assert.ok(/jc-v1\.9\.270/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.270');
-assert.strictEqual(cfg.version, '1.9.270');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.270\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-306\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.271/.test(ver));
+assert.ok(/VERSION_CODE=307/.test(ver));
+assert.ok(/jc-v1\.9\.271/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.271');
+assert.strictEqual(cfg.version, '1.9.271');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.271\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-307\}"/.test(apkSh));
 
 // --- client: schedule list heartbeat poll (ongoing soft refresh, not only pull) ---
 assert.ok(/function scheduleHasPendingLive\(/.test(appJs), 'pending-live helper defined');
@@ -51,9 +51,11 @@ assert.ok(/if \(!force \|\| !S\._liveScoresInflight\) return S\.liveScores;/.tes
 // returning to foreground on the schedule tab refetches immediately
 const visIdx = appJs.indexOf("addEventListener('visibilitychange'");
 assert.ok(visIdx > 0, 'visibilitychange handler present');
-const visBody = appJs.slice(visIdx, visIdx + 600);
-assert.ok(/route\(\)\.name === 'schedule'/.test(visBody) && /pullRefreshScheduleLiveScores\(\)/.test(visBody),
+const visBody = appJs.slice(visIdx, visIdx + 800);
+assert.ok(/onScheduleForeground\(\)/.test(visBody), 'visibilitychange uses shared foreground refresh');
+assert.ok(/function onScheduleForeground\(/.test(appJs) && /pullRefreshScheduleLiveScores\(\)/.test(appJs),
   'foreground resume forces schedule live scores');
+assert.ok(/addEventListener\('pageshow'/.test(appJs), 'pageshow fallback for WebView');
 
 // --- CSS: 赛后复盘 gutters survive the .pr-report padding:0 !important flatten ---
 const cssNoComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
