@@ -6,6 +6,7 @@
 
 - systemd 单元使用 `EnvironmentFile=-/opt/jingcai/.env`（前缀 `-` 表示文件缺失时仍启动，但**没有密钥时过程统计等接口会失败**）。
 - 过程统计等上游能力依赖 `.env` 中的 `API_FOOTBALL_KEY`（以及可选 `DEEPSEEK_API_KEY` 等）。**不要把 `.env` 提交进 git。**
+- 关注场次进球杀进程通知（1.9.267+）：`.env` 增加 `JPUSH_APPKEY` 与 `JPUSH_MASTER_SECRET`（极光控制台，步骤见 `docs/jpush-setup.md`）。未配置时 App 活着仍可本地提醒，划掉进程则无系统窗。
 - 运维备份副本（仅服务器，不在仓库）：`/root/jingcai-secrets/jingcai.env` — 用于恢复，勿在文档/PR 中粘贴内容。
 
 ## 安全同步（推荐）

@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.tiicai.jingcai" android:versionCode="255" android:versionName="1.9.218">
+    package="com.tiicai.jingcai" android:versionCode="303" android:versionName="1.9.267">
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher"
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <application android:name=".JingcaiApp" android:label="@string/app_name" android:icon="@mipmap/ic_launcher"
         android:allowBackup="true" android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme">
@@ -18,5 +20,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- JPUSH_COMPONENTS_BEGIN -->
+        <!-- JPUSH_COMPONENTS_END -->
     </application>
 </manifest>

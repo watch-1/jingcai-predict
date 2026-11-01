@@ -1,5 +1,5 @@
 'use strict';
-// 1.9.247: 赛程/比分 list must stay live WITHOUT opening match detail —
+// 1.9.267: 赛程/比分 list must stay live WITHOUT opening match detail —
 //   (a) heartbeat poll keeps refreshing score+minute while the user stays on the list
 //       (repro: Fiorentina list 0:1@51' vs detail 2:1@63');
 //   (b) AF overlay adopts the fresher clock when sporttery's minute froze in the same phase;
@@ -22,13 +22,13 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
 // --- version pins ---
-assert.ok(/VERSION=1\.9\.247/.test(ver));
-assert.ok(/VERSION_CODE=284/.test(ver));
-assert.ok(/jc-v1\.9\.247/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.247');
-assert.strictEqual(cfg.version, '1.9.247');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.247\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-284\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.267/.test(ver));
+assert.ok(/VERSION_CODE=303/.test(ver));
+assert.ok(/jc-v1\.9\.267/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.267');
+assert.strictEqual(cfg.version, '1.9.267');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.267\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-303\}"/.test(apkSh));
 
 // --- client: schedule list heartbeat poll (ongoing soft refresh, not only pull) ---
 assert.ok(/function scheduleHasPendingLive\(/.test(appJs), 'pending-live helper defined');

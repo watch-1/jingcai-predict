@@ -30,6 +30,6 @@ assert.ok(manifest.playerIds.includes('252107'), 'Vini photo bundled');
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
 assert.ok(/VERSION=1\.9\./.test(ver));
-assert.ok(/VERSION_CODE=24[4-9]/.test(ver) || /VERSION_CODE=25\d/.test(ver) || /VERSION_CODE=26\d/.test(ver) || /VERSION_CODE=2[6-8]\d/.test(ver));
+assert.ok(/VERSION_CODE=24[4-9]/.test(ver) || /VERSION_CODE=25\d/.test(ver) || /VERSION_CODE=26\d/.test(ver) || /VERSION_CODE=2[6-8]\d/.test(ver) || /VERSION_CODE=30\d/.test(ver));
 
 console.log('ui-205-test OK', { players: manifest.playerIds.length, bootKb: Math.round(bootJs.length / 1024) });

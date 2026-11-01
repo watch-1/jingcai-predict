@@ -28,6 +28,7 @@ UI：蓝色体育风、底部 5 Tab（首页/赛程/预测/数据/我的；开�
 - 聊球：`GET /api/match-chat?matchId=`（短轮询，`afterId` 增量）、`POST /api/match-chat`（登录，限流）、`GET /api/match-chat/stream`（SSE）
 - 数据中心：`GET /api/leagues`、`GET /api/standings?league=epl|39`、`GET /api/topscorers`、`GET /api/topassists`、`GET /api/team?id=`、`GET /api/af-player?id=`（队/人详情含参考身价 `marketValue`；身价索引见 `GET /api/market-value-status`；榜单缓存约 6 小时；队徽/头像走 `/api/logo`）
 - 实时比分（赛程页）：`GET /api/live-scores?ids=`（sporttery `getMatchLiveV1` 批量，缓存约 45 秒；可选叠加 API-Football `/fixtures?live=all` 一次请求补分钟，依赖已有 fixture-map）
+- 关注场次进球推送（1.9.267，Android 杀进程系统通知）：`POST /api/push/register`、`PUT /api/push/favs`、`GET /api/push/status`；服务端 worker + 极光 REST。开通步骤 `docs/jpush-setup.md`。
 - 综合预测简报：`GET /api/predict-report?matchId=`（赛前情报长文 + 结构化结论，磁盘缓存）；配额策略 `GET /api/predict-quota`
 - 绿茵屏：`GET /api/live-stats` 附带 `events`（API-Football fixtures/events，重缓存；无真实球轨迹）
 - 账号（JSON，`Authorization: Bearer <token>`）：
@@ -71,7 +72,7 @@ systemd 单元包含 `EnvironmentFile=-/opt/jingcai/.env`、`Environment=PORT=80
 ## APK
 
 ```bash
-API_BASE=http://120.77.152.74:8088 ./android/build-apk.sh     # 默认即此地址；VERSION_NAME=1.9.0 VERSION_CODE=41
+API_BASE=http://120.77.152.74:8088 JPUSH_APPKEY=从极光控制台复制 ./android/build-apk.sh
 # 输出 dist/jingcai-predict.apk，使用 android/release.keystore 签名（与旧版相同密钥，可覆盖安装）
 ```
 API 地址在构建时写入 `www/config.js`，APP 内**没有**服务器地址设置。网页版同源调用 `/api`。

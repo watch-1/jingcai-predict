@@ -1774,6 +1774,7 @@ async function refreshAccount() {
     hydrateKbPacksCache();
     prefetchKbPacksOnBoot();
     if (route().name === 'kb') ensureKbRouteData();
+    if (typeof syncPushFavs === 'function') syncPushFavs();
   } catch (e) { if (e.status !== 401) console.warn('account refresh failed', e.message); }
 }
 async function loadMembershipCatalog() {
@@ -1815,6 +1816,7 @@ async function toggleFav(id) {
   persistLists(); toast(on ? '已取消关注' : loggedIn() ? '已关注，已同步到账号' : '已关注（本机保存，登录后可同步）');
   if (!on) requestFavGoalNotifyPermission();
   ensureFavGoalPoll();
+  syncPushFavs();
   render();
 }
 async function savePlan() {
@@ -4402,6 +4404,111 @@ function fireFavGoalNotify(payload) {
     bridge.notifyGoal(JSON.stringify(payload));
   } catch (_) {}
 }
+function pushDeviceId() {
+  try {
+    if (window.JingcaiChrome && typeof window.JingcaiChrome.getPushDeviceId === 'function') {
+      const id = window.JingcaiChrome.getPushDeviceId();
+      if (id && String(id).length >= 16) { LS.set('jc_push_device', id); return String(id); }
+    }
+  } catch (_) {}
+  let id = LS.get('jc_push_device', '');
+  if (!id || String(id).length < 16) {
+    id = ('jc' + Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+    while (id.length < 16) id += 'x';
+    LS.set('jc_push_device', id);
+  }
+  return String(id);
+}
+function pushDeviceSecret() {
+  try {
+    if (window.JingcaiChrome && typeof window.JingcaiChrome.getPushDeviceSecret === 'function') {
+      const s = window.JingcaiChrome.getPushDeviceSecret();
+      if (s) { LS.set('jc_push_secret', s); return String(s); }
+    }
+  } catch (_) {}
+  return LS.get('jc_push_secret', '') || '';
+}
+function rememberPushSecret(secret) {
+  if (!secret) return;
+  LS.set('jc_push_secret', secret);
+  try {
+    if (window.JingcaiChrome && typeof window.JingcaiChrome.setPushDeviceSecret === 'function') {
+      window.JingcaiChrome.setPushDeviceSecret(secret);
+    }
+  } catch (_) {}
+}
+function isNativePushReady() {
+  try {
+    if (S.pushReady) return true;
+    if (window.JingcaiChrome && typeof window.JingcaiChrome.isPushReady === 'function') {
+      return !!window.JingcaiChrome.isPushReady();
+    }
+  } catch (_) {}
+  return false;
+}
+async function syncPushRegistration() {
+  if (!IS_APP) return;
+  try {
+    if (window.JingcaiChrome && typeof window.JingcaiChrome.startPush === 'function') {
+      window.JingcaiChrome.startPush();
+    }
+    const deviceId = pushDeviceId();
+    const secret = pushDeviceSecret();
+    let regId = '';
+    try {
+      if (window.JingcaiChrome && typeof window.JingcaiChrome.getPushRegId === 'function') {
+        regId = window.JingcaiChrome.getPushRegId() || '';
+      }
+    } catch (_) {}
+    const body = { deviceId, platform: 'android', appVersion: CFG.version || '' };
+    if (secret) body.deviceSecret = secret;
+    if (regId) body.regId = regId;
+    const j = await api('/push/register', { method: 'POST', body });
+    if (j && j.deviceSecret) rememberPushSecret(j.deviceSecret);
+    S.pushEnabled = !!(j && j.pushEnabled);
+    S.pushReady = !!(regId || isNativePushReady());
+    await syncPushFavs();
+  } catch (e) {
+    console.warn('push register', e && e.message);
+  }
+}
+async function syncPushFavs() {
+  if (!IS_APP) return;
+  const deviceId = pushDeviceId();
+  const secret = pushDeviceSecret();
+  if (!secret) return;
+  const favorites = (S.favs || []).map(f => ({
+    matchId: String(f.matchId || f.id || ''),
+    home: f.home || '',
+    away: f.away || '',
+    date: f.date || '',
+    time: f.time || '',
+  })).filter(f => f.matchId);
+  try {
+    await api('/push/favs', { method: 'PUT', body: { deviceId, deviceSecret: secret, favorites } });
+  } catch (e) {
+    console.warn('push favs', e && e.message);
+  }
+}
+function markGoalAlertSeenFromPush(matchId, scoreKey) {
+  const id = String(matchId || '');
+  const key = String(scoreKey || '');
+  if (!id || !key) return;
+  S.goalAlertSeen = S.goalAlertSeen || {};
+  S.goalAlertSeen[id] = key;
+  S.goalAlertWatching = S.goalAlertWatching || {};
+  S.goalAlertWatching[id] = true;
+  persistGoalAlertSeen();
+}
+try {
+  window.__onJPushRegId = function (regId) {
+    if (regId) S.pushReady = true;
+    syncPushRegistration();
+  };
+  window.__onJPushGoal = function (matchId, scoreKey) {
+    markGoalAlertSeenFromPush(matchId, scoreKey);
+  };
+} catch (_) {}
 function notifyFavGoalsFromScores(prevMap, nextMap) {
   if (!IS_APP) return;
   const favs = S.favs || [];
@@ -4431,7 +4538,7 @@ function notifyFavGoalsFromScores(prevMap, nextMap) {
       const hint = lastCachedGoalHint(S.liveStatsCache && S.liveStatsCache[id]);
       const minute = (hint && hint.minute != null) ? hint.minute : next.minute;
       const copy = buildFavGoalNotifyCopy(meta.home, meta.away, d.homeScore, d.awayScore, minute, hint && hint.player);
-      fireFavGoalNotify({
+      const payload = {
         matchId: id,
         title: copy.title,
         body: copy.body,
@@ -4439,7 +4546,17 @@ function notifyFavGoalsFromScores(prevMap, nextMap) {
         away: meta.away,
         homeScore: d.homeScore,
         awayScore: d.awayScore,
-      });
+        scoreKey: d.key,
+      };
+      // Dedup: JPush shows the OS tray when the process is hidden/killed
+      // (display_foreground=0). Skip local only when the server actually has
+      // JPush credentials (pushEnabled) AND native has a regId — otherwise a
+      // background-alive process would go silent if .env keys are missing.
+      if (S.pushEnabled && isNativePushReady() && document.hidden) {
+        /* server / JPush owns the tray */
+      } else {
+        fireFavGoalNotify(payload);
+      }
     }
     S.goalAlertWatching[id] = true;
   }
@@ -10949,7 +11066,13 @@ function baselineDoc() {
   <p class="note">命中率高于乱猜或全选主胜，不等于长期盈利；未计税、限额与截期。仅作方法说明。</p>`;
 }
 function pageAbout() {
-  return hdr('关于') + `<div class="doc" style="text-align:center"><div style="width:72px;height:72px;margin:10px auto;border-radius:18px;background:url(icons/icon-192.png) center/cover;box-shadow:var(--sh2)"></div><h2>竞彩预测</h2><p class="note">版本 ${esc(CFG.version)} · ${IS_APP ? 'Android 应用' : '网页版'}</p></div>
+  let pushLine = '';
+  if (IS_APP) {
+    let rid = '';
+    try { rid = window.JingcaiChrome && window.JingcaiChrome.getPushRegId && window.JingcaiChrome.getPushRegId(); } catch (_) {}
+    pushLine = `<p class="note">进球推送设备号 ${esc(pushDeviceId())}${rid ? '<br>Registration ID ' + esc(rid) : ''}</p>`;
+  }
+  return hdr('关于') + `<div class="doc" style="text-align:center"><div style="width:72px;height:72px;margin:10px auto;border-radius:18px;background:url(icons/icon-192.png) center/cover;box-shadow:var(--sh2)"></div><h2>竞彩预测</h2><p class="note">版本 ${esc(CFG.version)} · ${IS_APP ? 'Android 应用' : '网页版'}</p>${pushLine}</div>
   <div class="doc"><h4>我们提供什么</h4><p>竞彩足球在售赛程、胜平负/让球赔率、基于赔率隐含概率的预测分析、联赛积分榜/射手榜数据中心，以及开奖结果查询。</p>
   <h4>预测如何计算</h4><p>详情「预测」页生成赛前情报简报：赛况背景、近期战绩与进失球、交锋史、伤停（有第三方数据才写，否则标明暂无）、主客日程，以及市场赔率（仅参考项）。由服务端按场次缓存，避免打爆数据源配额。不编造伤停/比分/未发生新闻。</p>
   <h4>历史实测（基线）</h4>${baselineDoc()}
@@ -10969,7 +11092,7 @@ function pageTerms() {
 }
 function pagePrivacy() {
   return hdr('隐私政策') + `<div class="doc">${TPL}<h2>竞彩预测隐私政策（模板）</h2><p>更新日期：【YYYY年MM月DD日】　运营方：【运营主体名称】</p>
-  <h4>一、我们收集的信息</h4><p>1. 注册信息：手机号、密码（仅保存经 scrypt 加盐哈希后的结果，不保存明文）、昵称、所选预设头像。<br>2. 使用数据：你主动保存的「我的方案」和「我的关注」。<br>3. 登录会话：登录凭证（服务器仅保存其哈希）及设备 User-Agent，用于保持登录状态。<br>4. 会员订单：套餐、金额、支付方式与会员有效期（用于提供资讯会员服务；当前为模拟支付）。</p>
+  <h4>一、我们收集的信息</h4><p>1. 注册信息：手机号、密码（仅保存经 scrypt 加盐哈希后的结果，不保存明文）、昵称、所选预设头像。<br>2. 使用数据：你主动保存的「我的方案」和「我的关注」。<br>3. 登录会话：登录凭证（服务器仅保存其哈希）及设备 User-Agent，用于保持登录状态。<br>4. 会员订单：套餐、金额、支付方式与会员有效期（用于提供资讯会员服务；当前为模拟支付）。<br>5. 进球提醒（Android）：在你授予通知权限后，设备会向极光推送（JPush）注册一个推送令牌，并把「关注场次」同步到服务器，以便 App 被划掉后仍能弹出系统通知。不开启通知则不初始化该 SDK。</p>
   <h4>二、我们如何使用信息</h4><p>仅用于提供账号登录、数据同步功能及保障账号安全（如登录频率限制）。我们不会出售你的个人信息，也不会将方案提交给任何第三方。</p>
   <h4>三、信息存储</h4><p>数据存储于运营方位于【地区】的服务器。游客模式下的方案与关注仅保存在你的设备本地。</p>
   <h4>四、你的权利</h4><p>你可以随时修改昵称、头像和密码，删除方案或关注，并可通过「注销账号」永久删除全部个人数据。</p>
@@ -12690,6 +12813,7 @@ document.addEventListener('click', async e => {
       if (loggedIn()) { try { await api('/favorites/' + encodeURIComponent(d.id), { method: 'DELETE' }); } catch (er) { return toast(er.message); } }
       S.favs = S.favs.filter(f => f.matchId !== d.id); persistLists(); toast('已取消关注');
       ensureFavGoalPoll();
+      syncPushFavs();
       return render();
     }
     case 'clearSel': S.sel = {}; S.types = []; S.mult = 1; return render();
@@ -13244,7 +13368,7 @@ document.addEventListener('submit', async e => {
 loadLocalLists();
 loadGoalAlertSeen();
 // 1.9.265: first launch must prompt Android POST_NOTIFICATIONS even with zero favs
-if (IS_APP) requestFavGoalNotifyPermission();
+if (IS_APP) { requestFavGoalNotifyPermission(); syncPushRegistration(); }
 hydrateFromCache(); // 1.9.124: JSON lists
 hydrateKbPacksCache(); // 1.9.158: KB list before first /kb paint
 if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.161: idle KB warm; DC queue yields while #/kb or KB in-flight
@@ -13329,6 +13453,7 @@ window.__partnerGateReady.then((ok) => {
     if (['me', 'plans', 'favs', 'profile', 'membership', 'orders', 'pay'].includes(route().name)) render({ force: true });
     requestFavGoalNotifyPermission();
     ensureFavGoalPoll();
+    syncPushRegistration();
   });
   loadMembershipCatalog();
   ensureFavGoalPoll();
