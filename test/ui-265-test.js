@@ -14,13 +14,13 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const mainJava = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.267/.test(ver));
-assert.ok(/VERSION_CODE=303/.test(ver));
-assert.ok(/jc-v1\.9\.267/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.267');
-assert.strictEqual(cfg.version, '1.9.267');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.267\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-303\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.268/.test(ver));
+assert.ok(/VERSION_CODE=304/.test(ver));
+assert.ok(/jc-v1\.9\.268/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.268');
+assert.strictEqual(cfg.version, '1.9.268');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.268\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-304\}"/.test(apkSh));
 
 // Boot / first paint: request even with zero favs (must not be gated on S.favs.length)
 const bootIdx = appJs.indexOf('loadLocalLists();\nloadGoalAlertSeen();');
