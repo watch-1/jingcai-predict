@@ -75,8 +75,10 @@ assert.ok(/case 'schSearchClear'/.test(appJs), 'clear search');
 assert.ok(/\.sch-search/.test(css) && /border-radius:\s*999px/.test(css), 'pill search');
 assert.ok(!/if \(rName === 'schedule'\) return schDateSpindleHtml/.test(appJs), 'spindle left top chrome');
 assert.ok(/tc-tabs--schedule/.test(appJs), 'schedule top tabs');
-assert.ok(/\.tc-tabs--schedule/.test(css), 'schedule top tabs css');
-assert.ok(/比分[\s\S]*计算器[\s\S]*开奖/.test(appJs.match(/if \(rName === 'schedule'\) \{[\s\S]*?return `<nav class="tc-tabs tc-tabs--schedule/)[0]), 'top order 比分 计算器 开奖');
+assert.ok(/rName === 'schedule' \|\| rName === 'results'/.test(appJs), 'results shares schedule top tabs');
+assert.ok(/top-chrome--modes/.test(appJs) && /top-chrome--modes/.test(css), 'modes chrome fills center slot');
+assert.ok(/flex:\s*1 1 0/.test(css.replace(/\s+/g, ' ')), 'tabs grow to fill band');
+assert.ok(/比分[\s\S]*计算器[\s\S]*开奖/.test(appJs.match(/if \(rName === 'schedule' \|\| rName === 'results'\) \{[\s\S]*?return `<nav class="tc-tabs tc-tabs--schedule/)[0]), 'top order 比分 计算器 开奖');
 assert.ok(!/h \+= schChannelsHtml\(\)/.test(appJs), 'no duplicate 比分/计算器 row under search');
 assert.ok(/topChromeCenterHtml/.test(appJs), 'top chrome helper kept');
 

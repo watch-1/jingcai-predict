@@ -80,6 +80,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await tap('#top-chrome .tc-tab[data-go="#/results"]');
     await p.waitForFunction(() => location.hash === '#/results', { timeout: 5000 });
     ok(/#\/results/.test(await p.evaluate(() => location.hash)), 'schedule: tap 开奖 goes to results');
+    ok((await p.$$eval('#top-chrome .tc-tab', l => l.map(x => x.textContent).join())) === '比分,计算器,开奖', 'results top: same 比分/计算器/开奖');
+    ok(await p.$eval('#top-chrome .tc-tab[data-go="#/results"]', e => e.classList.contains('on')), 'results: 开奖 on');
     await tap('.tabbar [data-go="#/schedule"]');
     await p.waitForSelector('#view #dstrip');
     ok((await p.$$eval('#top-chrome .tc-tab', l => l.map(x => x.textContent).join())) === '比分,计算器,开奖', 'back from 开奖: schedule top restored');

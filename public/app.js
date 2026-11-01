@@ -2753,20 +2753,21 @@ function initSchDateSpindle() {
   rebuildSchDateSpindle(wrap, state);
 }
 function topChromeCenterHtml(rName) {
-  if (rName === 'schedule') {
+  if (rName === 'schedule' || rName === 'results') {
     const ch = schChannelOf();
+    const onResults = rName === 'results';
     const tabs = [
       ['list', '比分', 'schChannel'],
       ['calc', '计算器', 'schChannel'],
       ['results', '开奖', 'go'],
     ].map(([k, lab, kind]) => {
-      const on = kind === 'schChannel' ? ch === k : false;
+      const on = kind === 'go' ? onResults : (!onResults && ch === k);
       const act = kind === 'go'
         ? `data-go="#/${k}"`
         : `data-act="schChannel" data-ch="${k}"`;
       return `<button type="button" class="tc-tab${on ? ' on' : ''}" ${act}${on ? ' aria-current="true"' : ''}>${esc(lab)}</button>`;
     }).join('');
-    return `<nav class="tc-tabs tc-tabs--schedule" aria-label="赛程视图">${tabs}</nav>`;
+    return `<nav class="tc-tabs tc-tabs--schedule tc-tabs--modes" aria-label="赛程视图">${tabs}</nav>`;
   }
   if (rName === 'data') {
     const sec = dataSectionOf();
@@ -2796,6 +2797,7 @@ function syncTopChrome(rName) {
   el.classList.toggle('hidden', !show);
   app.classList.toggle('has-top-chrome', show);
   el.classList.toggle('top-chrome--schedule', false);
+  el.classList.toggle('top-chrome--modes', show && (rName === 'schedule' || rName === 'results'));
   el.classList.toggle('top-chrome--data', show && rName === 'data');
   el.classList.toggle('top-chrome--tribe', show && rName === 'tribe');
   if (!show) return;
@@ -12958,6 +12960,7 @@ document.addEventListener('click', async e => {
       setSchChannel(d.ch);
       invalidateTabKeep('schedule');
       stopLiveScorePoll();
+      if (route().name !== 'schedule') return go('#/schedule');
       return render({ force: true });
     }
     case 'schSearchClear': {
