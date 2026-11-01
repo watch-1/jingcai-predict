@@ -13,8 +13,9 @@ assert.ok(/function resumeScheduleLivePoll/.test(appJs), 'schedule: resume poll 
 const pollBlock = appJs.match(/function ensureLiveScorePoll[\s\S]*?^}/m)?.[0] || '';
 assert.ok(/afterScheduleLiveScoresLoaded\(\)/.test(pollBlock), 'live poll: patch list after fetch, not bare render()');
 
-const renderTail = appJs.match(/if \(r\.name === 'schedule'\) resumeScheduleLivePoll\(\);[\s\S]*?else stopLiveScorePoll\(\);/)?.[0] || '';
+const renderTail = appJs.match(/if \(r\.name === 'schedule'\) \{[\s\S]*?resumeScheduleLivePoll\(\);[\s\S]*?else stopLiveScorePoll\(\);/)?.[0] || '';
 assert.ok(renderTail.length > 0, 'render: resume schedule live poll when on 赛程 tab');
+assert.ok(/kickScheduleLiveRefresh\(\)/.test(renderTail), 'render: tab restore kicks live fetch');
 
 const sigBlock = appJs.match(/if \(name === 'schedule'\)[\s\S]*?return 's:'/)?.[0] || '';
 assert.ok(!/liveScoresAt/.test(sigBlock), 'schedule tabContentSig must not include live (poll uses soft patch)');

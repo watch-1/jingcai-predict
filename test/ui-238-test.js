@@ -10,11 +10,11 @@ const swJs = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.270/.test(ver));
-assert.ok(/VERSION_CODE=306/.test(ver));
-assert.ok(/jc-v1\.9\.270/.test(swJs), 'SW VER 1.9.270');
+assert.ok(/VERSION=1\.9\.271/.test(ver));
+assert.ok(/VERSION_CODE=307/.test(ver));
+assert.ok(/jc-v1\.9\.271/.test(swJs), 'SW VER 1.9.271');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.270');
+assert.strictEqual(pkg.version, '1.9.271');
 
 assert.ok(/先为其余单式分配使预估奖金不低于优化金额/.test(appJs), '博冷 help copy break-even-then-cold');
 
@@ -89,7 +89,7 @@ assert.strictEqual(sum(m400), 200);
 assert.ok(m400[0] >= 75, `400yuan low line needs ~78x got ${m400[0]}`);
 assert.ok(lineEstPrize(twoLines[0], m400[0]) >= 400, '400yuan lower line covers stake');
 
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.270\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-306\}"/.test(apkSh));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.271\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-307\}"/.test(apkSh));
 
 console.log('ui-238-test OK', { m2, m4, mLow, m400, units: bonusOptUnitsFromAmount(200) });

@@ -25,15 +25,15 @@ assert.ok(/standings refresh can fill tribe after purge/.test(appJs)
   'loadDataCenter rebuilds tribe after standings');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.270');
+assert.strictEqual(pkg.version, '1.9.271');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.270/.test(ver));
-assert.ok(/VERSION_CODE=306/.test(ver));
-assert.ok(/jc-v1\.9\.270/.test(fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8')));
-assert.ok(/"version":"1\.9\.270"/.test(fs.readFileSync(path.join(root, 'public/config.js'), 'utf8')));
+assert.ok(/VERSION=1\.9\.271/.test(ver));
+assert.ok(/VERSION_CODE=307/.test(ver));
+assert.ok(/jc-v1\.9\.271/.test(fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8')));
+assert.ok(/"version":"1\.9\.271"/.test(fs.readFileSync(path.join(root, 'public/config.js'), 'utf8')));
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.270\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-306\}"/.test(apkSh));
-assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.270.md')));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.271\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-307\}"/.test(apkSh));
+assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.271.md')));
 
 console.log('ui-199-test OK');
