@@ -2796,17 +2796,46 @@ function topChromeCenterHtml(rName) {
   ).join('');
   return `<nav class="tc-tabs" aria-label="内容">${tabs}</nav>`;
 }
+/** 1.9.273: view padding follows the real fixed header (status-bar inset + CJK tab metrics). */
+function syncTopChromeHeight() {
+  try {
+    const el = document.getElementById('top-chrome');
+    const root = document.documentElement;
+    if (!el || el.classList.contains('hidden')) {
+      root.style.removeProperty('--top-chrome-pad');
+      return;
+    }
+    const h = Math.ceil(el.getBoundingClientRect().height);
+    if (h > 0) root.style.setProperty('--top-chrome-pad', h + 'px');
+  } catch (_) {}
+}
+function bindTopChromePad() {
+  if (typeof window === 'undefined' || window._topChromePadBound) return;
+  window._topChromePadBound = true;
+  const run = () => syncTopChromeHeight();
+  window.addEventListener('resize', run, { passive: true });
+  window.addEventListener('orientationchange', run, { passive: true });
+  try {
+    const el = document.getElementById('top-chrome');
+    if (el && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(run).observe(el);
+    }
+  } catch (_) {}
+}
+if (typeof window !== 'undefined') window.syncTopChromeHeight = syncTopChromeHeight;
+
 function syncTopChrome(rName) {
   const el = $('#top-chrome');
   const app = $('#app');
   if (!el || !app) return;
+  bindTopChromePad();
   const show = isShellTab(rName);
   el.classList.toggle('hidden', !show);
   app.classList.toggle('has-top-chrome', show);
   el.classList.toggle('top-chrome--schedule', false);
   el.classList.toggle('top-chrome--data', show && rName === 'data');
   el.classList.toggle('top-chrome--tribe', show && rName === 'tribe');
-  if (!show) return;
+  if (!show) { syncTopChromeHeight(); return; }
   const activeTop = activeTopTab(rName);
   if (activeTop) noteFeedTop(activeTop);
   const li = loggedIn();
@@ -2820,6 +2849,8 @@ function syncTopChrome(rName) {
       <button type="button" class="tc-ic" data-go="#/plans" aria-label="我的消息">${I.mail}${msgDot}</button>
     </div></div>`;
   if (el.innerHTML !== want) el.innerHTML = want;
+  syncTopChromeHeight();
+  try { requestAnimationFrame(syncTopChromeHeight); } catch (_) {}
 }
 const empty = (text, btn = '', title = '') => `<div class="empty">${EMPTY_SVG}${title ? `<div class="empty-t">${title}</div>` : ''}<div class="empty-d">${text}</div>${btn}</div>`;
 const skeleton = (n = 4) => '<div class="grid">' + Array.from({ length: n }, () => `<div class="card sk-card"><div style="display:flex;gap:8px"><div class="sk sk-line" style="width:48px;margin:0"></div><div class="sk sk-line" style="width:90px;margin:0"></div></div>
@@ -12085,6 +12116,7 @@ function syncAndroidChrome(routeName) {
     if (window.JingcaiChrome && typeof window.JingcaiChrome.refreshSafeArea === 'function') {
       window.JingcaiChrome.refreshSafeArea();
     }
+    try { syncTopChromeHeight(); } catch (_) {}
     const darkIcons = isShellTab(routeName) || routeName === 'search';
     if (window.JingcaiChrome && typeof window.JingcaiChrome.statusBarStyle === 'function') {
       window.JingcaiChrome.statusBarStyle(darkIcons ? 'dark' : 'light');
