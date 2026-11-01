@@ -11,7 +11,7 @@ assert.ok(/function commitSchDate/.test(appJs), 'shared date commit');
 assert.ok(/schDateStep/.test(appJs), 'date step handler');
 assert.ok(!/data-act="schMode"/.test(appJs), 'schMode buttons removed from app');
 assert.ok(/let modeRows = classifiedDay/.test(appJs), 'schedule shows all matches for day');
-assert.ok(!/h \+= dateStrip\(dates, S\.schDate/.test(appJs), 'no date strip under top bar on schedule');
+assert.ok(/h \+= dateStrip\(dates, S\.schDate/.test(appJs), 'schedule reuses 开奖 dateStrip under top bar');
 
 assert.ok(/\.tc-sch-date-spindle/.test(css) || /\.tc-sch-date/.test(css), 'schedule date chrome styles');
 

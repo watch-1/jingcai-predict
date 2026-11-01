@@ -1,6 +1,6 @@
 {
-  "name": "竞彩预测",
-  "short_name": "竞彩预测",
+  "name": "云球迷",
+  "short_name": "云球迷",
   "description": "竞彩足球赛程、赔率隐含概率预测与开奖结果（仅供参考）",
   "lang": "zh-CN",
   "start_url": "./index.html#/home",

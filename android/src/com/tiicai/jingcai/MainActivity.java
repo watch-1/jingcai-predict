@@ -6,14 +6,24 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.Outline;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -28,7 +38,7 @@ import java.util.Map;
 import org.json.JSONObject;
 
 /**
- * 竞彩预测: WebView shell. Frontend is bundled in assets/www and served from
+ * 云球迷: WebView shell. Frontend is bundled in assets/www and served from
  * https://appassets.androidplatform.net/www/ (reserved host, never hits the network),
  * so the page has a normal origin with working localStorage; API calls go to the fixed
  * build-time API_BASE server (see www/config.js, network_security_config.xml).
@@ -37,8 +47,8 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     static final String HOST = "appassets.androidplatform.net";
     static final String START = "https://" + HOST + "/www/index.html";
-    /** CSS --pri-d / theme-color. Used as WebView/window fill while page paints. */
-    static final int CHROME = Color.parseColor("#1B2A4A");
+    /** Light splash / first-paint fill so the old navy centered-icon look never flashes. */
+    static final int CHROME = Color.parseColor("#F7F7F8");
     private static final int FILE_CHOOSER_REQUEST = 9101;
     private static final int REQ_POST_NOTIF = 9102;
     static final String GOAL_CHANNEL = "goal_alerts"; // 进球提醒
@@ -47,6 +57,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> filePathCallback;
     private String pendingOpenHash;
     private boolean pageReady;
+    private View splashBrand;
     /** Session-level: only show the system POST_NOTIFICATIONS sheet once. */
     private boolean notifyPermAsked;
     private final Handler bgHandler = new Handler(Looper.getMainLooper());
@@ -66,7 +77,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         applyEdgeToEdge();
         web = new WebView(this);
-        // Avoid white flash before first CSS/JS paint (cold start + route re-render gaps).
+        // Light fill so splash→HTML first paint stays one color (no navy / centered icon).
         web.setBackgroundColor(CHROME);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -108,6 +119,7 @@ public class MainActivity extends Activity {
                 pageReady = true;
                 injectSafeAreaTop();
                 injectOpenHash();
+                hideNativeSplashBrand();
                 // 1.9.265: system notify dialog on first paint, even if JS boot is slow
                 requestGoalNotifyPermission();
             }
@@ -135,7 +147,7 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
-        setContentView(web);
+        setContentView(buildSplashRoot(web));
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
         else web.loadUrl(START);
         alive = this;
@@ -148,7 +160,7 @@ public class MainActivity extends Activity {
      * 1.9.121: immersive edge-to-edge. Transparent status bar so header gradients
      * (home / 赛程 / 预测 / 数据 / 我的 / 详情) paint continuously under system icons —
      * same "one surface" feel as 澳客 reference. CSS pads with --sat (injected below).
-     * Light status icons on dark chrome by default.
+     * Dark status icons on the light splash; JS later sets per-route icon color.
      */
     private void applyEdgeToEdge() {
         Window w = getWindow();
@@ -160,8 +172,75 @@ public class MainActivity extends Activity {
         View decor = w.getDecorView();
         int flags = decor.getSystemUiVisibility();
         flags |= View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
-        flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        }
         decor.setSystemUiVisibility(flags);
+    }
+
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    /** Light full-screen + bottom-center Design G icon and 「云球迷」 until HTML splash paints. */
+    private View buildSplashRoot(WebView webView) {
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(CHROME);
+        root.addView(webView, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        final int iconPx = dp(40);
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(R.mipmap.ic_launcher);
+        icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(iconPx, iconPx);
+        icon.setLayoutParams(iconLp);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            icon.setOutlineProvider(new ViewOutlineProvider() {
+                @Override public void getOutline(View view, Outline outline) {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(11));
+                }
+            });
+            icon.setClipToOutline(true);
+        }
+
+        TextView name = new TextView(this);
+        name.setText("云球迷");
+        name.setTextColor(Color.parseColor("#1A1A1A"));
+        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        name.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        name.setIncludeFontPadding(false);
+        LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        nameLp.leftMargin = dp(10);
+        name.setLayoutParams(nameLp);
+
+        LinearLayout brand = new LinearLayout(this);
+        brand.setOrientation(LinearLayout.HORIZONTAL);
+        brand.setGravity(Gravity.CENTER_VERTICAL);
+        brand.addView(icon);
+        brand.addView(name);
+
+        FrameLayout.LayoutParams brandLp = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        brandLp.bottomMargin = dp(56);
+        root.addView(brand, brandLp);
+        splashBrand = brand;
+        return root;
+    }
+
+    private void hideNativeSplashBrand() {
+        if (splashBrand == null) return;
+        final View brand = splashBrand;
+        splashBrand = null;
+        brand.animate().alpha(0f).setDuration(160).withEndAction(new Runnable() {
+            @Override public void run() {
+                ViewGroup parent = (ViewGroup) brand.getParent();
+                if (parent != null) parent.removeView(brand);
+            }
+        }).start();
     }
 
     private int statusBarHeightPx() {

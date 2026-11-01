@@ -59,25 +59,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     ok(await p.$$eval('.banner img.bn-bg', l => l.length) === 3, 'home banner carousel with 3 background images');
     await shot('home');
     // schedule
-    await tap('.tabbar [data-go="#/schedule"]'); await p.waitForSelector('.tc-sch-date-spindle');
+    await tap('.tabbar [data-go="#/schedule"]'); await p.waitForSelector('#view #dstrip');
     ok(!(await p.$('#top-chrome [data-act="schMode"]')), 'schedule: no 关注/未开始/已结束 filters');
-    ok(!(await p.$('#top-chrome .tc-sch-date-pill')), 'schedule: no gray/white date pill');
-    ok(!!(await p.$('#top-chrome .tc-sch-date-spindle-track')), 'schedule: date spindle track');
-    ok((await p.$$eval('#top-chrome .tc-sch-date-spindle-slot', els => els.length)) > 10, 'schedule: continuous date spindle slots');
-    ok(!(await p.$('#view .dstrip')), 'schedule: no date timeline under top bar');
+    ok(!(await p.$('#top-chrome .tc-sch-date-spindle-track')), 'schedule: date spindle left top chrome');
+    ok(!!(await p.$('#view .dstrip')), 'schedule: 开奖-style date timeline under top bar');
+    ok(!!(await p.$('#sch-team-search')), 'schedule: team search bar');
+    ok(await p.$eval('#sch-team-search', e => e.placeholder), 'schedule: search placeholder');
     ok(!(await p.$('.sch-mode')), 'schedule: no duplicate mode row');
-    ok(!(await p.$('.sch-channels')), 'schedule: no 热门/关注/全部 channel row');
+    ok(!!(await p.$('.sch-channels')), 'schedule: 比分/计算器 row');
     ok(!(await p.$('.ls-status')), 'schedule: no legacy status pill row');
     ok(await p.$$eval('.chips button', l => l.length) > 0, 'schedule: league chips');
-    const flushTop = await p.evaluate(() => {
-      const chips = document.querySelector('.league-chips');
-      const view = document.getElementById('view');
-      if (!chips || !view) return false;
-      const vr = view.getBoundingClientRect();
-      const cr = chips.getBoundingClientRect();
-      return cr.top - vr.top < 24;
-    });
-    ok(flushTop, 'schedule: league chips flush under top chrome');
     async function assertSchLeagueToggle(modeLabel) {
       const leagueSel = await p.evaluate(() => {
         const leagueBtn = [...document.querySelectorAll('.league-chips button[data-slg]')].find(b => b.dataset.slg !== '全部');
@@ -97,33 +88,37 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       ok(!(await p.$eval(leagueSel, e => e.classList.contains('on'))), `schedule ${modeLabel}: ${lgName} off after second tap`);
     }
     await assertSchLeagueToggle('当日');
-    const centerLabel = () => p.$eval('#top-chrome .tc-sch-date-spindle-center-hi', e => e.textContent.trim());
-    const beforeDate = await centerLabel();
-    const dragBox = await p.$('.tc-sch-date-spindle');
-    const dragSpindle = async (dx) => {
-      const db = await dragBox.boundingBox();
-      if (!db) return false;
-      await p.mouse.move(db.x + db.width * 0.5, db.y + db.height * 0.5);
-      await p.mouse.down();
-      await p.mouse.move(db.x + db.width * 0.5 + dx, db.y + db.height * 0.5, { steps: 10 });
-      await p.mouse.up();
-      await sleep(320);
-      return true;
-    };
-    ok(await dragSpindle(-72), 'schedule: drag gesture');
-    const afterDate = await centerLabel();
-    ok(beforeDate !== afterDate, 'schedule: horizontal drag updates center label');
-    ok(await dragSpindle(72), 'schedule: drag back gesture');
-    await tap('#top-chrome .tc-sch-date-spindle-center-hi'); await sleep(280);
-    ok(!(await p.$('#sheet.hidden')), 'schedule: tap center blue opens calendar sheet');
-    await tap('#sheet'); await sleep(120);
-    ok(!!(await p.$('#sheet.hidden')), 'schedule: tap mask closes calendar');
+    const dayBtns = await p.$$('#view #dstrip button[data-sdate]');
+    ok(dayBtns.length > 1, 'schedule: date pills');
+    const beforeDate = await p.$eval('#view #dstrip button.on', e => e.getAttribute('data-sdate'));
+    const otherDay = await p.evaluate(() => {
+      const on = document.querySelector('#view #dstrip button.on');
+      const next = on && (on.nextElementSibling || on.previousElementSibling);
+      return next && next.getAttribute && next.getAttribute('data-sdate');
+    });
+    if (otherDay) {
+      await tap(`#view #dstrip button[data-sdate="${otherDay}"]`);
+      await sleep(200);
+      const afterDate = await p.$eval('#view #dstrip button.on', e => e.getAttribute('data-sdate'));
+      ok(beforeDate !== afterDate, 'schedule: tap date pill updates selected day');
+      await tap(`#view #dstrip button[data-sdate="${beforeDate}"]`);
+      await sleep(160);
+    }
     const hasMatch = await p.$('.ls-row[data-go^="#/match/"]');
     await shot('schedule');
-    if (!hasMatch) {
+    if (!hasMatch && otherDay) {
       for (let i = 0; i < 5; i++) {
-        if (await dragSpindle(-72) && await p.$('.ls-row[data-go^="#/match/"]')) break;
-        if (await dragSpindle(72) && await p.$('.ls-row[data-go^="#/match/"]')) break;
+        const alt = await p.evaluate(() => {
+          const btns = [...document.querySelectorAll('#view #dstrip button[data-sdate]')];
+          const on = document.querySelector('#view #dstrip button.on');
+          const idx = btns.indexOf(on);
+          const pick = btns[idx + 1] || btns[idx - 1];
+          return pick && pick.getAttribute('data-sdate');
+        });
+        if (!alt) break;
+        await tap(`#view #dstrip button[data-sdate="${alt}"]`);
+        await sleep(180);
+        if (await p.$('.ls-row[data-go^="#/match/"]')) break;
       }
     }
     // detail

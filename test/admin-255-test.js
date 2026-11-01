@@ -10,7 +10,7 @@ let fails = 0;
 const ok = (c, m) => { console.log(c ? 'OK  ' : 'FAIL', m); if (!c) fails++; };
 
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-ok(/VERSION=1\.9\.25[5-9]/.test(ver) || /VERSION=1\.9\.26/.test(ver), 'VERSION.txt at least 1.9.255');
+ok(/VERSION=1\.9\.25[5-9]/.test(ver) || /VERSION=1\.9\.26/.test(ver) || /VERSION=1\.9\.27/.test(ver), 'VERSION.txt at least 1.9.255');
 
 const adminPath = path.join(__dirname, '../public/admin/admin.js');
 try {
