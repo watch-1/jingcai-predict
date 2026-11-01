@@ -35,7 +35,7 @@ JPUSH_MASTER_SECRET=从极光控制台复制
 
 改完后 `systemctl restart jingcai`。**不要**把 `.env` 同步进 git。
 
-未配置这两项时：服务端仍会记录设备和关注场次、侦测进球，但 **不会调用极光**；App 活着时仍走 1.9.264 的本地 `NotificationManager`。
+未配置这两项时：服务端仍会记录设备和关注场次、侦测进球，但 **不会调用极光**（进球事件会留下待重试，配上密钥后下一轮再推）；App 活着时仍走 1.9.264 的本地 `NotificationManager`（含切到后台但进程还在的情况）。
 
 ## 打 APK
 
@@ -52,7 +52,7 @@ API_BASE=http://120.77.152.74:8088 \
 - 用户授予 `POST_NOTIFICATIONS` 后才 `JPushInterface.init`。
 - JS 把 `deviceId` + `regId` 登记到 `POST /api/push/register`，关注列表 `PUT /api/push/favs`。
 - 服务端每 ~30s 对已登记关注场次拉 `/live-scores`，比分上升则对 `registration_id` 推通知（channel `goal_alerts`）。
-- **去重**：极光 `display_foreground=0`（前台不弹极光窗）；前台仍用本地 notify；后台/被杀只靠极光。同一 `matchId+scoreKey` 服务端只发一次；进程内 SharedPreferences / JS `goalAlertSeen` 再挡一层。
+- **去重**：极光 `display_foreground=0`（前台不弹极光窗）；前台仍用本地 notify；后台/被杀只靠极光。客户端仅在 **服务端已配极光密钥**（`pushEnabled`）且 native 已有 Registration ID 时，才在 `document.hidden` 下跳过本地窗——避免 `.env` 未配时后台进程也哑火。同一 `matchId+scoreKey` 服务端成功送达后只发一次；JPush 失败或尚未配密钥时下一轮会重试。进程内 SharedPreferences / JS `goalAlertSeen` 再挡一层。
 
 ## 手动验收
 

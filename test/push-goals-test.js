@@ -90,6 +90,51 @@ assert.strictEqual(push.listDevicesForMatch('m1')[0].regId, 'reg_aaa111');
   assert.strictEqual(r.events.length, 1);
   assert.strictEqual(r.events[0].scoreKey, '1-1');
 
+  // Failed / no-credential sends must retry (do not markSent / setSeen).
+  push.replaceFavs('jcdevicexxxxxxxx', [
+    { matchId: 'm3', home: '皇马', away: '巴萨' },
+  ]);
+  const liveSeed = { m3: { homeScore: 0, awayScore: 0, home: '皇马', away: '巴萨', minute: 10 } };
+  r = await push.detectAndPush({ getLiveScores: async () => ({ data: liveSeed }) });
+  assert.strictEqual((r.events || []).filter((e) => e.matchId === 'm3').length, 0);
+
+  const liveGoal = { m3: { homeScore: 1, awayScore: 0, home: '皇马', away: '巴萨', minute: 22 } };
+  push.setSender(async () => ({ skipped: 'no_jpush_credentials' }));
+  r = await push.detectAndPush({ getLiveScores: async () => ({ data: liveGoal }) });
+  assert.strictEqual(r.events.length, 1, 'goal detected even without JPush keys');
+  assert.strictEqual(r.events[0].scoreKey, '1-0');
+  assert.strictEqual(r.events[0].sent && r.events[0].sent.skipped, 'no_jpush_credentials');
+
+  const sentRetry = [];
+  push.setSender(async (payload) => { sentRetry.push(payload); return { ok: true, mock: true }; });
+  r = await push.detectAndPush({ getLiveScores: async () => ({ data: liveGoal }) });
+  assert.strictEqual(r.events.length, 1, 'retries after credentials appear');
+  assert.strictEqual(sentRetry.length, 1);
+
+  r = await push.detectAndPush({ getLiveScores: async () => ({ data: liveGoal }) });
+  assert.strictEqual(r.events.length, 0, 'successful send is not retried');
+
+  let boom = 0;
+  push.replaceFavs('jcdevicexxxxxxxx', [
+    { matchId: 'm4', home: '拜仁', away: '多特' },
+  ]);
+  await push.detectAndPush({
+    getLiveScores: async () => ({ data: { m4: { homeScore: 0, awayScore: 0, home: '拜仁', away: '多特' } } }),
+  });
+  push.setSender(async () => { boom += 1; throw Object.assign(new Error('JPush HTTP 500'), { status: 500 }); });
+  r = await push.detectAndPush({
+    getLiveScores: async () => ({ data: { m4: { homeScore: 0, awayScore: 1, home: '拜仁', away: '多特', minute: 40 } } }),
+  });
+  assert.ok(r.events[0] && r.events[0].error, 'send error is recorded');
+  const sentAfterErr = [];
+  push.setSender(async (payload) => { sentAfterErr.push(payload); return { ok: true, mock: true }; });
+  r = await push.detectAndPush({
+    getLiveScores: async () => ({ data: { m4: { homeScore: 0, awayScore: 1, home: '拜仁', away: '多特', minute: 41 } } }),
+  });
+  assert.strictEqual(r.events.length, 1, 'retries after JPush 5xx');
+  assert.strictEqual(sentAfterErr.length, 1);
+  assert.strictEqual(boom, 1);
+
   const built = push.buildJpushPayload({
     regIds: ['x'], title: '进球提醒', body: 'A 1-0 B', matchId: 'mid', scoreKey: '1-0',
   });

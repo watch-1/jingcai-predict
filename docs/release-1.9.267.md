@@ -7,7 +7,7 @@
 - **极光 JPush**（国内聚合，REST 下发 + Android SDK）。不假装 Foreground Service / AlarmManager 能扛杀进程。
 - 设备登记 `POST /api/push/register` + 关注同步 `PUT /api/push/favs`（游客/登录都行；登录会绑 `user_id`）。
 - 服务端 worker 侦测比分上升，按 `registration_id` 推 `goal_alerts` 频道通知。
-- 本地 poll 保留：无极光凭证时仍可用；有极光时前台走本地、后台/被杀走推送（`display_foreground=0` + `goalAlertSeen` / SharedPreferences 去重）。
+- 本地 poll 保留：无极光凭证时仍可用（含切后台但进程还在）；仅当服务端 `pushEnabled` 且 native 已有 Registration ID 时，隐藏窗口才把托盘交给极光（`display_foreground=0` + `goalAlertSeen` / SharedPreferences 去重）。JPush 失败或尚未配密钥时服务端下一轮重试，成功送达后同一 `matchId+scoreKey` 只发一次。
 - 范围：仅 **关注场次**，不做关注球队。
 
 ## 运营必做

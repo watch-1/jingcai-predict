@@ -51,7 +51,7 @@ assert.ok(/window\.__onJPushRegId/.test(appJs));
 assert.ok(/window\.__onJPushGoal/.test(appJs));
 assert.ok(/api\('\/push\/register'/.test(appJs));
 assert.ok(/api\('\/push\/favs'/.test(appJs));
-assert.ok(/isNativePushReady\(\) && document\.hidden/.test(appJs), 'hidden + push → skip local tray');
+assert.ok(/S\.pushEnabled && isNativePushReady\(\) && document\.hidden/.test(appJs), 'hidden + server push + native ready → skip local tray');
 assert.ok(/scoreKey: d\.key/.test(appJs));
 assert.ok(/极光推送/.test(appJs), 'privacy mentions JPush');
 

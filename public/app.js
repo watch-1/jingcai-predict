@@ -1774,6 +1774,7 @@ async function refreshAccount() {
     hydrateKbPacksCache();
     prefetchKbPacksOnBoot();
     if (route().name === 'kb') ensureKbRouteData();
+    if (typeof syncPushFavs === 'function') syncPushFavs();
   } catch (e) { if (e.status !== 401) console.warn('account refresh failed', e.message); }
 }
 async function loadMembershipCatalog() {
@@ -4548,9 +4549,10 @@ function notifyFavGoalsFromScores(prevMap, nextMap) {
         scoreKey: d.key,
       };
       // Dedup: JPush shows the OS tray when the process is hidden/killed
-      // (display_foreground=0). Local NotificationManager covers foreground
-      // and the no-JPush fallback.
-      if (isNativePushReady() && document.hidden) {
+      // (display_foreground=0). Skip local only when the server actually has
+      // JPush credentials (pushEnabled) AND native has a regId — otherwise a
+      // background-alive process would go silent if .env keys are missing.
+      if (S.pushEnabled && isNativePushReady() && document.hidden) {
         /* server / JPush owns the tray */
       } else {
         fireFavGoalNotify(payload);
