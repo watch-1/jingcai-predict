@@ -10,11 +10,11 @@ const swJs = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.268/.test(ver));
-assert.ok(/VERSION_CODE=304/.test(ver));
-assert.ok(/jc-v1\.9\.268/.test(swJs), 'SW VER 1.9.268');
+assert.ok(/VERSION=1\.9\.269/.test(ver));
+assert.ok(/VERSION_CODE=305/.test(ver));
+assert.ok(/jc-v1\.9\.269/.test(swJs), 'SW VER 1.9.269');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.268');
+assert.strictEqual(pkg.version, '1.9.269');
 
 assert.ok(/function calcTypeBarLabel/.test(appJs), 'calcbar label for multi pass ways');
 assert.ok(/function calcComboSheetOpen/.test(appJs), 'combo sheet stays open on multi-toggle');
@@ -92,7 +92,7 @@ assert.strictEqual(emptyDefault.cost, 480, 'default types yield official-like 48
 assert.strictEqual(ctx.calcTypeBarLabel([2]), '2串1');
 assert.strictEqual(ctx.calcTypeBarLabel([2, 3]), '2串1等');
 
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.268\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-304\}"/.test(apkSh));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.269\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-305\}"/.test(apkSh));
 
 console.log('ui-235-test OK', { only2: { bets: only2.bets, cost: only2.cost }, both: { bets: both.bets, cost: both.cost, min: both.min, max: both.max } });

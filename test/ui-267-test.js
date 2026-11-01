@@ -21,13 +21,13 @@ const recvJava = fs.readFileSync(path.join(root, 'android/src-jpush/com/tiicai/j
 const pushJs = fs.readFileSync(path.join(root, 'lib/push-goals.js'), 'utf8');
 const serverJs = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.268/.test(ver));
-assert.ok(/VERSION_CODE=304/.test(ver));
-assert.ok(/jc-v1\.9\.268/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.268');
-assert.strictEqual(cfg.version, '1.9.268');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.268\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-304\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.269/.test(ver));
+assert.ok(/VERSION_CODE=305/.test(ver));
+assert.ok(/jc-v1\.9\.269/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.269');
+assert.strictEqual(cfg.version, '1.9.269');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.269\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-305\}"/.test(apkSh));
 
 assert.ok(/android:name="\.JingcaiApp"/.test(manifest), 'Application class');
 assert.ok(/JPUSH_COMPONENTS_BEGIN/.test(manifest), 'JPush merge markers');
