@@ -79,4 +79,28 @@ assert.ok(/-webkit-line-clamp:\s*2/.test(css), 'full names wrap');
 assert.ok(/POST_NOTIFICATIONS/.test(androidManifest), 'notify permission kept');
 assert.ok(/goal_alerts/.test(main), 'goal channel id kept');
 
+// 4) schedule search also matches 场次编号; date + league still compose
+assert.ok(/function matchNumSearchHit/.test(appJs), 'num hit helper');
+assert.ok(/return matchNumSearchHit\(row\.num, nq\)/.test(appJs), 'team search falls through to num');
+assert.ok(/placeholder="搜索球队\/场次"/.test(appJs), 'placeholder mentions 场次');
+assert.ok(/aria-label="搜索球队或场次"/.test(appJs), 'search label');
+assert.ok(/modeRows = classifiedDay\.filter\(x => matchTeamSearchHit/.test(appJs), 'search still on day rows');
+assert.ok(/scheduleListRows\(modeRows\)/.test(appJs), 'league chip still after search');
+const hitSrc = appJs.match(/function matchNumSearchHit\(num, nq\) \{[\s\S]*?\n\}/);
+const teamSrc = appJs.match(/function matchTeamSearchHit\(row, q\) \{[\s\S]*?\n\}/);
+assert.ok(hitSrc && teamSrc, 'search fns extractable');
+const matchNumSearchHit = new Function(hitSrc[0] + '; return matchNumSearchHit;')();
+const matchTeamSearchHit = new Function(hitSrc[0] + '\n' + teamSrc[0] + '; return matchTeamSearchHit;')();
+const row = { num: '周一001', home: '曼城', away: '布伦特福德' };
+assert.ok(matchTeamSearchHit(row, '曼城'), 'team name still hits');
+assert.ok(matchTeamSearchHit(row, '001'), '001 hits 周一001');
+assert.ok(matchTeamSearchHit(row, '1'), '1 hits fixture index 001');
+assert.ok(matchTeamSearchHit(row, '周一001'), '周一001 exact');
+assert.ok(matchTeamSearchHit({ num: '周日021', home: '国米', away: '罗马' }, '021'), '021 hits 周日021');
+assert.ok(matchTeamSearchHit({ num: '周日021', home: '国米', away: '罗马' }, '21'), '21 hits 021');
+assert.ok(!matchTeamSearchHit(row, '021'), '021 does not hit 001');
+assert.ok(!matchTeamSearchHit(row, '周二001'), 'wrong weekday misses');
+assert.ok(matchNumSearchHit('周一001', '周一00'), 'partial weekday+digits');
+assert.ok(matchTeamSearchHit(row, ''), 'empty query keeps row');
+
 console.log('ui-272-test OK');

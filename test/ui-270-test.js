@@ -67,7 +67,7 @@ assert.ok(!/#1B2A4A/.test(main.match(/static final int CHROME.*/)[0]), 'CHROME n
 // 3) schedule chrome: lottery timeline + team search
 assert.ok(/h \+= dateStrip\(dates, S\.schDate, 'sdate'\)/.test(appJs), 'schedule uses dateStrip');
 assert.ok(/function schSearchBarHtml/.test(appJs), 'schedule search bar');
-assert.ok(/placeholder="搜索球队"/.test(appJs), 'search placeholder');
+assert.ok(/placeholder="搜索球队\/场次"/.test(appJs), 'search placeholder');
 assert.ok(/function matchTeamSearchHit/.test(appJs), 'team filter');
 assert.ok(/modeRows = classifiedDay\.filter\(x => matchTeamSearchHit/.test(appJs), 'filter applies to day rows');
 assert.ok(/id === 'sch-team-search'/.test(appJs), 'search input wired');
