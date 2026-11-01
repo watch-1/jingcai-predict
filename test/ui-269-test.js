@@ -1,5 +1,5 @@
 'use strict';
-// 1.9.269: launcher icons are resized from the locked Design G PNG, not a redrawn SVG.
+// 1.9.269: launcher icons Lanczos-downscaled from the locked 1024 Design G master, not a redrawn SVG.
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -26,9 +26,12 @@ assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.269.md')));
 assert.ok(/android:icon="@mipmap\/ic_launcher"/.test(manifest), 'launcher still @mipmap/ic_launcher');
 assert.ok(!/android:roundIcon/.test(manifest), 'no separate roundIcon');
 
+const srcJpg = path.join(root, 'tools/yunqiumi-icon-g-hires-master.jpg');
 const src = path.join(root, 'tools/yunqiumi-icon-g.png');
-assert.ok(fs.existsSync(src), 'locked Design G PNG is the source');
-assert.ok(/yunqiumi-icon-g\.png/.test(makeIcons), 'make-icons resizes the locked PNG');
+assert.ok(fs.existsSync(srcJpg), '1024 hi-res JPEG master is the source');
+assert.ok(fs.existsSync(src), 'decoded 1024 PNG of the master');
+assert.ok(/yunqiumi-icon-g-hires-master\.jpg/.test(makeIcons), 'make-icons reads the 1024 master');
+assert.ok(/flags=lanczos/.test(makeIcons), 'Lanczos downscale');
 assert.ok(!/yunqiumi-icon\.svg/.test(makeIcons), 'make-icons does not render the rejected SVG mark');
 assert.ok(!fs.existsSync(path.join(root, 'tools/yunqiumi-icon.svg')), 'rejected SVG mark removed');
 assert.ok(!fs.existsSync(path.join(root, 'tools/build-yunqiumi-svg.js')));
@@ -40,9 +43,12 @@ function pngSize(p) {
   return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20), len: buf.length, buf };
 }
 const srcSz = pngSize(src);
-assert.strictEqual(srcSz.w, 256, 'locked photo is 256');
-assert.strictEqual(srcSz.h, 256);
-assert.ok(srcSz.len > 20000, 'locked photo is the illustrated raster, not a tiny stub');
+assert.strictEqual(srcSz.w, 1024, 'decoded master is 1024');
+assert.strictEqual(srcSz.h, 1024);
+assert.ok(srcSz.len > 100000, '1024 master is the illustrated raster, not a tiny stub');
+const jpg = fs.readFileSync(srcJpg);
+assert.ok(jpg[0] === 0xff && jpg[1] === 0xd8, 'master is JPEG');
+assert.ok(jpg.length > 50000, 'JPEG master not a stub');
 
 const dens = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
 for (const [d, s] of Object.entries(dens)) {

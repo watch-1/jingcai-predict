@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // node tools/make-icons.js
-// Locked Design G photo (tools/yunqiumi-icon-g.png) → public/icons/*.png
-// and android/res/mipmap-*/ic_launcher.png.
-// Raster resize only. Does not redraw the mark or invent an SVG.
+// Locked Design G hi-res master (tools/yunqiumi-icon-g-hires-master.jpg, 1024²)
+// → public/icons/*.png + android/res/mipmap-*/ic_launcher.png
+// Raster Lanczos downscale only. Does not redraw the mark or invent an SVG.
 'use strict';
 const fs = require('fs');
 const os = require('os');
@@ -10,7 +10,9 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
-const SRC = path.join(ROOT, 'tools/yunqiumi-icon-g.png');
+const SRC_JPG = path.join(ROOT, 'tools/yunqiumi-icon-g-hires-master.jpg');
+const SRC_PNG = path.join(ROOT, 'tools/yunqiumi-icon-g.png');
+const SRC = fs.existsSync(SRC_JPG) ? SRC_JPG : SRC_PNG;
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'yunqiumi-icon-'));
 
 function run(cmd, args) {
@@ -21,22 +23,34 @@ function run(cmd, args) {
   return r;
 }
 
-function pngSize(p) {
+function imageSize(p) {
   const buf = fs.readFileSync(p);
-  if (!buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
-    throw new Error('not a png: ' + p);
+  if (buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
   }
-  return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  if (buf[0] === 0xff && buf[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < buf.length) {
+      if (buf[i] !== 0xff) { i++; continue; }
+      const m = buf[i + 1];
+      if (m === 0xd8 || m === 0xd9) { i += 2; continue; }
+      const len = buf.readUInt16BE(i + 2);
+      if (m >= 0xc0 && m <= 0xc2) {
+        return { w: buf.readUInt16BE(i + 7), h: buf.readUInt16BE(i + 5) };
+      }
+      i += 2 + len;
+    }
+  }
+  throw new Error('unsupported image: ' + p);
 }
 
-// The locked photo is an iOS-style squircle on a near-white canvas.
-// Flood-fill only the corner-connected light pixels with navy sampled
-// from the icon edge so launcher assets are a dark navy full-bleed square.
-// Cloud / ball whites are interior and are not touched.
-function fullBleedNavy(srcPng, outPng) {
-  const { w, h } = pngSize(srcPng);
+// Master is an iOS-style squircle on a black or near-white canvas.
+// Flood-fill only corner-connected canvas pixels (black, white, gray AA)
+// with navy sampled from the icon edge. Cloud / ball whites stay interior.
+function fullBleedNavy(src, outPng) {
+  const { w, h } = imageSize(src);
   const rawPath = path.join(TMP, 'src.rgb');
-  run('ffmpeg', ['-y', '-loglevel', 'error', '-i', srcPng, '-f', 'rawvideo', '-pix_fmt', 'rgb24', rawPath]);
+  run('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-f', 'rawvideo', '-pix_fmt', 'rgb24', rawPath]);
   const buf = fs.readFileSync(rawPath);
   if (buf.length !== w * h * 3) throw new Error('raw size mismatch');
 
@@ -45,12 +59,26 @@ function fullBleedNavy(srcPng, outPng) {
   const isCornerFill = (i) => {
     const r = buf[i], g = buf[i + 1], b = buf[i + 2];
     const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-    return lum(i) >= 170 && (mx - mn) <= 28;
+    const L = lum(i);
+    const chroma = mx - mn;
+    if (L < 18) return true; // black canvas
+    if (L >= 160 && chroma <= 28) return true; // white canvas
+    if (L >= 72 && L <= 150 && chroma <= 24) return true; // squircle AA fringe
+    return false;
   };
 
-  // Navy from the top-edge midpoint (inside the mark, not the white corner).
-  const mid = idx(Math.floor(w / 2), 2);
-  const navy = [buf[mid], buf[mid + 1], buf[mid + 2]];
+  // Navy from the top-middle, a few percent in (skip canvas / AA).
+  let navy = null;
+  const mx = Math.floor(w / 2);
+  for (let y = Math.max(2, Math.round(h * 0.02)); y < h; y++) {
+    const i = idx(mx, y);
+    const L = lum(i);
+    if (L >= 20 && L < 80) {
+      navy = [buf[i], buf[i + 1], buf[i + 2]];
+      break;
+    }
+  }
+  if (!navy) throw new Error('could not sample navy fill color');
 
   const seen = Buffer.alloc(w * h);
   const stack = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]];
@@ -89,7 +117,6 @@ function scalePng(src, size, dest) {
 
 function maskable(src, size, dest) {
   // Keep a little safe-zone padding so OS masks do not clip the ball.
-  // Pad color = navy already filling the source square.
   const inner = Math.round(size * 0.80);
   const pad = Math.round((size - inner) / 2);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -104,18 +131,21 @@ function maskable(src, size, dest) {
 let _navyHex;
 function navyHex() {
   if (_navyHex) return _navyHex;
-  const { w } = pngSize(path.join(TMP, 'fullbleed.png'));
+  const full = path.join(TMP, 'fullbleed.png');
+  const { w } = imageSize(full);
   const rawPath = path.join(TMP, 'fb.rgb');
-  run('ffmpeg', ['-y', '-loglevel', 'error', '-i', path.join(TMP, 'fullbleed.png'),
+  run('ffmpeg', ['-y', '-loglevel', 'error', '-i', full,
     '-f', 'rawvideo', '-pix_fmt', 'rgb24', rawPath]);
   const buf = fs.readFileSync(rawPath);
-  const i = (2 * w + Math.floor(w / 2)) * 3;
+  const i = (Math.max(2, Math.round(w * 0.02)) * w + Math.floor(w / 2)) * 3;
   _navyHex = [buf[i], buf[i + 1], buf[i + 2]].map((n) => n.toString(16).padStart(2, '0')).join('');
   return _navyHex;
 }
 
 (function main() {
   if (!fs.existsSync(SRC)) throw new Error('missing locked artwork ' + SRC);
+  const { w, h } = imageSize(SRC);
+  if (w !== h) throw new Error(`master must be square, got ${w}x${h}`);
   try {
     const full = path.join(TMP, 'fullbleed.png');
     fullBleedNavy(SRC, full);
