@@ -15,14 +15,15 @@ try {
 } catch (e) {}
 </script>
 <meta name="format-detection" content="telephone=no">
-<title>竞彩预测 · 赛事资讯与赔率概率</title>
+<title>云球迷 · 赛事资讯与赔率概率</title>
 <meta name="description" content="竞彩足球赛程、赔率隐含概率与预测分析、开奖结果。仅供参考">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preload" href="icons/icon-192.png" as="image">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="竞彩预测">
+<meta name="apple-mobile-web-app-title" content="云球迷">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="style.css">
 <link rel="prefetch" href="data-center-boot.json" as="fetch" crossorigin="anonymous">
@@ -36,7 +37,12 @@ try {
 </script>
 </head>
 <body>
-<div id="boot-shell" class="boot-shell" aria-hidden="true"></div>
+<div id="boot-shell" class="boot-shell" aria-hidden="true">
+  <div class="boot-brand">
+    <img class="boot-brand-icon" src="icons/icon-192.png" width="40" height="40" alt="">
+    <span class="boot-brand-name">云球迷</span>
+  </div>
+</div>
 <div id="app" class="app">
   <div id="ptr" class="ptr"><i class="ptr-spin"></i><span>下拉刷新</span></div>
   <header id="top-chrome" class="top-chrome hidden" aria-label="主导航"></header>

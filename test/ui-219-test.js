@@ -14,7 +14,9 @@ const resultsBody = appJs.match(/function resultsBodyHtml[\s\S]*?^}/m)?.[0] || '
 assert.ok(/matchCard\(x, \{ odds: false \}\)/.test(resultsBody), '开奖: live/upcoming cards without odds grid');
 assert.ok(!/matchCard\(x\)\)/.test(resultsBody.replace(/matchCard\(x, \{ odds: false \}\)/g, '')), '开奖: no bare matchCard with default odds');
 
-assert.ok(/function schChannelsHtml/.test(appJs) && /计算器/.test(appJs.match(/function schChannelsHtml[\s\S]*?^}/m)?.[0] || ''), '赛程: 计算器 tab');
+assert.ok(/function schChannelsHtml/.test(appJs) && /计算器/.test(appJs.match(/function schChannelsHtml[\s\S]*?^}/m)?.[0] || ''), '赛程: 计算器 tab helper');
+assert.ok(/tc-tabs--schedule/.test(appJs) && /data-act="schChannel"/.test(appJs), '赛程: 比分/计算器 in top chrome');
+assert.ok(/function fillDateStripDays/.test(appJs), '赛程/开奖: date strip pads days');
 assert.ok(/function scheduleCalcHtml/.test(appJs) && /function openCalcSubmitSheet/.test(appJs), '赛程: calculator panel + submit');
 assert.ok(/function calcFrom/.test(appJs) && /2 \* \(mult/.test(appJs), 'calc: 2 yuan/note combinatorial math');
 assert.ok(/data-act="calcSubmit"/.test(appJs), 'calc: submit action');
@@ -22,17 +24,17 @@ assert.ok(/data-act="calcSubmit"/.test(appJs), 'calc: submit action');
 assert.ok(/id="calcbar"/.test(html), 'index: calcbar mount');
 assert.ok(/\.calcbar/.test(css) && /\.calc-card/.test(css), 'calc UI styles');
 
-assert.ok(/jc-v1\.9\.269/.test(swJs), 'SW VER 1.9.269');
+assert.ok(/jc-v1\.9\.270/.test(swJs), 'SW VER 1.9.270');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.269');
+assert.strictEqual(pkg.version, '1.9.270');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.269/.test(ver));
-assert.ok(/VERSION_CODE=305/.test(ver));
+assert.ok(/VERSION=1\.9\.270/.test(ver));
+assert.ok(/VERSION_CODE=306/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.strictEqual(cfg.version, '1.9.269');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.269\}"/.test(apkSh), 'build-apk default VERSION_NAME');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-305\}"/.test(apkSh), 'build-apk default VERSION_CODE');
+assert.strictEqual(cfg.version, '1.9.270');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.270\}"/.test(apkSh), 'build-apk default VERSION_NAME');
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-306\}"/.test(apkSh), 'build-apk default VERSION_CODE');
 
 assert.ok(/simultaneousWinPrizeRange/.test(appJs), 'calc: predicted prize uses simultaneous-win totals');
 assert.ok(/bets \+= c\.reduce/.test(appJs), 'calc: expands note count');

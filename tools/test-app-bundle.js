@@ -42,7 +42,7 @@ let fails = 0; const ok = (c, m) => { console.log(c ? 'OK  ' : 'FAIL', m); if (!
   const sw = await w.evaluate(async () => { const r = await navigator.serviceWorker.ready; return r.active && r.active.scriptURL; });
   ok(/sw\.js$/.test(sw || ''), 'PWA service worker active: ' + sw);
   const man = await w.evaluate(async () => (await fetch(document.querySelector('link[rel=manifest]').href)).json());
-  ok(man.name === '竞彩预测' && man.icons.length === 3 && man.display === 'standalone', 'manifest ok: ' + man.name + ' start_url=' + man.start_url);
+  ok(man.name === '云球迷' && man.icons.length === 3 && man.display === 'standalone', 'manifest ok: ' + man.name + ' start_url=' + man.start_url);
   await new Promise(r => setTimeout(r, 1000));
   await w.setOfflineMode(true); await w.reload({ waitUntil: 'domcontentloaded' }); await w.waitForSelector('.auth, .hdr', { timeout: 8000 });
   ok(true, 'offline reload served app shell (' + (await w.title()) + ')');

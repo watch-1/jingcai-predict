@@ -18,15 +18,15 @@ assert.ok(/\.rs-body \.mc-result \.rs-upset-tag/.test(css), '爆冷角标样式'
 assert.ok(/\.rs-body \.mc-result \.match-meta \{ font-size: 10px/.test(css), '开奖场次信息更小');
 assert.ok(/\.rs-body \.mc-result \.mc-teams \.badge[^}]*width: 24px/.test(css), '开奖队徽略大');
 
-assert.ok(/jc-v1\.9\.2[4-6]\d/.test(swJs), 'SW VER current');
+assert.ok(/jc-v1\.9\.2[4-7]\d/.test(swJs), 'SW VER current');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.ok(/^1\.9\.2[4-6]\d/.test(pkg.version), 'package version');
+assert.ok(/^1\.9\.2[4-7]\d/.test(pkg.version), 'package version');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.2[4-6]\d/.test(ver));
+assert.ok(/VERSION=1\.9\.2[4-7]\d/.test(ver));
 assert.ok(/VERSION_CODE=27\d/.test(ver) || /VERSION_CODE=28\d/.test(ver) || /VERSION_CODE=30\d/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.ok(/^1\.9\.2[4-6]\d/.test(cfg.version), 'config version');
+assert.ok(/^1\.9\.2[4-7]\d/.test(cfg.version), 'config version');
 assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.2/.test(apkSh), 'build-apk default VERSION_NAME');
 assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-/.test(apkSh), 'build-apk default VERSION_CODE');
 

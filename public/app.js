@@ -761,6 +761,7 @@ const S = {
   tribeSearchQ: '',
   sel: {}, types: [], mult: 1, navDepth: 0,
   schDate: null, schLeague: '全部', schMode: initSchMode(), schChannel: initSchChannel(),
+  schSearchQ: '',
   calcSel: {}, calcTypes: [], calcMult: 1,
   bonusOpt: { mode: 'avg', amount: 0, mults: [] },
   schHideFinished: (typeof localStorage !== 'undefined' && localStorage.getItem('jc_sch_hide_fin') === '1'),
@@ -1295,7 +1296,56 @@ function revealBootShell() {
   el.classList.add('out');
   setTimeout(() => {
     try { el.classList.add('gone'); el.remove(); } catch (_) {}
-  }, 200);
+  }, 220);
+}
+
+/** 1.9.270: branded splash stays ~3s or until first-screen data is ready, capped at ~5s. */
+const BOOT_SPLASH_MIN_MS = 3000;
+const BOOT_SPLASH_MAX_MS = 5000;
+const bootSplashAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+let bootSplashReady = false;
+let bootSplashRevealed = false;
+let bootSplashTimer = 0;
+function bootSplashElapsed() {
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  return now - bootSplashAt;
+}
+function revealBootShellNow() {
+  if (bootSplashRevealed) return;
+  bootSplashRevealed = true;
+  if (bootSplashTimer) { try { clearTimeout(bootSplashTimer); } catch (_) {} bootSplashTimer = 0; }
+  revealBootShell();
+}
+function scheduleBootSplashReveal() {
+  if (bootSplashRevealed) return;
+  const elapsed = bootSplashElapsed();
+  if (elapsed >= BOOT_SPLASH_MAX_MS || (bootSplashReady && elapsed >= BOOT_SPLASH_MIN_MS)) {
+    revealBootShellNow();
+    return;
+  }
+  const wait = bootSplashReady
+    ? Math.max(16, BOOT_SPLASH_MIN_MS - elapsed)
+    : Math.max(16, BOOT_SPLASH_MAX_MS - elapsed);
+  if (bootSplashTimer) try { clearTimeout(bootSplashTimer); } catch (_) {}
+  bootSplashTimer = setTimeout(scheduleBootSplashReveal, wait);
+}
+function markBootSplashReady() {
+  bootSplashReady = true;
+  scheduleBootSplashReveal();
+}
+function preloadBootCritical() {
+  try {
+    const hrefs = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
+    hrefs.forEach(src => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = src;
+    });
+  } catch (_) {}
+  try {
+    const ids = ((S.schedule && S.schedule.length ? S.schedule : S.matches) || []).slice(0, 16).map(m => String(m.id));
+    if (ids.length && typeof loadLiveScores === 'function') loadLiveScores(ids);
+  } catch (_) {}
 }
 const DATA_DC_PREFETCH_LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'ucl'];
 const DATA_CACHE_LS_MAX = 28;
@@ -1625,6 +1675,7 @@ function afterBootPackMerged() {
     }
   } catch (_) {}
   try {
+    // standings refresh can fill tribe after purge
     if ((route().name === 'tribe' || route().name === 'tribe-club') && tribeCatalogNeedsRebuildFromCache()) {
       rebuildTribeCatalogFromCache({ renderIfTribe: true });
     } else if (route().name === 'tribe' && S.tribeCat && S.tribeCat._settled) {
@@ -2702,7 +2753,21 @@ function initSchDateSpindle() {
   rebuildSchDateSpindle(wrap, state);
 }
 function topChromeCenterHtml(rName) {
-  if (rName === 'schedule') return schDateSpindleHtml();
+  if (rName === 'schedule') {
+    const ch = schChannelOf();
+    const tabs = [
+      ['list', '比分', 'schChannel'],
+      ['calc', '计算器', 'schChannel'],
+      ['results', '开奖', 'go'],
+    ].map(([k, lab, kind]) => {
+      const on = kind === 'schChannel' ? ch === k : false;
+      const act = kind === 'go'
+        ? `data-go="#/${k}"`
+        : `data-act="schChannel" data-ch="${k}"`;
+      return `<button type="button" class="tc-tab${on ? ' on' : ''}" ${act}${on ? ' aria-current="true"' : ''}>${esc(lab)}</button>`;
+    }).join('');
+    return `<nav class="tc-tabs tc-tabs--schedule" aria-label="赛程视图">${tabs}</nav>`;
+  }
   if (rName === 'data') {
     const sec = dataSectionOf();
     const tabs = [['team', '球队'], ['star', '球星']].map(([k, lab]) =>
@@ -2730,7 +2795,7 @@ function syncTopChrome(rName) {
   const show = isShellTab(rName);
   el.classList.toggle('hidden', !show);
   app.classList.toggle('has-top-chrome', show);
-  el.classList.toggle('top-chrome--schedule', show && rName === 'schedule');
+  el.classList.toggle('top-chrome--schedule', false);
   el.classList.toggle('top-chrome--data', show && rName === 'data');
   el.classList.toggle('top-chrome--tribe', show && rName === 'tribe');
   if (!show) return;
@@ -2747,7 +2812,6 @@ function syncTopChrome(rName) {
       <button type="button" class="tc-ic" data-go="#/plans" aria-label="我的消息">${I.mail}${msgDot}</button>
     </div></div>`;
   if (el.innerHTML !== want) el.innerHTML = want;
-  if (show && rName === 'schedule') initSchDateSpindle();
 }
 const empty = (text, btn = '', title = '') => `<div class="empty">${EMPTY_SVG}${title ? `<div class="empty-t">${title}</div>` : ''}<div class="empty-d">${text}</div>${btn}</div>`;
 const skeleton = (n = 4) => '<div class="grid">' + Array.from({ length: n }, () => `<div class="card sk-card"><div style="display:flex;gap:8px"><div class="sk sk-line" style="width:48px;margin:0"></div><div class="sk sk-line" style="width:90px;margin:0"></div></div>
@@ -3944,6 +4008,21 @@ function pageTribePost(id) {
   return h;
 }
 
+/** Expand match/result dates into a contiguous calendar window so the dstrip has enough pills to fill the viewport. */
+function fillDateStripDays(dates, { padBefore = 7, padAfter = 10 } = {}) {
+  const today = bjDate(0);
+  const src = (dates || []).filter(Boolean).sort();
+  let start = src[0] || today;
+  let end = src[src.length - 1] || today;
+  const minStart = shiftIssueDate(today, -padBefore);
+  const minEnd = shiftIssueDate(today, padAfter);
+  if (start > minStart) start = minStart;
+  if (end < minEnd) end = minEnd;
+  const out = [];
+  for (let d = start; d <= end; d = shiftIssueDate(d, 1)) out.push(d);
+  return out;
+}
+
 function dateStrip(dates, cur, key, { light = true } = {}) {
   const cls = 'dstrip' + (light ? ' light' : '');
   const btns = dates.map(d => `<button type="button" class="${d === cur ? 'on' : ''}" data-${key}="${d}">${dayName(d)}<small>${d.slice(5)}</small></button>`).join('');
@@ -4622,21 +4701,57 @@ function ensureLiveScorePoll(keepAlive) {
   }, 30000);
 }
 
+function schSearchQ() { return String(S.schSearchQ || '').trim(); }
+function matchTeamSearchHit(row, q) {
+  const raw = String(q || '').trim();
+  if (!raw) return true;
+  if (!row) return false;
+  const nq = raw.toLowerCase().replace(/\s+/g, '');
+  const home = String(row.home || '');
+  const away = String(row.away || '');
+  const blob = (home + away).toLowerCase().replace(/\s+/g, '');
+  return blob.includes(nq) || home.includes(raw) || away.includes(raw);
+}
+function syncSchSearchClearBtn() {
+  const bar = document.querySelector('.sch-search');
+  if (!bar) return;
+  const q = schSearchQ();
+  let btn = bar.querySelector('.sch-search-clear');
+  if (q && !btn) {
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'sch-search-clear';
+    btn.setAttribute('data-act', 'schSearchClear');
+    btn.setAttribute('aria-label', '清除搜索');
+    btn.textContent = '×';
+    bar.appendChild(btn);
+  } else if (!q && btn) btn.remove();
+}
+function schSearchBarHtml() {
+  const q = esc(S.schSearchQ || '');
+  return `<div class="sch-search" role="search" aria-label="搜索球队">
+    <span class="sch-search-ic" aria-hidden="true">${I.search}</span>
+    <input type="search" id="sch-team-search" class="sch-search-inp" placeholder="搜索球队" value="${q}" autocomplete="off" enterkeyhint="search" maxlength="40">
+    ${q ? `<button type="button" class="sch-search-clear" data-act="schSearchClear" aria-label="清除搜索">×</button>` : ''}
+  </div>`;
+}
+
 /** Shared schedule day model (date strip + league chips + list body). */
 function scheduleDayModel() {
   const ms = (S.schedule && S.schedule.length) ? S.schedule : S.matches;
   const rs = S.results;
   if (!ms) return null;
-  const dates = [...new Set([...(rs || []).map(issueDate), ...ms.map(issueDate)])].sort();
+  const srcDates = [...new Set([...(rs || []).map(issueDate), ...ms.map(issueDate)])].sort();
   const today = bjDate(0);
   if (!S.schDate) {
-    S.schDate = dates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || dates.find(d => d >= today) || dates[dates.length - 1];
+    S.schDate = srcDates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || srcDates.find(d => d >= today) || srcDates[srcDates.length - 1];
   }
+  const dates = fillDateStripDays(srcDates);
   const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
   const dayAll = [...ms.filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)).map(m => ({ ...m, _t: 'm' })), ...dayRes.map(r => ({ ...r, _t: 'r' }))];
   const classifiedDay = dayAll.map(classifyScoreRow);
   const mode = '当日';
-  let modeRows = classifiedDay;
+  let modeRows = classifiedDay.filter(x => matchTeamSearchHit(x, schSearchQ()));
   if (S.schLeague !== '全部' && !modeRows.some(x => x.league === S.schLeague)) S.schLeague = '全部';
   const gapInfo = S.ssrc && S.ssrc.meta && S.ssrc.meta.gaps && S.ssrc.meta.gaps[S.schDate];
   const counts = {
@@ -4678,8 +4793,11 @@ function scheduleBodyHtml(model) {
   }
   h += warnBar();
   const rows = scheduleListRows(modeRows);
+  const q = schSearchQ();
   if (!rows.length) {
-    h += empty('该日期暂无场次，可切换日期查看。', '', '暂无场次');
+    h += q
+      ? empty('当天没有「' + esc(q) + '」的场次，可清空搜索或换一天。', '<button class="btn ghost sm" data-act="schSearchClear">清除搜索</button>', '未找到场次')
+      : empty('该日期暂无场次，可切换日期查看。', '', '暂无场次');
   } else {
     // 1.9.257: 「全部」与单联赛筛选均按竞彩编号平铺，不再按联赛分块（避免 009→意甲块、010→德甲块打断编号序）
     // 1.9.263: 未完场 / 已结束之间加隔断
@@ -4709,6 +4827,17 @@ function applySchLeagueFromChip(el) {
   return true;
 }
 
+function applyScheduleDateStrip(v, model) {
+  if (!v || !model) return;
+  const ds = v.querySelector('#dstrip');
+  if (!ds) return;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = dateStrip(model.dates, S.schDate, 'sdate');
+  const next = wrap.firstElementChild;
+  if (next) ds.replaceWith(next);
+  syncDateStripScroll(v.querySelector('#dstrip'));
+}
+
 /** 1.9.154: patch schedule league chips + list in place (avoid TAB_KEEP / render no-op flash). */
 function softPatchSchedule() {
   try {
@@ -4717,6 +4846,23 @@ function softPatchSchedule() {
     if (!model) return false;
     const v = document.getElementById('view');
     if (!v) return false;
+    applyScheduleDateStrip(v, model);
+    if (schChannelOf() === 'calc') {
+      const panel = v.querySelector('.calc-panel');
+      if (!panel) return false;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = scheduleCalcHtml(model);
+      const next = wrap.firstElementChild;
+      if (next) panel.replaceWith(next);
+      renderCalcBar();
+      resumeScheduleLivePoll();
+      try {
+        render.lastSig = tabContentSig('schedule');
+        render.last = location.hash;
+      } catch (_) {}
+      saveTabKeep('schedule', v);
+      return true;
+    }
     const chips = v.querySelector('.league-chips');
     if (!chips) return false;
     const wrap = document.createElement('div');
@@ -4839,7 +4985,10 @@ function scheduleCalcHtml(model) {
     </div>
     `;
   if (!rows.length) {
-    h += empty('该日期暂无在售场次，可切换日期或查看比分列表。', '', '暂无可算场次');
+    const q = schSearchQ();
+    h += q
+      ? empty('当天没有「' + esc(q) + '」的在售场次，可清空搜索或换一天。', '<button class="btn ghost sm" data-act="schSearchClear">清除搜索</button>', '未找到场次')
+      : empty('该日期暂无在售场次，可切换日期或查看比分列表。', '', '暂无可算场次');
   } else {
     h += `<div class="calc-list">${rows.map(calcMatchCard).join('')}</div>`;
   }
@@ -5240,9 +5389,13 @@ async function openCalcMoreSheet(mid) {
 function pageSchedule() {
   let h = '';
   const model = scheduleDayModel();
-  if (!model) return h + skeleton(4);
-  const { modeRows, classifiedDay } = model;
-  h += schChannelsHtml();
+  if (!model) {
+    const today = S.schDate || bjDate(0);
+    return dateStrip([today], today, 'sdate') + schSearchBarHtml() + skeleton(4);
+  }
+  const { modeRows, classifiedDay, dates } = model;
+  h += dateStrip(dates, S.schDate, 'sdate');
+  h += schSearchBarHtml();
   if (schChannelOf() === 'calc') {
     h += scheduleCalcHtml(model);
   } else {
@@ -6723,12 +6876,13 @@ function resultsDayModel() {
   const sched = (S.schedule && S.schedule.length) ? S.schedule : [];
   const schedById = new Map(sched.map(m => [String(m.id), m]));
   const today = bjDate(0);
-  const dates = [...new Set([...rs.map(issueDate), ...sched.filter(m => issueDate(m) <= today).map(issueDate)])].sort();
-  if (!dates.length) return { emptyAll: true, dates };
+  const srcDates = [...new Set([...rs.map(issueDate), ...sched.filter(m => issueDate(m) <= today).map(issueDate)])].sort();
+  if (!srcDates.length) return { emptyAll: true, dates: srcDates };
+  const dates = fillDateStripDays(srcDates);
   if (!S.rsDate || !dates.includes(S.rsDate)) {
-    const withScores = dates.filter(d => rs.some(r => issueDate(r) === d && r.full && d <= today)
+    const withScores = srcDates.filter(d => rs.some(r => issueDate(r) === d && r.full && d <= today)
       || sched.some(m => issueDate(m) === d && m.full && d <= today));
-    S.rsDate = withScores[withScores.length - 1] || [...dates].reverse().find(d => d <= today) || dates[dates.length - 1];
+    S.rsDate = withScores[withScores.length - 1] || [...srcDates].reverse().find(d => d <= today) || srcDates[srcDates.length - 1];
   }
   const dayRes = rs.filter(r => issueDate(r) === S.rsDate).map(r => hydrateResultScores(r, schedById));
   const dayFix = sched
@@ -10881,7 +11035,7 @@ function pageOrders() {
 }
 
 function pageMemberTerms() {
-  return hdr('会员服务协议') + `<div class="doc">${TPL}<h2>竞彩预测会员服务协议（模板）</h2>
+  return hdr('会员服务协议') + `<div class="doc">${TPL}<h2>云球迷会员服务协议（模板）</h2>
   <p>更新日期：2026年10月14日　运营方：【运营主体名称】</p>
   <h4>一、服务性质</h4><p>会员服务指向注册用户提供的<strong>资讯内容与高级数据访问</strong>权益（如高级预测简报、数据中心完整浏览、无广告纯净浏览等）。本服务面向资讯与数据访问，内容<strong>仅供参考</strong>。</p>
   <h4>二、费用与支付</h4><p>1. 会员套餐价格以应用内展示为准。<br>2. <strong>当前版本为模拟支付（sandbox/mock）</strong>：选择微信/支付宝仅演示流程，不会真实扣款。<br>3. 正式接入微信/支付宝前，须完成商户入驻、经营类目审核与证书配置；正式扣款上线前会另行告知。</p>
@@ -10979,7 +11133,7 @@ function pageFavs() {
 
 // ======================= auth & account pages =======================
 function pageLogin() {
-  return `<div class="auth"><div class="auth-hd">${S.guest || loggedIn() ? `<button class="back" data-act="back">${I.back}</button>` : ''}<div class="lg"></div><h1>欢迎来到竞彩预测</h1><p>赛事资讯 · 赔率概率 · 智能预测</p></div>
+  return `<div class="auth"><div class="auth-hd">${S.guest || loggedIn() ? `<button class="back" data-act="back">${I.back}</button>` : ''}<div class="lg"></div><h1>欢迎来到云球迷</h1><p>赛事资讯 · 赔率概率 · 智能预测</p></div>
   <form class="auth-card" id="fLogin" autocomplete="on" novalidate>
     <div class="fld">${I.phone}<span class="pfx">+86</span><input name="phone" type="tel" inputmode="numeric" maxlength="11" placeholder="请输入手机号" autocomplete="tel" value="${esc(LS.get('jc_last_phone', ''))}"></div>
     <div class="fld">${I.lock}<input name="password" type="password" maxlength="32" placeholder="请输入密码" autocomplete="current-password"><button type="button" class="eye" data-act="eye">显示</button></div>
@@ -11072,7 +11226,7 @@ function pageAbout() {
     try { rid = window.JingcaiChrome && window.JingcaiChrome.getPushRegId && window.JingcaiChrome.getPushRegId(); } catch (_) {}
     pushLine = `<p class="note">进球推送设备号 ${esc(pushDeviceId())}${rid ? '<br>Registration ID ' + esc(rid) : ''}</p>`;
   }
-  return hdr('关于') + `<div class="doc" style="text-align:center"><div style="width:72px;height:72px;margin:10px auto;border-radius:18px;background:url(icons/icon-192.png) center/cover;box-shadow:var(--sh2)"></div><h2>竞彩预测</h2><p class="note">版本 ${esc(CFG.version)} · ${IS_APP ? 'Android 应用' : '网页版'}</p>${pushLine}</div>
+  return hdr('关于') + `<div class="doc" style="text-align:center"><div style="width:72px;height:72px;margin:10px auto;border-radius:18px;background:url(icons/icon-192.png) center/cover;box-shadow:var(--sh2)"></div><h2>云球迷</h2><p class="note">版本 ${esc(CFG.version)} · ${IS_APP ? 'Android 应用' : '网页版'}</p>${pushLine}</div>
   <div class="doc"><h4>我们提供什么</h4><p>竞彩足球在售赛程、胜平负/让球赔率、基于赔率隐含概率的预测分析、联赛积分榜/射手榜数据中心，以及开奖结果查询。</p>
   <h4>预测如何计算</h4><p>详情「预测」页生成赛前情报简报：赛况背景、近期战绩与进失球、交锋史、伤停（有第三方数据才写，否则标明暂无）、主客日程，以及市场赔率（仅参考项）。由服务端按场次缓存，避免打爆数据源配额。不编造伤停/比分/未发生新闻。</p>
   <h4>历史实测（基线）</h4>${baselineDoc()}
@@ -11082,7 +11236,7 @@ function pageAbout() {
 }
 const TPL = '<div class="tpl">【模板文本】以下内容为占位模板，请店主/运营方根据实际运营主体信息及适用法律法规修改、并经专业人士审核后再正式使用。</div>';
 function pageTerms() {
-  return hdr('用户协议') + `<div class="doc">${TPL}<h2>竞彩预测用户协议（模板）</h2><p>更新日期：【YYYY年MM月DD日】　运营方：【运营主体名称】</p>
+  return hdr('用户协议') + `<div class="doc">${TPL}<h2>云球迷用户协议（模板）</h2><p>更新日期：【YYYY年MM月DD日】　运营方：【运营主体名称】</p>
   <h4>一、服务内容</h4><p>本应用向用户提供体育赛事资讯、赔率展示、基于赔率的概率分析与开奖结果查询服务。上述内容<strong>仅供参考</strong>，不构成任何收益承诺。</p>
   <h4>二、服务范围</h4><p>「保存方案」功能仅为用户个人记录，不会提交给任何第三方。资讯会员订阅（若开通）仅对应资讯与数据权益，当前版本为模拟支付。全部内容仅供参考。</p>
   <h4>三、账号注册与使用</h4><p>用户须年满18周岁，应使用本人手机号注册，妥善保管密码，并对账号下的行为负责。不得利用本应用从事违法违规活动。</p>
@@ -11091,7 +11245,7 @@ function pageTerms() {
   <h4>六、协议修改与联系</h4><p>运营方可能适时修订本协议并在应用内公布。如有疑问请联系：【联系电话/邮箱】。</p></div>` + foot();
 }
 function pagePrivacy() {
-  return hdr('隐私政策') + `<div class="doc">${TPL}<h2>竞彩预测隐私政策（模板）</h2><p>更新日期：【YYYY年MM月DD日】　运营方：【运营主体名称】</p>
+  return hdr('隐私政策') + `<div class="doc">${TPL}<h2>云球迷隐私政策（模板）</h2><p>更新日期：【YYYY年MM月DD日】　运营方：【运营主体名称】</p>
   <h4>一、我们收集的信息</h4><p>1. 注册信息：手机号、密码（仅保存经 scrypt 加盐哈希后的结果，不保存明文）、昵称、所选预设头像。<br>2. 使用数据：你主动保存的「我的方案」和「我的关注」。<br>3. 登录会话：登录凭证（服务器仅保存其哈希）及设备 User-Agent，用于保持登录状态。<br>4. 会员订单：套餐、金额、支付方式与会员有效期（用于提供资讯会员服务；当前为模拟支付）。<br>5. 进球提醒（Android）：在你授予通知权限后，设备会向极光推送（JPush）注册一个推送令牌，并把「关注场次」同步到服务器，以便 App 被划掉后仍能弹出系统通知。不开启通知则不初始化该 SDK。</p>
   <h4>二、我们如何使用信息</h4><p>仅用于提供账号登录、数据同步功能及保障账号安全（如登录频率限制）。我们不会出售你的个人信息，也不会将方案提交给任何第三方。</p>
   <h4>三、信息存储</h4><p>数据存储于运营方位于【地区】的服务器。游客模式下的方案与关注仅保存在你的设备本地。</p>
@@ -11906,7 +12060,7 @@ function tabContentSig(name) {
     if (name === 'schedule') {
       const n = (S.schedule && S.schedule.length) || (S.matches && S.matches.length) || 0;
       const calcN = calcSelMatches().length;
-      return 's:' + n + ':' + (S.schDate || '') + ':' + (S.schLeague || '') + ':' + (S.schHideFinished ? 1 : 0) + ':' + schChannelOf() + ':' + calcN + ':' + (S.calcMult || 1);
+      return 's:' + n + ':' + (S.schDate || '') + ':' + (S.schLeague || '') + ':' + (S.schHideFinished ? 1 : 0) + ':' + schChannelOf() + ':' + calcN + ':' + (S.calcMult || 1) + ':' + schSearchQ();
     }
     if (name === 'predict') {
       const ms = S.matches || [];
@@ -12215,7 +12369,7 @@ function render(opts) {
   if (r.name === 'home') setTimeout(syncHomeAttitudeScroll, 0);
   if (r.name === 'schedule') resumeScheduleLivePoll();
   else stopLiveScorePoll();
-  document.title = (TITLES[r.name] ? TITLES[r.name] + ' · ' : '') + '竞彩预测';
+  document.title = (TITLES[r.name] ? TITLES[r.name] + ' · ' : '') + '云球迷';
   try { if (window.JCFloatBall) window.JCFloatBall.syncRoute(r.name); } catch (_) {}
   if (r.name === 'predict' || r.name === 'home') {
     const need = (S.matches || []).some(m => {
@@ -12569,7 +12723,7 @@ document.addEventListener('click', async e => {
     }
     case 'newsClear': {
       S.newsQ = '';
-      document.title = '体坛资讯 · 竞彩预测';
+      document.title = '体坛资讯 · 云球迷';
       return go('#/news', true);
     }
     case 'newsMore':
@@ -12821,6 +12975,17 @@ document.addEventListener('click', async e => {
       setSchChannel(d.ch);
       invalidateTabKeep('schedule');
       stopLiveScorePoll();
+      return render({ force: true });
+    }
+    case 'schSearchClear': {
+      S.schSearchQ = '';
+      invalidateTabKeep('schedule');
+      if (softPatchSchedule()) {
+        const inp = document.getElementById('sch-team-search');
+        if (inp) inp.value = '';
+        syncTopChrome('schedule');
+        return;
+      }
       return render({ force: true });
     }
     case 'calcPick': return toggleCalcPick(d.mid, d.calcKey, d.odds);
@@ -13202,6 +13367,16 @@ document.addEventListener('input', e => {
       else invalidateTabKeep('tribe');
     }, 160);
   }
+  if (e.target && e.target.id === 'sch-team-search') {
+    S.schSearchQ = String(e.target.value || '');
+    syncSchSearchClearBtn();
+    if (S._schSearchTimer) clearTimeout(S._schSearchTimer);
+    S._schSearchTimer = setTimeout(() => {
+      if (route().name !== 'schedule') return;
+      if (!softPatchSchedule()) render({ force: true });
+      else invalidateTabKeep('schedule');
+    }, 140);
+  }
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'bonusOptAmtInp') {
@@ -13285,7 +13460,7 @@ document.addEventListener('submit', async e => {
   if (f.id === 'fNewsSearch') {
     const q = String(new FormData(f).get('q') || '').trim();
     S.newsQ = q;
-    document.title = (q ? ('体坛资讯 · ' + q) : '体坛资讯') + ' · 竞彩预测';
+    document.title = (q ? ('体坛资讯 · ' + q) : '体坛资讯') + ' · 云球迷';
     return go(q ? '#/news?q=' + encodeURIComponent(q) : '#/news', true);
   }
   if (f.id === 'fPdbSearch') {
@@ -13426,8 +13601,10 @@ NAV.push(location.hash || '#/home');
       } catch (_) {}
     }, 700);
   }
-  const reveal = () => waitAboveFoldReady(v, restored ? 520 : 560).then(() => revealBootShell());
+  const reveal = () => waitAboveFoldReady(v, restored ? 520 : 560).then(() => markBootSplashReady());
   reveal();
+  try { preloadBootCritical(); } catch (_) {}
+  scheduleBootSplashReveal();
   // If first paint was empty/skel (no cache), keep shell until reloadData then one commit
   window.__bootReveal = reveal;
 })();
@@ -13440,12 +13617,12 @@ window.__partnerGateReady.then((ok) => {
     const r = route();
     if (r.name === 'home' && bootShellHeld() && !(S.matches && S.matches.length) && !window.__homeSnapRestored) {
       render({ force: true });
-      waitAboveFoldReady(document.getElementById('view'), 480).then(() => revealBootShell());
+      waitAboveFoldReady(document.getElementById('view'), 480).then(() => markBootSplashReady());
     } else {
       render();
       tickClock();
       if (r.name === 'home') { try { persistHomeSnap(document.getElementById('view')); persistPredictCache(); } catch (_) {} }
-      if (bootShellHeld()) revealBootShell();
+      if (bootShellHeld()) markBootSplashReady();
     }
     ensureFavGoalPoll();
   });
