@@ -10,11 +10,11 @@ const swJs = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.271/.test(ver));
-assert.ok(/VERSION_CODE=307/.test(ver));
-assert.ok(/jc-v1\.9\.271/.test(swJs), 'SW VER 1.9.271');
+assert.ok(/VERSION=1\.9\.272/.test(ver));
+assert.ok(/VERSION_CODE=308/.test(ver));
+assert.ok(/jc-v1\.9\.272/.test(swJs), 'SW VER 1.9.272');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '1.9.271');
+assert.strictEqual(pkg.version, '1.9.272');
 
 assert.ok(/function crsScoreInList/.test(appJs), 'CRS score lists for pickKeyTrueAtScore');
 assert.ok(/key\.startsWith\('crs_'\)/.test(appJs), 'pickKeyTrueAtScore handles CRS keys');
@@ -198,8 +198,8 @@ assert.ok(
   'ttg_s3 and hhadh must appear in same achievable subset on one match'
 );
 
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.271\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-307\}"/.test(apkSh));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.272\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-308\}"/.test(apkSh));
 
 console.log('ui-239-test OK', {
   range,

@@ -1,5 +1,5 @@
 'use strict';
-// 1.9.271: list live-scores must overlay AF when sporttery is still NS after kickoff.
+// 1.9.272: list live-scores must overlay AF when sporttery is still NS after kickoff.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');

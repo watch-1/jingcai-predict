@@ -22,13 +22,13 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
 // --- version pins ---
-assert.ok(/VERSION=1\.9\.271/.test(ver));
-assert.ok(/VERSION_CODE=307/.test(ver));
-assert.ok(/jc-v1\.9\.271/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.271');
-assert.strictEqual(cfg.version, '1.9.271');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.271\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-307\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.272/.test(ver));
+assert.ok(/VERSION_CODE=308/.test(ver));
+assert.ok(/jc-v1\.9\.272/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.272');
+assert.strictEqual(cfg.version, '1.9.272');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.272\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-308\}"/.test(apkSh));
 
 // --- client: schedule list heartbeat poll (ongoing soft refresh, not only pull) ---
 assert.ok(/function scheduleHasPendingLive\(/.test(appJs), 'pending-live helper defined');

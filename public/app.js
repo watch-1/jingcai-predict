@@ -4033,17 +4033,32 @@ function fillDateStripDays(dates, { padBefore = 7, padAfter = 10 } = {}) {
 
 function dateStrip(dates, cur, key, { light = true } = {}) {
   const cls = 'dstrip' + (light ? ' light' : '');
-  const btns = dates.map(d => `<button type="button" class="${d === cur ? 'on' : ''}" data-${key}="${d}">${dayName(d)}<small>${d.slice(5)}</small></button>`).join('');
+  const btns = dates.map(d => `<button type="button" class="${d === cur ? 'on' : ''}" data-${key}="${d}"><span class="dstrip-wd">${dayName(d)}</span><small>${d.slice(5)}</small></button>`).join('');
   return `<div class="${cls}" id="dstrip"><span class="dstrip-edge" aria-hidden="true"></span>${btns}<span class="dstrip-edge" aria-hidden="true"></span></div>`;
 }
-/** 1.9.214: date strip — keep selected day readable without half-clipped edge cells. */
+/** 1.9.272: center selected day; keep immediate neighbor pills fully in the scrollport. */
 function syncDateStripScroll(nds) {
   if (!nds) return;
   const on = nds.querySelector('button.on');
   if (!on) return;
   const pad = Math.max(10, (nds.clientWidth - on.offsetWidth) / 2);
   const max = Math.max(0, nds.scrollWidth - nds.clientWidth);
-  nds.scrollLeft = Math.max(0, Math.min(on.offsetLeft - pad, max));
+  let left = on.offsetLeft - pad;
+  const inset = 8;
+  const prev = on.previousElementSibling;
+  const next = on.nextElementSibling;
+  if (prev && prev.tagName === 'BUTTON') left = Math.min(left, prev.offsetLeft - inset);
+  if (next && next.tagName === 'BUTTON') {
+    left = Math.max(left, next.offsetLeft + next.offsetWidth + inset - nds.clientWidth);
+  }
+  nds.scrollLeft = Math.max(0, Math.min(left, max));
+}
+if (typeof window !== 'undefined' && !window._dstripResizeBound) {
+  window._dstripResizeBound = true;
+  window.addEventListener('resize', () => {
+    const el = document.getElementById('dstrip');
+    if (el) syncDateStripScroll(el);
+  }, { passive: true });
 }
 /** 热门 = 竞彩常见优先联赛（LEAGUE_PRIO 白名单），不含瑞超/挪超/巴甲等长尾。 */
 function isHotLeague(l) { return prio(l) < 99; }
@@ -4746,6 +4761,21 @@ function ensureLiveScorePoll(keepAlive) {
 }
 
 function schSearchQ() { return String(S.schSearchQ || '').trim(); }
+/** 1.9.272: 「001」「021」「周一001」hit 场次编号; still matches team names. */
+function matchNumSearchHit(num, nq) {
+  const code = String(num || '').replace(/\s+/g, '');
+  if (!code || !nq) return false;
+  const low = code.toLowerCase();
+  if (!/^\d+$/.test(nq) && low.includes(nq)) return true;
+  if (/^\d+$/.test(nq) && nq.length >= 3 && low.includes(nq)) return true;
+  const qDigits = (nq.match(/\d+/) || [])[0] || '';
+  const numDigits = (code.match(/(\d+)$/) || [])[1] || '';
+  if (!qDigits || !numDigits) return false;
+  if (parseInt(qDigits, 10) !== parseInt(numDigits, 10)) return false;
+  const qHead = nq.replace(/\d+/g, '');
+  if (!qHead) return true;
+  return low.replace(/\d+$/g, '').includes(qHead);
+}
 function matchTeamSearchHit(row, q) {
   const raw = String(q || '').trim();
   if (!raw) return true;
@@ -4754,7 +4784,8 @@ function matchTeamSearchHit(row, q) {
   const home = String(row.home || '');
   const away = String(row.away || '');
   const blob = (home + away).toLowerCase().replace(/\s+/g, '');
-  return blob.includes(nq) || home.includes(raw) || away.includes(raw);
+  if (blob.includes(nq) || home.includes(raw) || away.includes(raw)) return true;
+  return matchNumSearchHit(row.num, nq);
 }
 function syncSchSearchClearBtn() {
   const bar = document.querySelector('.sch-search');
@@ -4773,9 +4804,9 @@ function syncSchSearchClearBtn() {
 }
 function schSearchBarHtml() {
   const q = esc(S.schSearchQ || '');
-  return `<div class="sch-search" role="search" aria-label="搜索球队">
+  return `<div class="sch-search" role="search" aria-label="搜索球队或场次">
     <span class="sch-search-ic" aria-hidden="true">${I.search}</span>
-    <input type="search" id="sch-team-search" class="sch-search-inp" placeholder="搜索球队" value="${q}" autocomplete="off" enterkeyhint="search" maxlength="40">
+    <input type="search" id="sch-team-search" class="sch-search-inp" placeholder="搜索球队/场次" value="${q}" autocomplete="off" enterkeyhint="search" maxlength="40">
     ${q ? `<button type="button" class="sch-search-clear" data-act="schSearchClear" aria-label="清除搜索">×</button>` : ''}
   </div>`;
 }

@@ -36,6 +36,7 @@ a { color: var(--pri); text-decoration: none; }
 .hidden { display: none !important; }
 
 /* 1.9.270: light Dongqiudi-style splash — bottom brand lockup, empty space above */
+/* 1.9.272: pin lockup to native 40 / 10 / 56 — no late safe-area or font-swap jump */
 .boot-shell{
   position:fixed;inset:0;z-index:10000;background:#F7F7F8;pointer-events:none;
   display:flex;align-items:flex-end;justify-content:center;
@@ -45,16 +46,18 @@ html[data-theme="pitch"] .boot-shell{background:#F7F7F8}
 .boot-shell.out{opacity:0}
 .boot-shell.gone{display:none!important}
 .boot-brand{
+  position:absolute;left:50%;bottom:56px;transform:translateX(-50%);
   display:flex;align-items:center;justify-content:center;gap:10px;
-  margin-bottom:max(52px, calc(28px + env(safe-area-inset-bottom, 0px) + var(--safe-b, 0px)));
-  padding-bottom:8px;
+  height:40px;margin:0;padding:0;contain:layout;
 }
 .boot-brand-icon{
-  width:40px;height:40px;border-radius:11px;object-fit:cover;display:block;
+  width:40px;height:40px;border-radius:11px;object-fit:cover;display:block;flex:none;
   box-shadow:0 2px 8px rgba(15,23,42,.12);
 }
 .boot-brand-name{
-  font-size:22px;font-weight:700;letter-spacing:.02em;color:#1A1A1A;line-height:1;
+  font-family:sans-serif;
+  font-size:22px;font-weight:700;letter-spacing:.02em;color:#1A1A1A;
+  line-height:40px;height:40px;white-space:nowrap;font-synthesis:none;
 }
 html[data-boot="1"] .app{background:#F7F7F8}
 html[data-theme="pitch"][data-boot="1"] .app{background:#F7F7F8}
@@ -346,8 +349,8 @@ html[data-ready="1"] .app {
 .shell-link svg { width: 16px; height: 16px; }
 .dstrip.light {
   background: var(--bg);
-  padding-top: 3px;
-  padding-bottom: 2px;
+  padding-top: 4px;
+  padding-bottom: 6px;
   border-bottom: 1px solid var(--line);
 }
 .dstrip.light button {
@@ -797,20 +800,34 @@ body.me-drawer-on { overflow: hidden; }
 .plbl .h { color: #f04438; } .plbl .a { color: #1a62f0; }
 
 /* ---------- date strip & chips ---------- */
+/* 1.9.272: fluid pills so selected + neighbors stay whole on narrow / notched phones */
 .dstrip {
-  display: flex; gap: 5px; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
-  padding: 0 0 6px; scrollbar-width: none; background: var(--pri-g);
-  scroll-snap-type: x proximity; scroll-padding-inline: max(10px, calc(50% - 32px));
+  --dstrip-gap: clamp(4px, 1.2vw, 8px);
+  --dstrip-pill: clamp(48px, 17vw, 64px);
+  --dstrip-side: max(10px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+  display: flex; gap: var(--dstrip-gap); overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+  padding: 4px var(--dstrip-side) 8px; scrollbar-width: none; background: var(--pri-g);
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: max(var(--dstrip-side), calc(50% - var(--dstrip-pill) / 2));
 }
 .dstrip::-webkit-scrollbar { display: none; }
-.dstrip-edge { flex: none; width: max(10px, calc(50% - 32px)); scroll-snap-align: none; }
-.dstrip button {
-  flex: none; min-width: 54px; padding: 4px 7px; border-radius: 9px;
-  color: rgba(255,255,255,.8); text-align: center; line-height: 1.2; font-size: 12.5px;
-  scroll-snap-align: center;
+.dstrip-edge {
+  flex: none;
+  width: max(var(--dstrip-side), calc(50% - var(--dstrip-pill) / 2));
+  scroll-snap-align: none;
 }
-.dstrip button small { display: block; font-size: 10.5px; opacity: .85; line-height: 1.15; }
-.dstrip button.on { background: #fff; color: var(--pri); font-weight: 700; box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+.dstrip button {
+  flex: none; box-sizing: border-box;
+  width: var(--dstrip-pill); min-width: var(--dstrip-pill);
+  padding: 4px 2px; border-radius: 9px;
+  color: rgba(255,255,255,.8); text-align: center; line-height: 1.2; font-size: 12.5px;
+  font-weight: 500; scroll-snap-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  overflow: visible; white-space: nowrap;
+}
+.dstrip-wd { display: block; font-size: inherit; font-weight: inherit; line-height: 1.15; }
+.dstrip button small { display: block; font-size: 10.5px; opacity: .85; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.dstrip button.on { background: #fff; color: var(--pri); font-weight: 600; box-shadow: 0 3px 10px rgba(0,0,0,.12); }
 .chips { display: flex; gap: 6px; overflow-x: auto; padding: 10px 12px 4px; scrollbar-width: none; position: sticky; top: 48px; z-index: 20; background: var(--bg); }
 .chips::-webkit-scrollbar { display: none; }
 .chips button { flex: none; padding: 4px 12px; border-radius: 14px; background: #fff; color: var(--t2); font-size: 12.5px; border: 1px solid var(--line); box-shadow: var(--sh); font-weight: 500; }
@@ -2960,6 +2977,15 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
   .ls-mid .score { font-size: clamp(16px, 4.8vw, 19px); }
   .match-st,
   .ls-mid .match-st { font-size: clamp(9.5px, 2.7vw, 10.5px); }
+  /* 1.9.272: phone list/card type one step lighter; no synthetic extra-bold */
+  .mc-teams .t .n,
+  .ls-body .nm,
+  .ls-side .nm {
+    font-weight: 600;
+    font-synthesis: none;
+  }
+  .mc-mid .vs,
+  .ls-mid .vs { font-weight: 600; }
 }
 .ls-score {
   display: flex; align-items: baseline; justify-content: center; gap: 4px;

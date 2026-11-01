@@ -1,5 +1,5 @@
 'use strict';
-// 1.9.271: launcher icons Lanczos-downscaled from the locked 1024 Design G master, not a redrawn SVG.
+// 1.9.272: launcher icons Lanczos-downscaled from the locked 1024 Design G master, not a redrawn SVG.
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -14,14 +14,14 @@ const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const manifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const makeIcons = fs.readFileSync(path.join(root, 'tools/make-icons.js'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.271/.test(ver));
-assert.ok(/VERSION_CODE=307/.test(ver));
-assert.ok(/jc-v1\.9\.271/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.271');
-assert.strictEqual(cfg.version, '1.9.271');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.271\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-307\}"/.test(apkSh));
-assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.271.md')));
+assert.ok(/VERSION=1\.9\.272/.test(ver));
+assert.ok(/VERSION_CODE=308/.test(ver));
+assert.ok(/jc-v1\.9\.272/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.272');
+assert.strictEqual(cfg.version, '1.9.272');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.272\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-308\}"/.test(apkSh));
+assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.272.md')));
 
 assert.ok(/android:icon="@mipmap\/ic_launcher"/.test(manifest), 'launcher still @mipmap/ic_launcher');
 assert.ok(!/android:roundIcon/.test(manifest), 'no separate roundIcon');

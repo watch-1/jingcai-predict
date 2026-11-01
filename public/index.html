@@ -1,10 +1,17 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-boot="1">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
-<style id="critical-chrome">html,body{background:#F5F7FB;margin:0}#app.app{min-height:100vh;background:#F5F7FB}</style>
+<style id="critical-chrome">
+html,body{background:#F7F7F8;margin:0}
+html[data-boot="1"] #app.app{min-height:100vh;background:#F7F7F8}
+.boot-shell{position:fixed;inset:0;z-index:10000;background:#F7F7F8;pointer-events:none;display:flex;align-items:flex-end;justify-content:center}
+.boot-brand{position:absolute;left:50%;bottom:56px;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;gap:10px;height:40px;margin:0;padding:0}
+.boot-brand-icon{width:40px;height:40px;border-radius:11px;object-fit:cover;display:block;flex:none}
+.boot-brand-name{font:700 22px/40px sans-serif;letter-spacing:.02em;color:#1A1A1A;height:40px;white-space:nowrap;font-synthesis:none}
+</style>
 <script>
 try {
   var t = 'luxury';
@@ -39,7 +46,7 @@ try {
 <body>
 <div id="boot-shell" class="boot-shell" aria-hidden="true">
   <div class="boot-brand">
-    <img class="boot-brand-icon" src="icons/icon-192.png" width="40" height="40" alt="">
+    <img class="boot-brand-icon" src="icons/icon-192.png" width="40" height="40" alt="" decoding="sync" fetchpriority="high">
     <span class="boot-brand-name">云球迷</span>
   </div>
 </div>

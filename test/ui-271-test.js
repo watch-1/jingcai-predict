@@ -1,5 +1,5 @@
 'use strict';
-// 1.9.271: fav-star must not shift kickoff time; list live poll must not reset / skip new-day ids.
+// 1.9.272: fav-star must not shift kickoff time; list live poll must not reset / skip new-day ids.
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -17,17 +17,17 @@ const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const main = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.271/.test(ver));
-assert.ok(/VERSION_CODE=307/.test(ver));
-assert.ok(/jc-v1\.9\.271/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.271');
-assert.strictEqual(cfg.version, '1.9.271');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.271\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-307\}"/.test(apkSh));
-assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.271.md')));
+assert.ok(/VERSION=1\.9\.272/.test(ver));
+assert.ok(/VERSION_CODE=308/.test(ver));
+assert.ok(/jc-v1\.9\.272/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.272');
+assert.strictEqual(cfg.version, '1.9.272');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.272\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-308\}"/.test(apkSh));
+assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.272.md')));
 assert.ok(/package="com\.tiicai\.jingcai"/.test(androidManifest), 'package id unchanged');
-assert.ok(/android:versionCode="307"/.test(androidManifest));
-assert.ok(/android:versionName="1\.9\.271"/.test(androidManifest));
+assert.ok(/android:versionCode="308"/.test(androidManifest));
+assert.ok(/android:versionName="1\.9\.272"/.test(androidManifest));
 
 // 1) fav star reserved column — time is not a sibling that space-between can shove inward
 const metaFn = appJs.match(/function matchCardMeta\([\s\S]*?^\}/m);
