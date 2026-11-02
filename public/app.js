@@ -2314,7 +2314,7 @@ function openSheetHtml(html) {
 
 // ======================= router =======================
 /** 1.9.146: top feed tabs (部落/头条/开奖) + bottom tabs (首页/赛程/预测/数据). */
-const TOP_TABS = ['tribe', 'news', 'results'];
+const TOP_TABS = ['tribe', 'news'];
 const TABS = ['home', 'schedule', 'predict', 'data'];
 const SHELL_TABS = [...TOP_TABS, ...TABS];
 function isShellTab(name) { return SHELL_TABS.includes(name); }
@@ -2342,7 +2342,12 @@ function routeFromHash(h) {
 }
 function go(h, replace) {
   closeMeDrawer();
-  const dest = routeFromHash(h);
+  let dest = routeFromHash(h);
+  if (dest.name === 'results') {
+    setSchChannel('results');
+    h = '#/schedule';
+    dest = routeFromHash(h);
+  }
   if (!isMeDrawerChildRoute(dest.name)) S.meBackToDrawer = false;
   if (replace) { history.replaceState(null, '', h); if (typeof NAV !== 'undefined') { if (NAV.length) NAV[NAV.length - 1] = h; else NAV.push(h); } render(); window.scrollTo(0, 0); }
   else if (location.hash !== h) location.hash = h;
@@ -2385,7 +2390,7 @@ const hdr = (title, { back: b = true, right = '' } = {}) =>
   `<header class="hdr center"><div class="hdr-side left">${b ? `<button class="ic-btn" data-act="back" aria-label="返回">${I.back}</button>` : '<span class="ph"></span>'}</div><h1 class="hdr-title">${esc(title)}</h1><div class="hdr-side right">${right || '<span class="ph"></span>'}</div></header>`;
 const foot = () => ''; // 1.9.96: no data-source / disclaimer footer in end-user UI
 
-const TOP_TAB_DEF = [['tribe', '论坛'], ['news', '头条'], ['results', '开奖']];
+const TOP_TAB_DEF = [['tribe', '论坛'], ['news', '头条']];
 const TAB_DEF = [['home', '首页', I.home], ['schedule', '赛程', I.cal], ['predict', '预测', I.chart], ['data', '数据', I.data]];
 
 /** Remember last 部落/头条/开奖 when user opens a top tab (not used for bottom-tool highlight). */
@@ -2470,7 +2475,7 @@ function syncMeDrawer() {
   const html = meDrawerHtml();
   if (dr.innerHTML !== html) dr.innerHTML = html;
 }
-/** 顶栏中部 Tab 集：按底栏上下文切换（赛程=日期滚筒，其余=部落/头条/开奖）。 */
+/** 顶栏中部 Tab 集：赛程=比分/计算器/开奖；数据=球队/球星；其余=论坛/头条。 */
 function shiftIssueDate(d, delta) {
   const t = new Date(String(d) + 'T12:00:00Z');
   t.setUTCDate(t.getUTCDate() + (delta | 0));
@@ -2507,6 +2512,7 @@ function schSpindleCenterTapHit(spindle, clientX, clientY) {
 function commitSchDate(next) {
   if (!next || next === S.schDate) return false;
   S.schDate = next;
+  if (schChannelOf() === 'results') S.rsDate = next;
   invalidateTabKeep('schedule');
   if (softPatchSchedule()) {
     syncTopChrome('schedule');
@@ -2764,15 +2770,12 @@ function topChromeCenterHtml(rName) {
   if (rName === 'schedule') {
     const ch = schChannelOf();
     const tabs = [
-      ['list', '比分', 'schChannel'],
-      ['calc', '计算器', 'schChannel'],
-      ['results', '开奖', 'go'],
-    ].map(([k, lab, kind]) => {
-      const on = kind === 'schChannel' ? ch === k : false;
-      const act = kind === 'go'
-        ? `data-go="#/${k}"`
-        : `data-act="schChannel" data-ch="${k}"`;
-      return `<button type="button" class="tc-tab${on ? ' on' : ''}" ${act}${on ? ' aria-current="true"' : ''}>${esc(lab)}</button>`;
+      ['list', '比分'],
+      ['calc', '计算器'],
+      ['results', '开奖'],
+    ].map(([k, lab]) => {
+      const on = ch === k;
+      return `<button type="button" class="tc-tab${on ? ' on' : ''}" data-act="schChannel" data-ch="${k}"${on ? ' aria-current="true"' : ''}>${esc(lab)}</button>`;
     }).join('');
     return `<nav class="tc-tabs tc-tabs--schedule" aria-label="赛程视图">${tabs}</nav>`;
   }
@@ -2997,14 +3000,14 @@ function slideNews(item) {
 }
 function slideContra(hit) {
   if (!hit) {
-    return `<a class="hero-slide bn-slide bn-contra" href="#/results" data-go="#/results">
+    return `<a class="hero-slide bn-slide bn-contra" href="#/schedule" data-go="#/schedule">
       ${bannerBgImg(BN_CONTRA, '逆盘命中')}
       <div class="bn-shade bn-shade-contra"></div>
       <div class="bn-poster">
         <span class="bn-kicker">逆盘命中</span>
         <h2>近期表态对照</h2>
         <p>表态命中且与赔率热门相反</p>
-        <span class="hero-cta">查看开奖</span>
+        <span class="hero-cta">查看赛程</span>
       </div>
     </a>`;
   }
@@ -3415,7 +3418,7 @@ function paintHomeAttitudeFeed(feedEl, ms, posts) {
     const rows = homeAttitudeRows(matchPool);
     if (!rows.length) {
       feedEl.innerHTML = empty('今日暂无可展示的未开赛预测场次，开售后将按信心指数排序出现在这里。',
-        '<button type="button" class="btn ghost sm" data-go="#/results">查看最新开奖</button>', '暂无场次');
+        '<button type="button" class="btn ghost sm" data-go="#/schedule">去赛程查看</button>', '暂无场次');
     } else {
       feedEl.innerHTML = rows.map(homeAttitudeCard).join('');
     }
@@ -3467,7 +3470,7 @@ async function fillHomePlatformAttitude(opts) {
       feedEl.innerHTML = empty('加载失败，请稍后重试', '<button type="button" class="btn ghost sm" data-act="reload">重试</button>', '暂无场次');
     } else {
       feedEl.innerHTML = empty(reason || '今日暂无可展示的未开赛预测场次，开售后将按信心指数排序出现在这里。',
-        '<button type="button" class="btn ghost sm" data-go="#/results">查看最新开奖</button>', '暂无场次');
+        '<button type="button" class="btn ghost sm" data-go="#/schedule">去赛程查看</button>', '暂无场次');
     }
     syncHomeAttitudeScroll();
   };
@@ -4100,12 +4103,18 @@ const SCH_MODE_ALL = '全部';
 function initSchChannel() {
   try {
     const ch = localStorage.getItem('jc_sch_channel');
-    return ch === 'calc' ? 'calc' : 'list';
+    if (ch === 'calc' || ch === 'results') return ch;
+    return 'list';
   } catch (_) { return 'list'; }
 }
-function schChannelOf() { return S.schChannel === 'calc' ? 'calc' : 'list'; }
+function schChannelOf() {
+  if (S.schChannel === 'calc') return 'calc';
+  if (S.schChannel === 'results') return 'results';
+  return 'list';
+}
 function setSchChannel(ch) {
-  S.schChannel = ch === 'calc' ? 'calc' : 'list';
+  S.schChannel = (ch === 'calc' || ch === 'results') ? ch : 'list';
+  if (S.schChannel === 'results' && S.schDate) S.rsDate = S.schDate;
   try { localStorage.setItem('jc_sch_channel', S.schChannel); } catch (_) {}
 }
 function initSchMode() {
@@ -4969,6 +4978,20 @@ function softPatchSchedule() {
       saveTabKeep('schedule', v);
       return true;
     }
+    if (schChannelOf() === 'results') {
+      if (S.schDate) S.rsDate = S.schDate;
+      const rmodel = resultsDayModel();
+      if (!rmodel || rmodel.emptyAll) return false;
+      let body = document.getElementById('rsBody');
+      if (!body) return false;
+      body.innerHTML = resultsBodyHtml(rmodel.list);
+      try {
+        render.lastSig = tabContentSig('schedule');
+        render.last = location.hash;
+      } catch (_) {}
+      saveTabKeep('schedule', v);
+      return true;
+    }
     const chips = v.querySelector('.league-chips');
     if (!chips) return false;
     const wrap = document.createElement('div');
@@ -5492,6 +5515,16 @@ async function openCalcMoreSheet(mid) {
   inner.innerHTML = calcMoreSheetShell(m, renderCalcMorePickables(mid, snap, m));
 }
 
+function scheduleResultsHtml() {
+  if (!S.results) return skeleton(4);
+  if (S.schDate) S.rsDate = S.schDate;
+  const model = resultsDayModel();
+  if (!model || model.emptyAll) {
+    return empty('官方开奖数据暂未同步，请稍后下拉刷新。', '', '暂无开奖');
+  }
+  return `<div id="rsBody" class="rs-body rs-body--flush">${resultsBodyHtml(model.list)}</div>`;
+}
+
 function pageSchedule() {
   let h = '';
   const model = scheduleDayModel();
@@ -5501,15 +5534,19 @@ function pageSchedule() {
   }
   const { modeRows, classifiedDay, dates } = model;
   h += dateStrip(dates, S.schDate, 'sdate');
-  h += schSearchBarHtml();
-  if (schChannelOf() === 'calc') {
+  const ch = schChannelOf();
+  if (ch === 'calc') {
+    h += schSearchBarHtml();
     h += scheduleCalcHtml(model);
+  } else if (ch === 'results') {
+    h += scheduleResultsHtml();
   } else {
+    h += schSearchBarHtml();
     h += leagueChips(modeRows, S.schLeague, 'slg', { strong: true });
     h += `<div id="schBody" class="sch-body">${scheduleBodyHtml(model)}</div>`;
   }
   const allDayIds = classifiedDay.map(x => String(x.id));
-  if (allDayIds.length) {
+  if (allDayIds.length && ch !== 'results') {
     setTimeout(async () => {
       const pending = scheduleNeedLivePoll(classifiedDay, model.counts);
       const missing = allDayIds.some(id => !(S.liveScores && S.liveScores[id]));
@@ -7040,7 +7077,9 @@ function pageResults() {
 /** 1.9.129: patch 开奖 date/league in place — avoid #view wipe → paint-hold navy flash. */
 function softPatchResults() {
   try {
-    if (route().name !== 'results') return false;
+    const r = route();
+    if (r.name === 'schedule' && schChannelOf() === 'results') return softPatchSchedule();
+    if (r.name !== 'results') return false;
     const model = resultsDayModel();
     if (!model || model.emptyAll) return false;
     const v = document.getElementById('view');
@@ -12353,6 +12392,10 @@ function render(opts) {
   opts = opts || {};
   applyHomeTheme(homeTheme());
   let r = route();
+  if (r.name === 'results') {
+    setSchChannel('results');
+    return go('#/schedule', true);
+  }
   if (r.name === 'me') {
     openMeDrawer();
     if (location.hash !== '#/home') {

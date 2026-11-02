@@ -26,7 +26,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     const src = await p.evaluate(() => document.querySelector('.src-pill')?.textContent || '');
     console.log('     data source pill:', src);
     ok(await p.$$eval('.tabbar button', l => l.map(x => x.textContent).join()) === '首页,赛程,预测,数据', 'bottom tab bar has 首页/赛程/预测/数据');
-    ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '论坛,头条,开奖', 'top chrome has 部落/头条/开奖');
+    ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '论坛,头条', 'top chrome has 论坛/头条 (no 开奖 on 首页)');
     ok(!!(await p.$('.tc-actions .tc-ic[data-go="#/search"]')), 'top chrome has search icon');
     ok(!(await p.$('.home-search-cap')), 'no sticky home search bar');
     await tap('.tc-ic[data-go="#/search"]'); await p.waitForFunction(() => location.hash === '#/search', { timeout: 5000 });
@@ -78,13 +78,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await tap('#top-chrome .tc-tab[data-ch="list"]');
     await p.waitForSelector('#schBody, .league-chips', { timeout: 8000 });
     ok(await p.$eval('#top-chrome .tc-tab[data-ch="list"]', e => e.classList.contains('on')), 'schedule: tap 比分 returns to list');
-    await tap('#top-chrome .tc-tab[data-go="#/results"]');
-    await p.waitForFunction(() => location.hash === '#/results', { timeout: 5000 });
-    ok(/#\/results/.test(await p.evaluate(() => location.hash)), 'schedule: tap 开奖 goes to results');
-    ok((await p.$$eval('#view #dstrip button[data-rdate]', l => l.length)) >= 12, 'results: date strip padded with enough days');
-    await tap('.tabbar [data-go="#/schedule"]');
-    await p.waitForSelector('#view #dstrip');
-    ok((await p.$$eval('#top-chrome .tc-tab', l => l.map(x => x.textContent).join())) === '比分,计算器,开奖', 'back from 开奖: schedule top restored');
+    await tap('#top-chrome .tc-tab[data-ch="results"]');
+    await p.waitForSelector('#rsBody, .rs-body', { timeout: 8000 });
+    ok(/#\/schedule/.test(await p.evaluate(() => location.hash)), 'schedule: tap 开奖 stays on schedule route');
+    ok(await p.$eval('#top-chrome .tc-tab[data-ch="results"]', e => e.classList.contains('on')), 'schedule: 开奖 tab highlighted');
+    ok((await p.$$eval('#top-chrome .tc-tab', l => l.map(x => x.textContent).join())) === '比分,计算器,开奖', 'schedule on 开奖: top still 比分/计算器/开奖');
+    ok((await p.$$eval('#view #dstrip button[data-sdate]', l => l.length)) >= 12, 'schedule 开奖 channel: date strip padded with enough days');
+    await tap('#top-chrome .tc-tab[data-ch="list"]');
+    await p.waitForSelector('#schBody, .league-chips', { timeout: 8000 });
     ok(!(await p.$('.ls-status')), 'schedule: no legacy status pill row');
     ok(await p.$$eval('.chips button', l => l.length) > 0, 'schedule: league chips');
     async function assertSchLeagueToggle(modeLabel) {
@@ -141,7 +142,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     }
     // detail
     await tap('.tabbar [data-go="#/home"]'); await sleep(300);
-    ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '论坛,头条,开奖', 'home: top chrome restores 部落/头条/开奖');
+    ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '论坛,头条', 'home: top chrome restores 论坛/头条');
     await tap('.tabbar [data-go="#/schedule"]'); await sleep(200);
     await tap('.ls-row[data-go^="#/match/"]'); await p.waitForSelector('.hero');
     await p.evaluate(() => document.documentElement.style.setProperty('--sat', '24px'));
@@ -203,7 +204,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     // predict / results
     await tap('.hero-ic[data-act="back"]'); await p.waitForFunction(() => location.hash === '#/schedule');
     await tap('.tabbar [data-go="#/predict"]'); await p.waitForSelector('.kb-entry'); await shot('predict');
-    await tap('.tc-tab[data-go="#/results"]'); await p.waitForSelector('.dstrip button, .empty'); await shot('results');
+    ok((await p.$$eval('#top-chrome .tc-tab', l => l.length)) === 2, 'predict: top chrome has 论坛/头条 only (no 开奖 entry)');
+    await tap('.tabbar [data-go="#/schedule"]'); await p.waitForSelector('#view #dstrip');
+    await tap('#top-chrome .tc-tab[data-ch="results"]'); await p.waitForSelector('#rsBody, .rs-body', { timeout: 8000 }); await shot('results');
     // data center
     await tap('.tabbar [data-go="#/data"]'); await p.waitForSelector('#dcLeagues');
     await p.waitForFunction(() => document.querySelector('#dcBody .dc-table') && !document.querySelector('#dcBody .sk-card'), { timeout: 25000 });
@@ -241,7 +244,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     }, { timeout: 15000 });
     ok((await p.$eval('.empty-t', e => e.textContent)).includes('筹备'), '门神榜 shows 筹备 placeholder');
     await tap('.tabbar [data-go="#/home"]'); await sleep(300);
-    ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '论坛,头条,开奖', 'leave data restores 部落/头条/开奖');
+    ok(await p.$$eval('.tc-tab', l => l.map(x => x.textContent).join()) === '论坛,头条', 'leave data restores 论坛/头条');
     await shot('data');
     // me drawer
     await tap('[data-act="openMe"]'); await p.waitForSelector('.me-drawer.open');
