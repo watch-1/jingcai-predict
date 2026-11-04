@@ -1,0 +1,2319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>云球迷 · 比赛实况 · Pitch v10</title>
+<style>
+  :root {
+    --navy: #1A1E2B;
+    --navy-deep: #12151F;
+    --primary: #2F6FED;
+    --amber: #F5A623;
+    --muted: #8B93A7;
+    --app-w: 390px;
+  }
+  /* Wide / landscape-friendly demo frame via ?w=720 or .phone.wide */
+  body.wide-demo .phone { --app-w: 720px; width: min(720px, 100%); }
+  .phone.wide { --app-w: 720px; width: min(720px, 100%); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: #0B0D14;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+      "Microsoft YaHei", "Noto Sans SC", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 16px 0 48px;
+    min-height: 100vh;
+  }
+  .phone {
+    width: var(--app-w);
+    max-width: 100%;
+    background: var(--navy);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06);
+    transition: width 0.35s ease, max-width 0.35s ease, border-radius 0.35s ease;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px 8px;
+    background: linear-gradient(180deg, #1C2233 0%, var(--navy) 100%);
+  }
+  .header-left, .header-right { width: 76px; display: flex; align-items: center; }
+  .header-right { justify-content: flex-end; }
+  .back-btn {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: none; background: rgba(255,255,255,0.08);
+    color: #fff; font-size: 16px; cursor: pointer;
+    display: grid; place-items: center;
+  }
+  .title { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(231,76,60,0.18); color: #FF6B5A;
+    font-size: 11px; font-weight: 600;
+    padding: 4px 8px; border-radius: 999px;
+    border: 1px solid rgba(231,76,60,0.35);
+  }
+  .live-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #E74C3C;
+    animation: pulse-dot 1.4s ease-out infinite;
+  }
+  @keyframes pulse-dot {
+    0% { box-shadow: 0 0 0 0 rgba(231,76,60,0.55); }
+    70% { box-shadow: 0 0 0 6px rgba(231,76,60,0); }
+    100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
+  }
+
+  .pitch-wrap {
+    position: relative;
+    width: 100%;
+    background: #070a12;
+    line-height: 0;
+    /* Lock 16:9 so canvas stretch matches plate UV→px (min-height used to break AR on ~375px phones). */
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+  }
+  .cam-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform-origin: 0 0;
+    will-change: transform;
+    z-index: 0;
+  }
+  .pitch-shake { animation: pitch-shake 0.28s ease-out; }
+  @keyframes pitch-shake {
+    0%, 100% { transform: translate(0,0); }
+    20% { transform: translate(-3px, 2px); }
+    40% { transform: translate(3px, -2px); }
+    60% { transform: translate(-2px, -1px); }
+    80% { transform: translate(2px, 1px); }
+  }
+  /* Keep AR locked at every width — never 16/9.2 / 16/9.35 (those made object-fit:cover diverge from canvas). */
+  .pitch-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    /* fill (= canvas stretch). cover cropped sides on non-16:9 boxes and shifted 落点. */
+    object-fit: fill;
+    display: block;
+    z-index: 0;
+    pointer-events: none;
+  }
+  #pitch {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* Player card — TOP LEFT dead space over stands; smaller & more transparent (v7) */
+  .player-card {
+    position: absolute;
+    left: 6px;
+    top: 6px;
+    z-index: 5;
+    width: 90px;
+    max-width: 28%;
+    padding: 3px 4px 3px 4px;
+    background: rgba(8,10,18,0.42);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 9px;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.32);
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .player-card .card-top {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+  }
+  .player-card .avatar {
+    width: 24px; height: 24px; border-radius: 50%;
+    flex-shrink: 0;
+    background: linear-gradient(145deg, #3a4560, #1a2030);
+    border: 1.5px solid rgba(255,255,255,0.22);
+    display: grid; place-items: center;
+    overflow: hidden;
+    position: relative;
+  }
+  .player-card .avatar canvas { width: 100%; height: 100%; display: block; }
+  .player-card .meta { flex: 1; min-width: 0; }
+  .player-card .pname-row {
+    display: flex; align-items: center; gap: 4px;
+  }
+  .player-card .card-crest {
+    width: 15px; height: 15px; flex-shrink: 0;
+    border-radius: 50%;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.4);
+  }
+  .player-card .card-crest canvas { width: 15px; height: 15px; display: block; }
+  .player-card .pname {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.08px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    line-height: 1.15;
+  }
+  .player-card .ppos {
+    font-size: 8px; color: rgba(255,255,255,0.55); margin-top: 1px;
+    line-height: 1.1;
+  }
+  .player-card .pstats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    column-gap: 2px;
+    row-gap: 0;
+    margin-top: 0;
+    padding-top: 3px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    text-align: center;
+  }
+  .player-card .pstats .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 2px;
+    min-width: 0;
+  }
+  .player-card .pstats .stat .lbl {
+    font-size: 7px;
+    line-height: 1.05;
+    color: rgba(255,255,255,0.45);
+    white-space: nowrap;
+    height: 8px;
+  }
+  .player-card .pstats .stat .val {
+    display: block;
+    color: rgba(255,255,255,0.98);
+    font-weight: 700;
+    font-size: 10px;
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+    height: 11px;
+  }
+
+  /* Possession pill — smaller; hard AABB anti-overlap vs player card (v7) */
+  .pill {
+    position: absolute;
+    left: 50%;
+    top: 42%;
+    bottom: auto;
+    transform: translate(-50%, -125%);
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px 2px 2px;
+    background: rgba(8,10,18,0.48);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+    pointer-events: none;
+    min-width: 0;
+    max-width: 38%;
+    will-change: left, top;
+  }
+  .pill .crest-wrap {
+    width: 18px; height: 18px; flex-shrink: 0;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.28), 0 2px 6px rgba(0,0,0,0.35);
+  }
+  .pill .crest-wrap canvas { width: 18px; height: 18px; display: block; }
+  .pill .pill-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .pill .team-row {
+    display: flex; align-items: baseline; gap: 5px;
+  }
+  .pill .team-name { font-size: 9px; font-weight: 700; line-height: 1.0; }
+  .pill .action {
+    font-size: 8px; font-weight: 650; line-height: 1.0;
+  }
+  .pill.home .action { color: #6EC1FF; }
+  .pill.away .action { color: #F5C542; }
+  .pill.tackle .action { color: #FF8A65; }
+  .pill.shot .action { color: #FF6B9D; }
+  .pill.corner .action { color: #7CFFB2; }
+  .pill.freekick .action { color: #B388FF; }
+  .pill.carry .action { color: #9ED0FF; }
+  .pill .player-row {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 8px; color: rgba(255,255,255,0.88); font-weight: 500;
+    line-height: 1.0;
+  }
+  .pill .jersey {
+    width: 10px; height: 11px;
+    display: inline-block;
+    background: currentColor;
+    opacity: 0.9;
+    flex-shrink: 0;
+    clip-path: polygon(20% 18%, 35% 0, 65% 0, 80% 18%, 100% 22%, 92% 100%, 8% 100%, 0 22%);
+  }
+  .pill.home .jersey { color: #6EC1FF; }
+  .pill.away .jersey { color: #F5C542; }
+
+  .view-toggle {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 6;
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.28);
+    background: rgba(12,14,22,0.62);
+    display: grid; place-items: center;
+    pointer-events: auto;
+    cursor: pointer;
+    color: #fff;
+    padding: 0;
+  }
+  .view-toggle:hover { background: rgba(20,24,36,0.8); }
+  .view-toggle svg { width: 16px; height: 16px; opacity: 0.95; }
+  .view-toggle .land-label {
+    display: none;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+  }
+
+  .scoreboard {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px 12px;
+    background: linear-gradient(180deg, #161A26 0%, var(--navy) 100%);
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .team {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .team.away { align-items: flex-end; text-align: right; }
+  .team-name-sb {
+    font-size: 13px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .team.away .team-name-sb { flex-direction: row-reverse; }
+  .sb-crest {
+    width: 20px; height: 20px; border-radius: 50%;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.25);
+    flex-shrink: 0;
+  }
+  .sb-crest canvas { width: 20px; height: 20px; display: block; }
+  .team-meta {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 10px; color: var(--muted);
+  }
+  .team.away .team-meta { flex-direction: row-reverse; }
+  .meta-item { display: inline-flex; align-items: center; gap: 3px; }
+  .yc { width: 8px; height: 11px; background: #F5C542; border-radius: 1px; }
+  .rc { width: 8px; height: 11px; background: #E74C3C; border-radius: 1px; }
+  .corner-ico {
+    width: 10px; height: 10px; border: 1.5px solid var(--muted);
+    border-left: none; border-bottom: none; border-radius: 0 2px 0 0;
+    transform: rotate(-45deg); display: inline-block;
+  }
+  .score-mid {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    min-width: 78px;
+  }
+  .score {
+    font-size: 22px; font-weight: 700; letter-spacing: 1px;
+    font-variant-numeric: tabular-nums;
+  }
+  .clock {
+    font-size: 11px; color: #FF6B5A; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tabs {
+    display: flex; gap: 0;
+    padding: 0 8px;
+    background: #fff;
+    border-bottom: 1px solid #EEF0F5;
+  }
+  .tab {
+    flex: 1; text-align: center;
+    padding: 12px 0 10px;
+    font-size: 13px; color: #6B7285; font-weight: 500;
+    position: relative; cursor: default;
+  }
+  .tab.active { color: var(--primary); font-weight: 600; }
+  .tab.active::after {
+    content: ""; position: absolute; left: 22%; right: 22%; bottom: 0;
+    height: 2.5px; background: var(--primary); border-radius: 2px 2px 0 0;
+  }
+
+  .panel {
+    background: #fff; color: #1A1E2B;
+    padding: 14px 14px 18px;
+  }
+  .caption {
+    font-size: 11px; color: var(--muted); line-height: 1.5;
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    background: #F4F6FB;
+    border-radius: 8px;
+    border: 1px solid #E8ECF4;
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn {
+    flex: 1 1 calc(25% - 8px);
+    min-width: 64px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    border: 1px solid #D8DEEA;
+    background: #fff;
+    color: #1A1E2B;
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn.primary {
+    background: var(--primary); color: #fff; border-color: var(--primary);
+  }
+  .btn.active-speed {
+    background: rgba(47,111,237,0.12);
+    border-color: rgba(47,111,237,0.45);
+    color: var(--primary);
+  }
+  .btn.wide { flex: 1 1 100%; }
+  .status-row {
+    margin-top: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; color: var(--muted);
+  }
+  .status-row strong { color: #1A1E2B; font-weight: 600; }
+  .pass-log {
+    margin-top: 12px;
+    max-height: 140px;
+    overflow-y: auto;
+    border: 1px solid #EEF0F5;
+    border-radius: 10px;
+    background: #FAFBFE;
+  }
+  .pass-log-item {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 8px 10px;
+    font-size: 11px; line-height: 1.4;
+    border-bottom: 1px solid #EEF0F5;
+    color: #4B5568;
+  }
+  .pass-log-item:last-child { border-bottom: none; }
+  .pass-log-item .t {
+    flex-shrink: 0; width: 40px; color: var(--primary); font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .pass-log-item.home .dot { background: #2F6FED; }
+  .pass-log-item.away .dot { background: #E89B1C; }
+  .pass-log-item.tackle .dot { background: #FF7043; }
+  .pass-log-item.shot .dot { background: #EC407A; }
+  .pass-log-item.goal .dot { background: #66BB6A; }
+  .pass-log-item.corner .dot { background: #26A69A; }
+  .pass-log-item.freekick .dot { background: #7E57C2; }
+  .pass-log-item .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    margin-top: 5px; flex-shrink: 0;
+  }
+
+  body.land-mode {
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+  }
+  body.land-mode .phone {
+    width: min(100vw, calc(100vh * 16 / 9));
+    max-width: 100vw;
+    height: min(100vh, calc(100vw * 9 / 16));
+    max-height: 100vh;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    --app-w: 100%;
+  }
+  body.land-mode .header,
+  body.land-mode .tabs,
+  body.land-mode .panel { display: none !important; }
+  body.land-mode .scoreboard { padding: 6px 14px 8px; flex-shrink: 0; }
+  body.land-mode .pitch-wrap {
+    flex: 1; min-height: 0; aspect-ratio: auto; height: auto;
+  }
+  body.land-mode .view-toggle {
+    width: auto; height: 30px; padding: 0 10px; gap: 6px;
+    display: inline-flex; align-items: center; border-radius: 999px;
+  }
+  body.land-mode .view-toggle .land-label { display: inline; }
+  body.land-mode .score { font-size: 18px; }
+
+  /* v9d: stacked LED phase plates — crossfade cycle */
+  .pitch-bg-stack {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .pitch-bg-stack .pitch-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    display: block;
+    opacity: 0;
+    transition: opacity 1.1s ease-in-out;
+    will-change: opacity;
+  }
+  .pitch-bg-stack .pitch-bg.is-active {
+    opacity: 1;
+  }
+  /* v9d/v10: very slow gentle horizontal drift (calm, not flashy).
+     Applied to .pitch-world so plate + canvas overlay drift together (no 落点 desync). */
+  @keyframes ledSoftDrift {
+    0%   { transform: translateX(0); }
+    50%  { transform: translateX(-0.55%); }
+    100% { transform: translateX(0); }
+  }
+  .pitch-world {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    animation: ledSoftDrift 36s ease-in-out infinite;
+    will-change: transform;
+  }
+</style>
+</head>
+<body>
+  <div class="phone" id="phone">
+    <div class="header">
+      <div class="header-left"><button class="back-btn" type="button" aria-label="返回">‹</button></div>
+      <div class="title">云球迷</div>
+      <div class="header-right"><span class="live-badge"><span class="live-dot"></span>直播</span></div>
+    </div>
+
+    <div class="pitch-wrap" id="pitchWrap">
+      <div class="cam-layer" id="camLayer">
+        <div class="pitch-world" id="pitchWorld">
+          <div class="pitch-bg-stack" id="pitchBgStack" data-led-phase="0">
+            <img class="pitch-bg is-active" id="pitchBg" data-phase="0" alt="Blender 45° pitch LED phase 0"
+                 src="pitch-blender/pitch45_v9d_p0.png"
+                 onerror="this.onerror=null;this.src='pitch45_v9d_p0.png';" />
+            <img class="pitch-bg" id="pitchBg1" data-phase="1" alt="Blender 45° pitch LED phase 1"
+                 src="pitch-blender/pitch45_v9d_p1.png"
+                 onerror="this.onerror=null;this.src='pitch45_v9d_p1.png';" />
+            <img class="pitch-bg" id="pitchBg2" data-phase="2" alt="Blender 45° pitch LED phase 2"
+                 src="pitch-blender/pitch45_v9d_p2.png"
+                 onerror="this.onerror=null;this.src='pitch45_v9d_p2.png';" />
+          </div>
+          <canvas id="pitch" width="1600" height="900"></canvas>
+        </div>
+      </div>
+
+      <div class="player-card" id="playerCard">
+        <div class="card-top">
+          <div class="avatar"><canvas id="avatarCv" width="88" height="88"></canvas></div>
+          <div class="meta">
+            <div class="pname-row">
+              <div class="card-crest"><canvas id="cardCrestCv" width="84" height="84"></canvas></div>
+              <div class="pname" id="pcName">陈浩然</div>
+            </div>
+            <div class="ppos" id="pcPos">中场 · 曼城</div>
+          </div>
+        </div>
+        <div class="pstats">
+          <div class="stat"><span class="lbl">出场</span><span class="val" id="pcMin">24'</span></div>
+          <div class="stat"><span class="lbl">进球</span><span class="val" id="pcG">0</span></div>
+          <div class="stat"><span class="lbl">助攻</span><span class="val" id="pcA">0</span></div>
+          <div class="stat"><span class="lbl">红/黄</span><span class="val" id="pcC">—</span></div>
+        </div>
+      </div>
+
+      <div class="pill home" id="pill">
+        <div class="crest-wrap"><canvas id="crestCv" width="120" height="120"></canvas></div>
+        <div class="pill-body">
+          <div class="team-row">
+            <span class="team-name" id="pillTeam">曼城</span>
+            <span class="action" id="pillAction">控球</span>
+          </div>
+          <div class="player-row">
+            <span class="jersey" aria-hidden="true"></span>
+            <span id="pillPlayer">陈浩然</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="view-toggle" id="btnLand" type="button" title="横屏观看" aria-label="横屏观看">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+          <rect x="2" y="7" width="20" height="12" rx="2"/>
+          <path d="M8 7V5M16 7V5"/>
+        </svg>
+        <span class="land-label">退出横屏</span>
+      </button>
+    </div>
+
+    <div class="scoreboard">
+      <div class="team home">
+        <div class="team-name-sb">
+          <span class="sb-crest"><canvas id="sbHomeCrest" width="64" height="64"></canvas></span>
+          曼城
+        </div>
+        <div class="team-meta">
+          <span class="meta-item"><span class="yc"></span>0</span>
+          <span class="meta-item"><span class="rc"></span>0</span>
+          <span class="meta-item"><span class="corner-ico"></span>2</span>
+        </div>
+      </div>
+      <div class="score-mid">
+        <div class="score" id="scoreText">0 - 0</div>
+        <div class="clock" id="clock">24:18</div>
+      </div>
+      <div class="team away">
+        <div class="team-name-sb">
+          <span class="sb-crest"><canvas id="sbAwayCrest" width="64" height="64"></canvas></span>
+          阿森纳
+        </div>
+        <div class="team-meta">
+          <span class="meta-item"><span class="yc"></span>1</span>
+          <span class="meta-item"><span class="rc"></span>0</span>
+          <span class="meta-item"><span class="corner-ico"></span>1</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active">赛况</div>
+      <div class="tab">数据</div>
+      <div class="tab">阵容</div>
+      <div class="tab">聊天</div>
+      <div class="tab">情报</div>
+    </div>
+
+    <div class="panel">
+      <div class="caption">v10 · 持球跑动 · 落点对齐 · 角球/定位球 · 镜头跟随 · LED云足球·缓循环 · 横屏</div>
+      <div class="controls">
+        <button class="btn primary" id="btnPlay" type="button">暂停</button>
+        <button class="btn active-speed" id="btn1x" type="button">1x</button>
+        <button class="btn" id="btn2x" type="button">2x</button>
+        <button class="btn" id="btnReset" type="button">重置</button>
+        <button class="btn wide" id="btnNext" type="button">下一次</button>
+      </div>
+      <div class="status-row">
+        <span>片段 <strong id="segLabel">1 / 18</strong></span>
+        <span>演示时 <strong id="demoTime">0.0s</strong></span>
+      </div>
+      <div class="pass-log" id="passLog"></div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  const canvas = document.getElementById("pitch");
+  const ctx = canvas.getContext("2d", { alpha: true });
+  const camLayer = document.getElementById("camLayer");
+  const pitchWrapEl = document.getElementById("pitchWrap");
+  const IMG_W = 1600;
+  const IMG_H = 900;
+
+  /* Blender pitch45-map.json corners (pixel, top-left origin)
+     pitch meters: x 0..105 length, y 0..68 near(camera)→far
+     norm: u=x/105, v=y/68 ; bl(0,0) br(1,0) tr(1,1) tl(0,1) */
+  const CORNERS = {
+    tl: { u: 0, v: 1, x: 406.17, y: 334.36 },
+    tr: { u: 1, v: 1, x: 1211.62, y: 342.29 },
+    br: { u: 1, v: 0, x: 1435.01, y: 671.71 },
+    bl: { u: 0, v: 0, x: 156.88, y: 651.73 }
+  };
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+  function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+  function easeInCubic(t) { return t * t * t; }
+  function easeInOutQuint(t) {
+    return t < 0.5 ? 16 * t * t * t * t * t : 1 - Math.pow(-2 * t + 2, 5) / 2;
+  }
+
+  /* Solve 4-point perspective (homography) src(u,v)→dst(x,y) */
+  function computeHomography(src, dst) {
+    // src/dst: arrays of 4 {x,y}
+    const A = [];
+    const b = [];
+    for (let i = 0; i < 4; i++) {
+      const x = src[i].x, y = src[i].y;
+      const u = dst[i].x, v = dst[i].y;
+      A.push([x, y, 1, 0, 0, 0, -x * u, -y * u]);
+      b.push(u);
+      A.push([0, 0, 0, x, y, 1, -x * v, -y * v]);
+      b.push(v);
+    }
+    // Gaussian elimination 8x8
+    const M = A.map(function (row, i) { return row.concat([b[i]]); });
+    const n = 8;
+    for (let col = 0; col < n; col++) {
+      let piv = col;
+      for (let r = col + 1; r < n; r++) {
+        if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+      }
+      const tmp = M[col]; M[col] = M[piv]; M[piv] = tmp;
+      const div = M[col][col] || 1e-12;
+      for (let c = col; c <= n; c++) M[col][c] /= div;
+      for (let r = 0; r < n; r++) {
+        if (r === col) continue;
+        const f = M[r][col];
+        for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+      }
+    }
+    const h = M.map(function (row) { return row[n]; });
+    h.push(1);
+    return h; // 9 elems row-major 3x3
+  }
+
+  const H = computeHomography(
+    [
+      { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }
+    ],
+    [
+      { x: CORNERS.bl.x, y: CORNERS.bl.y },
+      { x: CORNERS.br.x, y: CORNERS.br.y },
+      { x: CORNERS.tr.x, y: CORNERS.tr.y },
+      { x: CORNERS.tl.x, y: CORNERS.tl.y }
+    ]
+  );
+
+  function applyH(u, v) {
+    const x = H[0] * u + H[1] * v + H[2];
+    const y = H[3] * u + H[4] * v + H[5];
+    const w = H[6] * u + H[7] * v + H[8];
+    return { x: x / w, y: y / w };
+  }
+
+  /** Pitch normalized (px,py)∈[0,1]² → image pixels; scale factor for icons */
+  function project(px, py) {
+    const p = applyH(px, py);
+    // Depth scale: near (py=0) larger
+    const near = applyH(px, 0);
+    const far = applyH(px, 1);
+    const dy = Math.hypot(near.x - far.x, near.y - far.y) || 1;
+    const s = lerp(1.15, 0.62, clamp(py, 0, 1));
+    return { x: p.x, y: p.y, s: s, dy: dy };
+  }
+
+  /**
+   * v10: 持球跑动 — short on-ground carry end between receive and pass.
+   * Prefer explicit a.carryTo / b.carryFrom; else auto a few meters toward destination.
+   */
+  function carryEndPoint(a, b) {
+    if (b && b.carryFrom) return { x: b.carryFrom.x, y: b.carryFrom.y };
+    if (a && a.carryTo) return { x: a.carryTo.x, y: a.carryTo.y };
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const carryDist = Math.min(0.09, Math.max(0.035, dist * 0.26));
+    const ux = dx / dist, uy = dy / dist;
+    const side = ((a.x * 17 + a.y * 13) % 1) > 0.5 ? 1 : -1;
+    return {
+      x: clamp(a.x + ux * carryDist + (-uy) * 0.014 * side, 0.02, 0.98),
+      y: clamp(a.y + uy * carryDist + (ux) * 0.014 * side, 0.02, 0.98)
+    };
+  }
+
+  /** Whether this a→b segment should show hold→dribble before the ball leaves the feet. */
+  function wantsCarry(a, b) {
+    if (!a || !b) return false;
+    if (b.carry === false || a.carry === false) return false;
+    if (b.carry === true || a.carryTo || b.carryFrom) return true;
+    const k = b.kind || "ground";
+    if (k !== "ground" && k !== "lofted") return false;
+    // Same-team progression or explicit 控球 start: dribble then pass (雷速/Nami feel).
+    if (a.team === b.team) return true;
+    // Turnover passes still get a tiny touch-carry from the receiver before the next outbound ball.
+    if (a.action === "控球" || a.action === "带球") return true;
+    return false;
+  }
+
+  function carryFracFor(a, b) {
+    if (!wantsCarry(a, b)) return 0;
+    if (b.carryFrac != null) return clamp(b.carryFrac, 0.12, 0.55);
+    if (a.carryFrac != null) return clamp(a.carryFrac, 0.12, 0.55);
+    const dist = Math.hypot(b.x - a.x, b.y - a.y);
+    // Longer passes → slightly longer carry; keep gentle (not eye-strain).
+    return clamp(0.30 + dist * 0.08, 0.28, 0.42);
+  }
+
+  /* ===== Rosters ===== */
+  const HOME = [
+    { id: "h1", name: "陈浩然", pos: "中场", min: 24, g: 0, a: 1, cards: "—", hue: 205 },
+    { id: "h2", name: "林子墨", pos: "后卫", min: 24, g: 0, a: 0, cards: "—", hue: 210 },
+    { id: "h3", name: "赵一凡", pos: "前锋", min: 24, g: 0, a: 0, cards: "—", hue: 198 },  /* g updated on goal */
+    { id: "h4", name: "周启航", pos: "中场", min: 24, g: 0, a: 0, cards: "黄", hue: 215 },
+    { id: "h5", name: "吴天宇", pos: "后卫", min: 24, g: 0, a: 0, cards: "—", hue: 200 },
+    { id: "h6", name: "郑博文", pos: "前锋", min: 18, g: 0, a: 0, cards: "—", hue: 190 }
+  ];
+  const AWAY = [
+    { id: "a1", name: "苏明哲", pos: "中场", min: 24, g: 0, a: 0, cards: "—", hue: 38 },
+    { id: "a2", name: "何俊杰", pos: "后卫", min: 24, g: 0, a: 0, cards: "黄", hue: 32 },
+    { id: "a3", name: "马嘉诚", pos: "前锋", min: 24, g: 0, a: 0, cards: "—", hue: 28 },
+    { id: "a4", name: "高子轩", pos: "中场", min: 24, g: 0, a: 1, cards: "—", hue: 42 },
+    { id: "a5", name: "唐浩宇", pos: "后卫", min: 24, g: 0, a: 0, cards: "—", hue: 25 },
+    { id: "a6", name: "谢宇轩", pos: "前锋", min: 12, g: 0, a: 0, cards: "—", hue: 48 }
+  ];
+  function playerById(id) {
+    return HOME.concat(AWAY).find(function (p) { return p.id === id; });
+  }
+
+  const EVENTS = [
+    { t: 0.0,  x: 0.14, y: 0.55, team: "home", player: "h2", action: "控球", kind: "ground",
+      carryTo: { x: 0.17, y: 0.60 }, carryFrac: 0.40 },
+    { t: 1.8,  x: 0.22, y: 0.74, team: "home", player: "h5", action: "传球", kind: "ground",
+      ctrl: { x: 0.15, y: 0.66 }, carryTo: { x: 0.25, y: 0.76 }, carryFrac: 0.34 },
+    { t: 3.5,  x: 0.34, y: 0.78, team: "home", player: "h1", action: "传球", kind: "ground",
+      ctrl: { x: 0.26, y: 0.84 }, carryTo: { x: 0.37, y: 0.72 }, carryFrac: 0.36 },
+    { t: 5.3,  x: 0.42, y: 0.50, team: "home", player: "h4", action: "传球", kind: "ground",
+      ctrl: { x: 0.38, y: 0.66 }, carryFrac: 0.32 },
+    { t: 7.2,  x: 0.48, y: 0.46, team: "away", player: "a1", action: "抢断", kind: "tackle",
+      ctrl: { x: 0.45, y: 0.48 }, tackleFrom: { x: 0.56, y: 0.40 }, tacklePlayer: "a1" },
+    { t: 9.0,  x: 0.58, y: 0.32, team: "away", player: "a4", action: "传球", kind: "ground",
+      ctrl: { x: 0.52, y: 0.36 }, carryTo: { x: 0.62, y: 0.30 }, carryFrac: 0.38 },
+    { t: 10.8, x: 0.70, y: 0.28, team: "away", player: "a6", action: "进攻", kind: "lofted",
+      ctrl: { x: 0.64, y: 0.20 }, loft: 0.85, carryFrac: 0.30 },
+    { t: 12.6, x: 0.06, y: 0.48, team: "away", player: "a3", action: "射门", kind: "shot",
+      ctrl: { x: 0.28, y: 0.36 }, shotResult: "save", shotBounce: { x: 0.14, y: 0.58 } },
+    /* → corner (near-right / BR): place then in-swinger + header flick */
+    { t: 14.4, x: 0.98, y: 0.04, team: "home", player: "h6", action: "角球", kind: "corner_set",
+      ctrl: { x: 0.70, y: 0.20 }, cornerId: "br" },
+    { t: 17.6, x: 0.88, y: 0.46, team: "home", player: "h3", action: "角球", kind: "corner",
+      swing: "in", loft: 0.95,
+      ctrl: { x: 0.99, y: 0.22 },
+      cornerFrom: { x: 0.98, y: 0.04 },
+      cornerResult: "header",
+      headerTo: { x: 0.94, y: 0.52 },
+      clearTo: { x: 0.72, y: 0.55 } },
+    { t: 19.0, x: 0.78, y: 0.58, team: "away", player: "a2", action: "解围", kind: "ground",
+      ctrl: { x: 0.86, y: 0.52 } },
+    /* free-kick (定位球) mid-right — wall + curl at goal */
+    { t: 21.0, x: 0.74, y: 0.48, team: "home", player: "h1", action: "定位球", kind: "freekick_set",
+      ctrl: { x: 0.76, y: 0.55 },
+      foulMark: { x: 0.74, y: 0.48 },
+      wall: [
+        { x: 0.86, y: 0.42 }, { x: 0.86, y: 0.46 }, { x: 0.86, y: 0.50 },
+        { x: 0.86, y: 0.54 }, { x: 0.855, y: 0.58 }
+      ],
+      runFrom: { x: 0.66, y: 0.52 } },
+    { t: 23.8, x: 0.955, y: 0.50, team: "home", player: "h1", action: "定位球", kind: "freekick",
+      curl: "goal", loft: 0.55,
+      ctrl: { x: 0.88, y: 0.36 },
+      fkResult: "save",
+      shotBounce: { x: 0.86, y: 0.58 },
+      foulMark: { x: 0.74, y: 0.48 },
+      wall: [
+        { x: 0.86, y: 0.42 }, { x: 0.86, y: 0.46 }, { x: 0.86, y: 0.50 },
+        { x: 0.86, y: 0.54 }, { x: 0.855, y: 0.58 }
+      ],
+      runFrom: { x: 0.66, y: 0.52 } },
+    { t: 25.4, x: 0.62, y: 0.40, team: "home", player: "h4", action: "进攻", kind: "lofted",
+      ctrl: { x: 0.72, y: 0.50 }, loft: 0.65 },
+    { t: 27.0, x: 0.78, y: 0.58, team: "home", player: "h6", action: "传球", kind: "ground",
+      ctrl: { x: 0.70, y: 0.48 } },
+    { t: 28.6, x: 0.94, y: 0.50, team: "home", player: "h3", action: "射门", kind: "shot",
+      ctrl: { x: 0.86, y: 0.54 }, shotResult: "goal", loft: 0.35 },
+    { t: 30.6, x: 0.78, y: 0.55, team: "away", player: "a2", action: "控球", kind: "ground",
+      ctrl: { x: 0.90, y: 0.50 } },
+    { t: 32.2, x: 0.64, y: 0.42, team: "away", player: "a1", action: "传球", kind: "ground",
+      ctrl: { x: 0.72, y: 0.50 } },
+    { t: 33.8, x: 0.52, y: 0.50, team: "home", player: "h1", action: "抢断", kind: "tackle",
+      ctrl: { x: 0.56, y: 0.46 }, tackleFrom: { x: 0.42, y: 0.58 }, tacklePlayer: "h1" },
+    /* second free-kick — cross from left channel */
+    { t: 35.4, x: 0.28, y: 0.62, team: "away", player: "a4", action: "定位球", kind: "freekick_set",
+      ctrl: { x: 0.40, y: 0.55 },
+      foulMark: { x: 0.28, y: 0.62 },
+      wall: [
+        { x: 0.18, y: 0.46 }, { x: 0.18, y: 0.50 }, { x: 0.18, y: 0.54 }, { x: 0.185, y: 0.58 }
+      ],
+      runFrom: { x: 0.36, y: 0.68 } },
+    { t: 38.0, x: 0.10, y: 0.42, team: "away", player: "a6", action: "定位球", kind: "freekick",
+      curl: "cross", loft: 0.85,
+      ctrl: { x: 0.16, y: 0.72 },
+      fkResult: "cross",
+      foulMark: { x: 0.28, y: 0.62 },
+      wall: [
+        { x: 0.18, y: 0.46 }, { x: 0.18, y: 0.50 }, { x: 0.18, y: 0.54 }, { x: 0.185, y: 0.58 }
+      ],
+      runFrom: { x: 0.36, y: 0.68 } },
+    /* second corner (far-left / TL) — out-swinger then clear */
+    { t: 39.6, x: 0.02, y: 0.96, team: "away", player: "a5", action: "角球", kind: "corner_set",
+      ctrl: { x: 0.12, y: 0.70 }, cornerId: "tl" },
+    { t: 42.6, x: 0.14, y: 0.55, team: "away", player: "a3", action: "角球", kind: "corner",
+      swing: "out", loft: 0.9,
+      ctrl: { x: 0.01, y: 0.72 },
+      cornerFrom: { x: 0.02, y: 0.96 },
+      cornerResult: "clear",
+      headerTo: { x: 0.08, y: 0.48 },
+      clearTo: { x: 0.30, y: 0.50 } },
+    { t: 44.2, x: 0.40, y: 0.55, team: "home", player: "h2", action: "控球", kind: "ground",
+      ctrl: { x: 0.28, y: 0.52 } },
+    { t: 45.8, x: 0.28, y: 0.48, team: "home", player: "h5", action: "传球", kind: "ground",
+      ctrl: { x: 0.34, y: 0.56 } },
+    { t: 47.4, x: 0.05, y: 0.38, team: "home", player: "h3", action: "射门", kind: "shot",
+      ctrl: { x: 0.16, y: 0.42 }, shotResult: "miss", loft: 0.55 },
+    { t: 49.2, x: 0.18, y: 0.55, team: "away", player: "a5", action: "控球", kind: "ground",
+      ctrl: { x: 0.08, y: 0.42 } },
+    { t: 50.8, x: 0.32, y: 0.50, team: "away", player: "a1", action: "传球", kind: "ground",
+      ctrl: { x: 0.24, y: 0.52 } }
+  ];
+  const PASSES = EVENTS;
+  const LOOP_END = 53.0;
+
+  const MATCH_CLOCK_START = 24 * 60 + 18;
+
+  /* ===== Clear circular crests (曼城 / 阿森纳) — readable at ≥28px ===== */
+  function drawCrest(cv, team) {
+    const g = cv.getContext("2d");
+    const s = cv.width;
+    g.clearRect(0, 0, s, s);
+    g.save();
+    g.translate(s / 2, s / 2);
+    const R = s * 0.48;
+
+    if (team === "home") {
+      // Manchester City-ish: sky blue disc, white ring, ship silhouette + MCFC
+      const grd = g.createRadialGradient(-R * 0.35, -R * 0.35, R * 0.08, 0, 0, R);
+      grd.addColorStop(0, "#9AD9FF");
+      grd.addColorStop(0.45, "#3BA7EB");
+      grd.addColorStop(1, "#0A4FA8");
+      g.beginPath();
+      g.arc(0, 0, R, 0, Math.PI * 2);
+      g.fillStyle = grd;
+      g.fill();
+      g.lineWidth = Math.max(2.5, s * 0.07);
+      g.strokeStyle = "#FFFFFF";
+      g.stroke();
+      g.beginPath();
+      g.arc(0, 0, R * 0.78, 0, Math.PI * 2);
+      g.lineWidth = Math.max(1.2, s * 0.028);
+      g.strokeStyle = "rgba(255,255,255,0.85)";
+      g.stroke();
+
+      // white inner badge
+      g.beginPath();
+      g.arc(0, R * 0.04, R * 0.48, 0, Math.PI * 2);
+      g.fillStyle = "#FFFFFF";
+      g.fill();
+
+      // simple ship / eagle hint
+      g.fillStyle = "#0A4FA8";
+      g.beginPath();
+      // hull
+      g.moveTo(-R * 0.28, R * 0.12);
+      g.lineTo(R * 0.28, R * 0.12);
+      g.lineTo(R * 0.18, R * 0.28);
+      g.lineTo(-R * 0.18, R * 0.28);
+      g.closePath();
+      g.fill();
+      // mast
+      g.fillRect(-R * 0.03, -R * 0.22, R * 0.06, R * 0.34);
+      // sail
+      g.beginPath();
+      g.moveTo(R * 0.02, -R * 0.2);
+      g.lineTo(R * 0.26, R * 0.02);
+      g.lineTo(R * 0.02, R * 0.06);
+      g.closePath();
+      g.fill();
+
+      g.font = "bold " + Math.floor(s * 0.14) + "px sans-serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillStyle = "#FFFFFF";
+      g.fillText("MCFC", 0, -R * 0.62);
+    } else {
+      // Arsenal-ish: red disc, gold ring, cannon silhouette + AFC
+      const grd = g.createRadialGradient(-R * 0.3, -R * 0.3, R * 0.08, 0, 0, R);
+      grd.addColorStop(0, "#FF6B6B");
+      grd.addColorStop(0.5, "#E0112B");
+      grd.addColorStop(1, "#7A0010");
+      g.beginPath();
+      g.arc(0, 0, R, 0, Math.PI * 2);
+      g.fillStyle = grd;
+      g.fill();
+      g.lineWidth = Math.max(2.5, s * 0.07);
+      g.strokeStyle = "#F5D76E";
+      g.stroke();
+      g.beginPath();
+      g.arc(0, 0, R * 0.78, 0, Math.PI * 2);
+      g.lineWidth = Math.max(1.2, s * 0.028);
+      g.strokeStyle = "rgba(255,255,255,0.9)";
+      g.stroke();
+
+      g.beginPath();
+      g.arc(0, R * 0.04, R * 0.48, 0, Math.PI * 2);
+      g.fillStyle = "#FFFFFF";
+      g.fill();
+
+      // cannon-ish shape
+      g.fillStyle = "#C8102E";
+      g.beginPath();
+      g.ellipse(0, R * 0.08, R * 0.32, R * 0.12, 0, 0, Math.PI * 2);
+      g.fill();
+      g.fillRect(-R * 0.05, -R * 0.18, R * 0.1, R * 0.22);
+      g.beginPath();
+      g.arc(-R * 0.22, R * 0.2, R * 0.08, 0, Math.PI * 2);
+      g.arc(R * 0.22, R * 0.2, R * 0.08, 0, Math.PI * 2);
+      g.fill();
+
+      g.font = "bold " + Math.floor(s * 0.14) + "px sans-serif";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillStyle = "#F5D76E";
+      g.fillText("AFC", 0, -R * 0.62);
+    }
+    g.restore();
+  }
+
+  function drawAvatar(cv, player, team) {
+    const g = cv.getContext("2d");
+    const s = cv.width;
+    g.clearRect(0, 0, s, s);
+    const bg = g.createRadialGradient(s * 0.4, s * 0.35, 4, s / 2, s / 2, s * 0.55);
+    bg.addColorStop(0, "hsl(" + player.hue + ",35%,42%)");
+    bg.addColorStop(1, "hsl(" + player.hue + ",40%,18%)");
+    g.fillStyle = bg;
+    g.beginPath();
+    g.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "hsl(25,45%," + (58 + (player.hue % 10)) + "%)";
+    g.beginPath();
+    g.arc(s / 2, s * 0.38, s * 0.18, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "hsl(" + (player.hue % 40) + ",20%,18%)";
+    g.beginPath();
+    g.ellipse(s / 2, s * 0.30, s * 0.19, s * 0.12, 0, Math.PI, 0);
+    g.fill();
+    g.fillStyle = team === "home" ? "#2F6FED" : "#C8102E";
+    g.beginPath();
+    g.moveTo(s * 0.18, s);
+    g.quadraticCurveTo(s * 0.18, s * 0.58, s / 2, s * 0.55);
+    g.quadraticCurveTo(s * 0.82, s * 0.58, s * 0.82, s);
+    g.closePath();
+    g.fill();
+    g.fillStyle = "rgba(255,255,255,0.9)";
+    g.font = "bold " + (s * 0.18) + "px sans-serif";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText(String((player.id.charCodeAt(1) % 9) + 1), s / 2, s * 0.78);
+  }
+
+  function bezierPoint(a, ctrl, b, u) {
+    const omu = 1 - u;
+    return {
+      x: omu * omu * a.x + 2 * omu * u * ctrl.x + u * u * b.x,
+      y: omu * omu * a.y + 2 * omu * u * ctrl.y + u * u * b.y
+    };
+  }
+  function catmullRom(p0, p1, p2, p3, t) {
+    const t2 = t * t, t3 = t2 * t;
+    return {
+      x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+      y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
+    };
+  }
+  function smoothCtrl(a, b) {
+    if (b.ctrl) return b.ctrl;
+    return {
+      x: (a.x + b.x) / 2 + (b.y - a.y) * 0.10,
+      y: (a.y + b.y) / 2 - (b.x - a.x) * 0.10
+    };
+  }
+
+  /* FX */
+  const trail = [];
+  const sparks = [];
+  let netRipple = null;
+  let lastTrailT = -1;
+  let lastFxSeg = -1;
+  let lastFxKind = "";
+  let scoreHome = 0, scoreAway = 0;
+
+  function pushTrail(x, y, lift, kind, t) {
+    if (t - lastTrailT < 0.016) return;
+    lastTrailT = t;
+    const life = (kind === "shot" || kind === "corner" || kind === "freekick") ? 0.85 : 0.55;
+    trail.push({ x: x, y: y, lift: lift || 0, age: 0, life: life, kind: kind || "pass" });
+    if (trail.length > 48) trail.shift();
+  }
+  function spawnSparks(px, py, n, col) {
+    const p = project(px, py);
+    for (let i = 0; i < n; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 40 + Math.random() * 120;
+      sparks.push({
+        x: p.x, y: p.y,
+        vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 40,
+        age: 0, life: 0.28 + Math.random() * 0.22,
+        col: col || "255,220,120"
+      });
+    }
+  }
+
+  function drawPassMarkers(segIdx, u) {
+    ctx.save();
+    if (segIdx < EVENTS.length - 1) {
+      const a = EVENTS[segIdx];
+      const b = EVENTS[segIdx + 1];
+      const isShot = b.kind === "shot";
+      const isTackle = b.kind === "tackle";
+      const isCorner = b.kind === "corner" || b.kind === "corner_set";
+      const isFk = b.kind === "freekick" || b.kind === "freekick_set";
+      const cFrac = (!isShot && !isTackle && !isCorner && !isFk) ? carryFracFor(a, b) : 0;
+      const cEnd = cFrac > 0.05 ? carryEndPoint(a, b) : null;
+      const passOrigin = cEnd || a;
+      const ctrl = b.ctrl && cEnd
+        ? { x: lerp(smoothCtrl(passOrigin, b).x, b.ctrl.x, 0.55), y: lerp(smoothCtrl(passOrigin, b).y, b.ctrl.y, 0.55) }
+        : smoothCtrl(passOrigin, b);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      /* Carry path (持球跑动) — soft solid before the pass leaves the feet */
+      if (cEnd) {
+        const carryProg = clamp(u / Math.max(0.001, cFrac), 0, 1);
+        ctx.strokeStyle = "rgba(255,255,255,0.55)";
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        const cSteps = 12;
+        const cMax = Math.max(1, Math.floor(cSteps * Math.max(0.02, carryProg)));
+        for (let i = 0; i <= cMax; i++) {
+          const tt = i / cSteps;
+          const e = easeInOutCubic(tt);
+          const pt = { x: lerp(a.x, cEnd.x, e), y: lerp(a.y, cEnd.y, e) };
+          const p = project(pt.x, pt.y);
+          if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+        const pc = project(cEnd.x, cEnd.y);
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        ctx.beginPath(); ctx.arc(pc.x, pc.y, 2.8 * pc.s, 0, Math.PI * 2); ctx.fill();
+      }
+
+      ctx.strokeStyle = isShot ? "rgba(255,120,160,0.95)"
+        : (isTackle ? "rgba(255,160,100,0.9)"
+        : (isCorner ? "rgba(100,230,180,0.95)"
+        : (isFk ? "rgba(180,140,255,0.95)" : "rgba(255,255,255,0.92)")));
+      ctx.lineWidth = (isShot || isCorner || isFk) ? 3.2 : 2.5;
+      ctx.beginPath();
+      const steps = 28;
+      /* Map overall u into pass-local progress when a carry prefix exists */
+      const passU = cFrac > 0.05 ? clamp((u - cFrac) / Math.max(0.001, 1 - cFrac), 0, 1) : u;
+      const maxI = Math.max(1, Math.floor(steps * clamp(passU, 0.02, 1)));
+      const drawPass = !(cFrac > 0.05 && u < cFrac);
+      if (drawPass) {
+        for (let i = 0; i <= maxI; i++) {
+          const tt = i / steps;
+          const pt = bezierPoint(passOrigin, ctrl, b, easeInOutCubic(tt));
+          const lift = (b.kind === "lofted" || b.kind === "shot" || b.kind === "corner" || b.kind === "freekick")
+            ? Math.sin(tt * Math.PI) * (b.loft || (isShot ? 0.4 : (isCorner ? 0.9 : 0.7))) : 0;
+          const p = project(pt.x, pt.y);
+          const y = p.y - lift * 28 * p.s;
+          if (i === 0) ctx.moveTo(p.x, y); else ctx.lineTo(p.x, y);
+        }
+        ctx.stroke();
+        if (passU < 0.98) {
+          ctx.strokeStyle = "rgba(255,255,255,0.22)";
+          ctx.setLineDash([5, 6]);
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          for (let i = maxI; i <= steps; i++) {
+            const pt = bezierPoint(passOrigin, ctrl, b, i / steps);
+            const p = project(pt.x, pt.y);
+            if (i === maxI) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+      const pa = project(a.x, a.y);
+      const pb = project(b.x, b.y);
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.beginPath(); ctx.arc(pa.x, pa.y, 3.8 * pa.s, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(pb.x, pb.y, 4.4 * pb.s, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawTrail(dt) {
+    ctx.save();
+    for (let i = trail.length - 1; i >= 0; i--) {
+      const tr = trail[i];
+      tr.age += dt;
+      const life = tr.life || 0.55;
+      if (tr.age >= life) { trail.splice(i, 1); continue; }
+      const fade = 1 - tr.age / life;
+      const fadeE = fade * fade;
+      const p = project(tr.x, tr.y);
+      const y = p.y - (tr.lift || 0) * 28 * p.s;
+      const r = (tr.kind === "shot" || tr.kind === "corner" || tr.kind === "freekick" ? 5.5 : 3.8) * p.s * fadeE;
+      let col = "255,255,255";
+      if (tr.kind === "shot") col = "255,140,180";
+      else if (tr.kind === "tackle") col = "255,180,120";
+      else if (tr.kind === "corner") col = "120,230,190";
+      else if (tr.kind === "freekick") col = "190,160,255";
+      ctx.fillStyle = "rgba(" + col + "," + (0.55 * fadeE) + ")";
+      ctx.beginPath();
+      ctx.arc(p.x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawSparks(dt) {
+    ctx.save();
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const sp = sparks[i];
+      sp.age += dt;
+      if (sp.age >= sp.life) { sparks.splice(i, 1); continue; }
+      const f = 1 - sp.age / sp.life;
+      sp.x += sp.vx * dt;
+      sp.y += sp.vy * dt;
+      sp.vy += 280 * dt;
+      ctx.fillStyle = "rgba(" + sp.col + "," + (0.9 * f) + ")";
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, 2.2 + 2 * f, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawClashFlash(sample) {
+    if (!sample.fxPeak || sample.fxPeak <= 0) return;
+    if (sample.kind !== "tackle" && sample.kind !== "shot" && sample.kind !== "corner" && sample.kind !== "freekick") return;
+    const p = project(sample.x, sample.y);
+    const peak = sample.fxPeak;
+    ctx.save();
+    const R = (sample.kind === "shot" ? 55 : 38) * peak * p.s;
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, R);
+    if (sample.kind === "tackle") {
+      grd.addColorStop(0, "rgba(255,240,180," + (0.85 * peak) + ")");
+      grd.addColorStop(0.4, "rgba(255,160,60," + (0.45 * peak) + ")");
+      grd.addColorStop(1, "rgba(255,100,40,0)");
+    } else {
+      grd.addColorStop(0, "rgba(255,255,255," + (0.7 * peak) + ")");
+      grd.addColorStop(0.35, "rgba(255,120,160," + (0.4 * peak) + ")");
+      grd.addColorStop(1, "rgba(255,60,100,0)");
+    }
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y - sample.lift * 20 * p.s, R, 0, Math.PI * 2);
+    ctx.fill();
+    if (sample.kind === "tackle") {
+      ctx.strokeStyle = "rgba(255,230,150," + (0.9 * peak) + ")";
+      ctx.lineWidth = 2;
+      for (let k = 0; k < 6; k++) {
+        const ang = (k / 6) * Math.PI * 2 + demoT * 3;
+        ctx.beginPath();
+        ctx.moveTo(p.x + Math.cos(ang) * 6, p.y + Math.sin(ang) * 6);
+        ctx.lineTo(p.x + Math.cos(ang) * (18 + 20 * peak), p.y + Math.sin(ang) * (18 + 20 * peak));
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawDefender(def) {
+    if (!def || !def.visible) return;
+    const p = project(def.x, def.y);
+    const col = def.team === "home" ? "100,170,255" : "255,180,70";
+    const sc = def.runner ? 0.92 : 1;
+    const alpha = def.runner ? 0.78 : 0.85;
+    ctx.save();
+    ctx.fillStyle = "rgba(" + col + "," + alpha + ")";
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + 2, 9 * p.s * sc, 4.5 * p.s * sc, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(" + col + "," + (def.runner ? 0.9 : 0.95) + ")";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y - 6 * p.s * sc, 5.5 * p.s * sc, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = def.team === "home" ? "#2F6FED" : "#C8102E";
+    ctx.beginPath();
+    ctx.moveTo(p.x - 5 * p.s * sc, p.y - 2 * p.s * sc);
+    ctx.lineTo(p.x + 5 * p.s * sc, p.y - 2 * p.s * sc);
+    ctx.lineTo(p.x + 4 * p.s * sc, p.y + 8 * p.s * sc);
+    ctx.lineTo(p.x - 4 * p.s * sc, p.y + 8 * p.s * sc);
+    ctx.closePath();
+    ctx.fill();
+    if (def.runner) {
+      /* soft motion cue under runner during 持球跑动 */
+      ctx.strokeStyle = "rgba(" + col + ",0.35)";
+      ctx.lineWidth = 1.5 * p.s;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + 3 * p.s, 11 * p.s, 5 * p.s, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawNetRipple(nowT) {
+    if (!netRipple) return;
+    const age = nowT - netRipple.t0;
+    if (age > 1.6) { netRipple = null; return; }
+    const p = project(netRipple.x, netRipple.y);
+    const f = age / 1.6;
+    ctx.save();
+    for (let i = 0; i < 4; i++) {
+      const rr = (12 + i * 14 + f * 40) * p.s;
+      const alpha = (1 - f) * (0.55 - i * 0.1);
+      ctx.strokeStyle = "rgba(200,255,210," + Math.max(0, alpha) + ")";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, rr * 1.1, rr * 0.55, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(255,255,255," + ((1 - f) * 0.35) + ")";
+    ctx.lineWidth = 1;
+    for (let g = -2; g <= 2; g++) {
+      ctx.beginPath();
+      ctx.moveTo(p.x + g * 10 * p.s, p.y - 28 * p.s);
+      ctx.quadraticCurveTo(p.x + g * 8 * p.s + Math.sin(age * 10 + g) * 4, p.y, p.x + g * 10 * p.s, p.y + 28 * p.s);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawSetPieceMarkings(sample) {
+    if (!sample) return;
+    const ev = sample.event || {};
+    const kind = sample.kind;
+    ctx.save();
+    /* Foul mark (white spray / disc) */
+    const foul = sample.foulMark || ev.foulMark;
+    if (foul && (kind === "freekick" || ev.kind === "freekick" || ev.kind === "freekick_set")) {
+      const p = project(foul.x, foul.y);
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + 1, 7 * p.s, 3.2 * p.s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 1.5 * p.s;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5.5 * p.s, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    /* Wall dots */
+    const wall = sample.wall || ev.wall;
+    if (wall && wall.length && (kind === "freekick" || ev.kind === "freekick" || ev.kind === "freekick_set")) {
+      for (let i = 0; i < wall.length; i++) {
+        const w = wall[i];
+        const p = project(w.x, w.y);
+        ctx.fillStyle = "rgba(240,240,255,0.92)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y - 6 * p.s, 5.2 * p.s, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(40,50,80,0.85)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y - 6 * p.s, 2.2 * p.s, 0, Math.PI * 2);
+        ctx.fill();
+        /* legs hint */
+        ctx.strokeStyle = "rgba(220,220,240,0.7)";
+        ctx.lineWidth = 1.6 * p.s;
+        ctx.beginPath();
+        ctx.moveTo(p.x - 2.5 * p.s, p.y - 1 * p.s);
+        ctx.lineTo(p.x - 3.5 * p.s, p.y + 5 * p.s);
+        ctx.moveTo(p.x + 2.5 * p.s, p.y - 1 * p.s);
+        ctx.lineTo(p.x + 3.5 * p.s, p.y + 5 * p.s);
+        ctx.stroke();
+      }
+    }
+    /* Corner arc cue */
+    if (kind === "corner" || ev.kind === "corner" || ev.kind === "corner_set") {
+      const c = ev.cornerFrom || (ev.kind === "corner_set" ? ev : null);
+      const cx = c ? c.x : (sample.x < 0.5 ? 0.02 : 0.98);
+      const cy = c ? c.y : (sample.y < 0.5 ? 0.04 : 0.96);
+      const p = project(cx, cy);
+      ctx.strokeStyle = "rgba(120,255,200,0.75)";
+      ctx.lineWidth = 2 * p.s;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 16 * p.s, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(120,255,200,0.2)";
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 10 * p.s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawBallRing(px, py, team, pulse, kind) {
+    const p = project(px, py);
+    let col = team === "home" ? "120,180,255" : "255,200,80";
+    if (kind === "shot") col = "255,130,170";
+    if (kind === "tackle") col = "255,170,100";
+    if (kind === "corner") col = "100,230,180";
+    if (kind === "freekick") col = "180,140,255";
+    if (kind === "carry") col = team === "home" ? "140,200,255" : "255,210,120";
+    const r = 14 * p.s * (1 + 0.08 * Math.sin(pulse * 6));
+    ctx.save();
+    const grd = ctx.createRadialGradient(p.x, p.y, r * 0.2, p.x, p.y, r * 1.6);
+    grd.addColorStop(0, "rgba(" + col + ",0.35)");
+    grd.addColorStop(0.55, "rgba(" + col + ",0.12)");
+    grd.addColorStop(1, "rgba(" + col + ",0)");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + 1, r * 1.35, r * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(" + col + ",0.95)";
+    ctx.lineWidth = 2.6 * p.s;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y + 1, r * 0.85, r * 0.38, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawBall(px, py, lift) {
+    const p = project(px, py);
+    const s = p.s;
+    const r = 7.5 * s;
+    const shadowScale = 1 - lift * 0.45;
+    const ballY = p.y - lift * 30 * s;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0," + (0.4 * shadowScale) + ")";
+    ctx.beginPath();
+    ctx.ellipse(p.x + 1, p.y + 2 * s, r * 1.2 * shadowScale, r * 0.42 * shadowScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const grd = ctx.createRadialGradient(p.x - r * 0.3, ballY - r * 0.35, r * 0.1, p.x, ballY, r);
+    grd.addColorStop(0, "#ffffff");
+    grd.addColorStop(0.6, "#f2f2f2");
+    grd.addColorStop(1, "#bdbdbd");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, ballY, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#1a1a1a";
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const ang = -Math.PI / 2 + i * Math.PI * 2 / 5;
+      const bx = p.x + Math.cos(ang) * r * 0.42;
+      const by = ballY + Math.sin(ang) * r * 0.42;
+      if (i === 0) ctx.moveTo(bx, by); else ctx.lineTo(bx, by);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(20,20,20,0.55)";
+    ctx.lineWidth = 1.0 * s;
+    for (let i = 0; i < 5; i++) {
+      const ang = -Math.PI / 2 + i * Math.PI * 2 / 5;
+      ctx.beginPath();
+      ctx.moveTo(p.x, ballY);
+      ctx.lineTo(p.x + Math.cos(ang) * r * 0.92, ballY + Math.sin(ang) * r * 0.92);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.beginPath();
+    ctx.arc(p.x - r * 0.28, ballY - r * 0.3, r * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function findSegment(t) {
+    let i = 0;
+    for (let k = 0; k < EVENTS.length - 1; k++) {
+      if (t >= EVENTS[k].t && t < EVENTS[k + 1].t) { i = k; break; }
+      if (t >= EVENTS[EVENTS.length - 1].t) i = EVENTS.length - 1;
+    }
+    if (t < EVENTS[0].t) i = 0;
+    return i;
+  }
+
+  function sampleBall(t) {
+    if (t >= EVENTS[EVENTS.length - 1].t) {
+      const last = EVENTS[EVENTS.length - 1];
+      return {
+        x: last.x, y: last.y, lift: 0, team: last.team,
+        player: last.player, action: last.action, kind: last.kind || "ground",
+        seg: EVENTS.length - 1, u: 1, event: last, defender: null, fxPeak: 0,
+        wall: last.wall || null, foulMark: last.foulMark || null,
+        cornerId: last.cornerId || null, swing: last.swing || null
+      };
+    }
+    const i = findSegment(t);
+    const a = EVENTS[i];
+    const b = EVENTS[Math.min(i + 1, EVENTS.length - 1)];
+    if (i === EVENTS.length - 1) {
+      return { x: a.x, y: a.y, lift: 0, team: a.team, player: a.player, action: a.action,
+        kind: a.kind || "ground", seg: i, u: 1, event: a, defender: null, fxPeak: 0,
+        wall: a.wall || null, foulMark: a.foulMark || null,
+        cornerId: a.cornerId || null, swing: a.swing || null };
+    }
+    const dur = Math.max(0.001, b.t - a.t);
+    const uRaw = clamp((t - a.t) / dur, 0, 1);
+    let u = easeInOutCubic(uRaw);
+    let pt, lift = 0;
+    let defender = null;
+    let fxPeak = 0;
+    let action = a.action;
+    let team = a.team;
+    let player = a.player;
+    let kind = b.kind || "ground";
+
+    if (b.kind === "tackle") {
+      const clashU = 0.72;
+      if (uRaw < clashU) {
+        u = easeInOutCubic(uRaw / clashU);
+        const ctrl = smoothCtrl(a, b);
+        pt = bezierPoint(a, ctrl, b, u * 0.92);
+        action = "传球";
+        team = a.team; player = a.player;
+      } else {
+        const local = (uRaw - clashU) / (1 - clashU);
+        u = easeOutCubic(local);
+        pt = { x: lerp(b.x, b.x + (b.x - a.x) * 0.02, u), y: lerp(b.y, b.y + (b.y - a.y) * 0.02, u) };
+        lift = Math.sin(local * Math.PI) * 0.25;
+        action = "抢断";
+        team = b.team; player = b.player;
+        fxPeak = local < 0.35 ? (1 - local / 0.35) : 0;
+      }
+      if (b.tackleFrom) {
+        const du = clamp(uRaw / 0.78, 0, 1);
+        const duE = easeInOutCubic(du);
+        defender = {
+          x: lerp(b.tackleFrom.x, b.x, duE),
+          y: lerp(b.tackleFrom.y, b.y, duE),
+          team: b.team,
+          visible: uRaw < 0.95
+        };
+      }
+      kind = "tackle";
+    } else if (b.kind === "shot") {
+      const impactU = 0.78;
+      const ctrl = smoothCtrl(a, b);
+      if (uRaw < impactU) {
+        u = easeInCubic(uRaw / impactU);
+        u = easeInOutQuint(u * 0.85 + 0.15 * u * u);
+        pt = bezierPoint(a, ctrl, b, u);
+        lift = Math.sin(u * Math.PI) * (b.loft != null ? b.loft : 0.4);
+        action = uRaw > 0.25 ? "射门" : (a.action === "控球" ? "进攻" : a.action);
+        team = b.team; player = b.player;
+        kind = "shot";
+        fxPeak = uRaw > 0.55 ? (uRaw - 0.55) / (impactU - 0.55) : 0;
+      } else {
+        const local = (uRaw - impactU) / (1 - impactU);
+        const result = b.shotResult || "miss";
+        if (result === "goal") {
+          pt = { x: b.x, y: b.y };
+          lift = Math.max(0, 0.2 * (1 - local));
+          action = "进球";
+          fxPeak = 1 - local;
+        } else if (result === "save") {
+          const bounce = b.shotBounce || { x: b.x + 0.08, y: b.y + 0.1 };
+          const bu = easeOutCubic(local);
+          pt = { x: lerp(b.x, bounce.x, bu), y: lerp(b.y, bounce.y, bu) };
+          lift = Math.sin(bu * Math.PI) * 0.45;
+          action = "扑救";
+          fxPeak = local < 0.4 ? 1 - local / 0.4 : 0;
+        } else {
+          const miss = { x: b.x + (b.x < 0.5 ? -0.04 : 0.04), y: b.y + (local < 0.5 ? -0.06 : 0.04) };
+          pt = { x: lerp(b.x, miss.x, easeOutCubic(local)), y: lerp(b.y, miss.y, easeOutCubic(local)) };
+          lift = Math.sin(Math.min(1, local * 1.2) * Math.PI) * 0.5;
+          action = "射偏";
+          fxPeak = local < 0.3 ? 1 - local / 0.3 : 0;
+        }
+        team = b.team; player = b.player;
+        kind = "shot";
+      }
+    } else if (b.kind === "corner_set") {
+      /* ball travels to corner arc; pill already 角球 */
+      u = easeInOutCubic(uRaw);
+      const ctrl = smoothCtrl(a, b);
+      pt = bezierPoint(a, ctrl, b, u);
+      lift = Math.sin(u * Math.PI) * 0.15;
+      action = "角球";
+      team = b.team; player = b.player;
+      kind = "corner";
+    } else if (b.kind === "corner") {
+      /* pause at corner → in/out-swinger Bezier into box → header flick or clear */
+      const corner = b.cornerFrom || a;
+      const pauseU = 0.16;
+      const flightEnd = 0.82;
+      const swingCtrl = b.ctrl || {
+        x: corner.x + (b.swing === "out" ? (corner.x < 0.5 ? -0.06 : 0.06) : (corner.x < 0.5 ? 0.04 : -0.04)),
+        y: (corner.y + b.y) * 0.5
+      };
+      action = "角球";
+      team = b.team; player = b.player;
+      kind = "corner";
+      if (uRaw < pauseU) {
+        pt = { x: corner.x, y: corner.y };
+        lift = 0;
+        fxPeak = 0.15;
+      } else if (uRaw < flightEnd) {
+        const local = (uRaw - pauseU) / (flightEnd - pauseU);
+        u = easeInOutCubic(local);
+        pt = bezierPoint(corner, swingCtrl, b, u);
+        lift = Math.sin(u * Math.PI) * (b.loft != null ? b.loft : 0.9);
+        fxPeak = local > 0.7 ? (local - 0.7) / 0.3 : 0;
+      } else {
+        const local = (uRaw - flightEnd) / (1 - flightEnd);
+        const result = b.cornerResult || "header";
+        if (result === "header") {
+          const dest = b.headerTo || { x: b.x + 0.04, y: b.y };
+          const bu = easeOutCubic(local);
+          pt = { x: lerp(b.x, dest.x, bu), y: lerp(b.y, dest.y, bu) };
+          lift = Math.sin(bu * Math.PI) * 0.55;
+          action = "头球";
+          fxPeak = local < 0.45 ? 1 - local / 0.45 : 0;
+        } else {
+          const dest = b.clearTo || { x: 0.5, y: 0.5 };
+          const bu = easeOutCubic(local);
+          pt = { x: lerp(b.x, dest.x, bu), y: lerp(b.y, dest.y, bu) };
+          lift = Math.sin(bu * Math.PI) * 0.4;
+          action = "解围";
+          fxPeak = local < 0.35 ? 1 - local / 0.35 : 0;
+        }
+      }
+    } else if (b.kind === "freekick_set") {
+      u = easeInOutCubic(uRaw);
+      const ctrl = smoothCtrl(a, b);
+      pt = bezierPoint(a, ctrl, b, u);
+      lift = 0;
+      action = "定位球";
+      team = b.team; player = b.player;
+      kind = "freekick";
+    } else if (b.kind === "freekick") {
+      /* hold + run-up, then curl toward goal or cross */
+      const setPt = a;
+      const runU = 0.22;
+      const impactU = 0.88;
+      const curlCtrl = b.ctrl || {
+        x: (setPt.x + b.x) / 2,
+        y: (setPt.y + b.y) / 2 + (b.curl === "cross" ? 0.18 : -0.12)
+      };
+      action = "定位球";
+      team = b.team; player = b.player;
+      kind = "freekick";
+      if (uRaw < runU) {
+        pt = { x: setPt.x, y: setPt.y };
+        lift = 0;
+        fxPeak = 0.1;
+        if (b.runFrom) {
+          const du = clamp(uRaw / runU, 0, 1);
+          const duE = easeInOutCubic(du);
+          defender = {
+            x: lerp(b.runFrom.x, setPt.x, duE),
+            y: lerp(b.runFrom.y, setPt.y, duE),
+            team: b.team,
+            visible: true,
+            runner: true
+          };
+        }
+      } else if (uRaw < impactU) {
+        const local = (uRaw - runU) / (impactU - runU);
+        u = easeInOutQuint(easeInCubic(local));
+        pt = bezierPoint(setPt, curlCtrl, b, u);
+        lift = Math.sin(u * Math.PI) * (b.loft != null ? b.loft : 0.55);
+        fxPeak = local > 0.55 ? (local - 0.55) / 0.45 : 0;
+      } else {
+        const local = (uRaw - impactU) / (1 - impactU);
+        const result = b.fkResult || "cross";
+        if (result === "goal") {
+          pt = { x: b.x, y: b.y };
+          lift = Math.max(0, 0.2 * (1 - local));
+          action = "进球";
+          fxPeak = 1 - local;
+        } else if (result === "save") {
+          const bounce = b.shotBounce || { x: b.x - 0.08, y: b.y + 0.08 };
+          const bu = easeOutCubic(local);
+          pt = { x: lerp(b.x, bounce.x, bu), y: lerp(b.y, bounce.y, bu) };
+          lift = Math.sin(bu * Math.PI) * 0.4;
+          action = "扑救";
+          fxPeak = local < 0.4 ? 1 - local / 0.4 : 0;
+        } else {
+          pt = { x: b.x, y: b.y };
+          lift = Math.max(0, 0.25 * (1 - local));
+          action = "传中";
+          fxPeak = local < 0.3 ? 1 - local / 0.3 : 0;
+        }
+      }
+    } else {
+      /* v10: hold → 持球跑动 (carry) → pass/loft. Set-piece kinds handled above. */
+      const cFrac = carryFracFor(a, b);
+      const cEnd = cFrac > 0 ? carryEndPoint(a, b) : null;
+      if (cFrac > 0.05 && cEnd && uRaw < cFrac) {
+        const local = uRaw / cFrac;
+        const e = easeInOutCubic(local);
+        const zig = Math.sin(local * Math.PI * 2.0) * 0.0055 * (1 - local * 0.85);
+        const dx = cEnd.x - a.x, dy = cEnd.y - a.y;
+        pt = {
+          x: lerp(a.x, cEnd.x, e) + (-dy) * zig * 10,
+          y: lerp(a.y, cEnd.y, e) + (dx) * zig * 10
+        };
+        lift = Math.abs(Math.sin(local * Math.PI * 2.6)) * 0.035;
+        action = "带球";
+        team = a.team;
+        player = a.player;
+        kind = "carry";
+        /* runner slightly behind the ball along carry path */
+        const back = Math.max(0, e - 0.08);
+        defender = {
+          x: lerp(a.x, pt.x, back),
+          y: lerp(a.y, pt.y, back),
+          team: a.team,
+          visible: true,
+          runner: true
+        };
+        fxPeak = 0;
+      } else if (cFrac > 0.05 && cEnd) {
+        const local = (uRaw - cFrac) / Math.max(0.001, 1 - cFrac);
+        u = easeInOutCubic(local);
+        const passA = { x: cEnd.x, y: cEnd.y };
+        const ctrlAuto = smoothCtrl(passA, b);
+        const ctrl = b.ctrl
+          ? { x: lerp(ctrlAuto.x, b.ctrl.x, 0.55), y: lerp(ctrlAuto.y, b.ctrl.y, 0.55) }
+          : ctrlAuto;
+        const bez = bezierPoint(passA, ctrl, b, u);
+        const p0 = EVENTS[Math.max(0, i - 1)];
+        const p3 = EVENTS[Math.min(EVENTS.length - 1, i + 2)];
+        const cr = catmullRom(p0, passA, b, p3, u);
+        pt = { x: lerp(bez.x, cr.x, 0.35), y: lerp(bez.y, cr.y, 0.35) };
+        if (b.kind === "lofted") {
+          lift = Math.sin(u * Math.PI) * (b.loft != null ? b.loft : 0.7);
+        }
+        const useB = local >= 0.42;
+        const wp = useB ? b : a;
+        team = wp.team; player = wp.player;
+        action = useB ? b.action : "传球";
+        kind = b.kind || "ground";
+      } else {
+        u = easeInOutCubic(uRaw);
+        const ctrl = smoothCtrl(a, b);
+        const bez = bezierPoint(a, ctrl, b, u);
+        const p0 = EVENTS[Math.max(0, i - 1)];
+        const p3 = EVENTS[Math.min(EVENTS.length - 1, i + 2)];
+        const cr = catmullRom(p0, a, b, p3, u);
+        pt = { x: lerp(bez.x, cr.x, 0.35), y: lerp(bez.y, cr.y, 0.35) };
+        if (b.kind === "lofted") {
+          lift = Math.sin(u * Math.PI) * (b.loft != null ? b.loft : 0.7);
+        }
+        const useB = uRaw >= 0.40;
+        const wp = useB ? b : a;
+        team = wp.team; player = wp.player;
+        action = useB ? b.action : (a.action === "控球" ? "传球" : a.action);
+        kind = b.kind || "ground";
+      }
+    }
+
+    return {
+      x: pt.x, y: pt.y, lift: lift,
+      team: team, player: player, action: action, kind: kind,
+      seg: i, u: uRaw, event: b, defender: defender, fxPeak: fxPeak,
+      wall: b.wall || (a && a.wall) || null,
+      foulMark: b.foulMark || (a && a.foulMark) || null,
+      cornerId: b.cornerId || (a && a.cornerId) || null,
+      swing: b.swing || null
+    };
+  }
+
+  function formatClock(totalSec) {
+    const s = Math.floor(totalSec) % (90 * 60);
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return m + ":" + String(r).padStart(2, "0");
+  }
+
+  /* ===== Virtual camera ===== */
+  const CAM_SCALE_BASE = 1.34;
+  const cam = { x: 0.5, y: 0.52, z: CAM_SCALE_BASE, tx: 0, ty: 0, tz: CAM_SCALE_BASE };
+  let camInitialized = false;
+
+  function updateCamera(sample, dt) {
+    const p = project(sample.x, sample.y);
+    const nx = clamp(p.x / IMG_W, 0, 1);
+    const ny = clamp(p.y / IMG_H, 0, 1);
+    let targetX = nx;
+    let targetY = ny * 0.85 + 0.08;
+    let targetZ = CAM_SCALE_BASE;
+    if (sample.kind === "shot") targetZ = CAM_SCALE_BASE * 1.08;
+    else if (sample.kind === "corner") {
+      targetZ = CAM_SCALE_BASE * 1.12;
+      /* bias slightly toward corner flag */
+      targetX = clamp(nx * 0.92 + (sample.x > 0.5 ? 0.06 : -0.02), 0, 1);
+      targetY = clamp(ny * 0.8 + 0.06, 0, 1);
+    } else if (sample.kind === "freekick") {
+      targetZ = CAM_SCALE_BASE * 1.1;
+    } else if (sample.x > 0.72 || sample.x < 0.28) targetZ = CAM_SCALE_BASE * 1.05;
+
+    const follow = 1 - Math.exp(-(dt || 0.016) * 3.2);
+    if (!camInitialized) {
+      cam.x = targetX; cam.y = targetY; cam.z = targetZ;
+      camInitialized = true;
+    } else {
+      cam.x = lerp(cam.x, targetX, follow);
+      cam.y = lerp(cam.y, targetY, follow * 0.85);
+      cam.z = lerp(cam.z, targetZ, follow * 0.6);
+    }
+    const z = cam.z;
+    const wrap = pitchWrapEl.getBoundingClientRect();
+    const W = wrap.width || 1;
+    const H = wrap.height || 1;
+    let tx = W * 0.5 - cam.x * W * z;
+    let ty = H * 0.5 - cam.y * H * z;
+    tx = clamp(tx, W * (1 - z), 0);
+    ty = clamp(ty, H * (1 - z), 0);
+    cam.tx = tx; cam.ty = ty; cam.tz = z;
+    camLayer.style.transform = "translate3d(" + tx.toFixed(2) + "px," + ty.toFixed(2) + "px,0) scale(" + z.toFixed(4) + ")";
+    return { nx: nx, ny: ny, tx: tx, ty: ty, z: z, W: W, H: H, px: p.x, py: p.y };
+  }
+
+  function ballWrapPct(sample, camInfo) {
+    const pr = project(sample.x, sample.y);
+    const lx = (pr.x / IMG_W) * camInfo.W;
+    const ly = (pr.y / IMG_H) * camInfo.H;
+    const sx = lx * camInfo.z + camInfo.tx;
+    const sy = ly * camInfo.z + camInfo.ty;
+    return {
+      xPct: clamp((sx / camInfo.W) * 100, 4, 96),
+      yPct: clamp((sy / camInfo.H) * 100, 4, 96)
+    };
+  }
+
+  window.__cameraState = function () {
+    return {
+      x: cam.x, y: cam.y, z: cam.z,
+      tx: cam.tx, ty: cam.ty, tz: cam.tz,
+      scaleBase: CAM_SCALE_BASE,
+      transform: camLayer.style.transform || ""
+    };
+  };
+
+  const crestCv = document.getElementById("crestCv");
+  const cardCrestCv = document.getElementById("cardCrestCv");
+  const avatarCv = document.getElementById("avatarCv");
+  let lastPillKey = "";
+  let lastCardKey = "";
+
+  /** AABB helpers for hard anti-overlap (card ∩ pill = 0). */
+  function rectOf(el, wrapRect) {
+    const r = el.getBoundingClientRect();
+    return {
+      left: r.left - wrapRect.left,
+      top: r.top - wrapRect.top,
+      right: r.right - wrapRect.left,
+      bottom: r.bottom - wrapRect.top,
+      width: r.width,
+      height: r.height
+    };
+  }
+  function aabbIntersect(a, b, pad) {
+    pad = pad || 0;
+    return !(a.right + pad <= b.left || a.left >= b.right + pad ||
+             a.bottom + pad <= b.top || a.top >= b.bottom + pad);
+  }
+  function aabbAreaIntersect(a, b) {
+    const x = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+    const y = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+    return x * y;
+  }
+
+  /**
+   * Position possession pill above the ball with HARD collision resolve:
+   * if pill AABB intersects player card (or bottom scoreboard dead-zone),
+   * nudge pill down/right/away until no intersection. Never stack on card.
+   */
+  function positionPillAboveBall(sample, camInfo) {
+    const pill = document.getElementById("pill");
+    const card = document.getElementById("playerCard");
+    const wrap = document.getElementById("pitchWrap");
+    if (!pill || !wrap || !card) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    const ww = wrapRect.width || 1;
+    const wh = wrapRect.height || 1;
+    if (!camInfo) camInfo = updateCamera(sample, 0);
+    const bp = ballWrapPct(sample, camInfo);
+    let xPct = bp.xPct;
+    let yPct = Math.max(8, Math.min(82, bp.yPct - 6));
+    xPct = Math.max(14, Math.min(86, xPct));
+
+    pill.style.bottom = "auto";
+    pill.style.transform = "translate(-50%, -125%)";
+
+    const maxIters = 28;
+    for (let i = 0; i < maxIters; i++) {
+      pill.style.left = xPct.toFixed(2) + "%";
+      pill.style.top = yPct.toFixed(2) + "%";
+      void pill.offsetWidth;
+      const cardR = rectOf(card, wrapRect);
+      const pillR = rectOf(pill, wrapRect);
+      const bottomZone = { left: 0, top: wh * 0.88, right: ww, bottom: wh, width: ww, height: wh * 0.12 };
+      const hitCard = aabbIntersect(pillR, cardR, 4);
+      const hitBottom = aabbIntersect(pillR, bottomZone, 0);
+      if (!hitCard && !hitBottom) break;
+      if (hitCard) {
+        const needRight = (cardR.right + 6) - pillR.left;
+        const needDown = (cardR.bottom + 6) - pillR.top;
+        if (needRight > 0 && needRight <= needDown + 8) {
+          xPct += (needRight / ww) * 100 + 0.6;
+        } else if (needDown > 0) {
+          yPct += (needDown / wh) * 100 + 0.6;
+        } else {
+          xPct += 2.2; yPct += 1.4;
+        }
+        const pillCx = (pillR.left + pillR.right) / 2;
+        if (pillCx < cardR.right && yPct < ((cardR.bottom + 8) / wh) * 100) {
+          xPct = Math.max(xPct, ((cardR.right + pillR.width * 0.55 + 8) / ww) * 100);
+        }
+      }
+      if (hitBottom) { yPct = Math.min(yPct, 78); yPct -= 2.5; }
+      xPct = Math.max(12, Math.min(88, xPct));
+      yPct = Math.max(6, Math.min(84, yPct));
+    }
+    pill.style.left = xPct.toFixed(2) + "%";
+    pill.style.top = yPct.toFixed(2) + "%";
+  }
+
+  /** Intersection area of two AABBs. */
+  function aabbOverlapArea(a, b) {
+    return aabbAreaIntersect(a, b);
+  }
+
+  /**
+   * Playable grass field AABB in wrap coords (from Blender corner map).
+   * Cards over stands dead-space are excluded from "pitch coverage".
+   */
+  function pitchFieldRect(wrapRect) {
+    const xs = [CORNERS.bl.x, CORNERS.br.x, CORNERS.tr.x, CORNERS.tl.x];
+    const ys = [CORNERS.bl.y, CORNERS.br.y, CORNERS.tr.y, CORNERS.tl.y];
+    const z = cam.tz || CAM_SCALE_BASE;
+    const pts = xs.map(function (x, i) {
+      const lx = (x / IMG_W) * wrapRect.width;
+      const ly = (ys[i] / IMG_H) * wrapRect.height;
+      return { x: lx * z + cam.tx, y: ly * z + cam.ty };
+    });
+    return {
+      left: Math.min.apply(null, pts.map(function (p) { return p.x; })),
+      right: Math.max.apply(null, pts.map(function (p) { return p.x; })),
+      top: Math.min.apply(null, pts.map(function (p) { return p.y; })),
+      bottom: Math.max.apply(null, pts.map(function (p) { return p.y; })),
+      width: 0,
+      height: 0
+    };
+  }
+
+  /** Debug/test hook for Playwright: returns overlap metrics. */
+  window.__pitchUIMetrics = function () {
+    const pill = document.getElementById("pill");
+    const card = document.getElementById("playerCard");
+    const wrap = document.getElementById("pitchWrap");
+    if (!pill || !card || !wrap) return null;
+    const wrapRect = wrap.getBoundingClientRect();
+    const cardR = rectOf(card, wrapRect);
+    const pillR = rectOf(pill, wrapRect);
+    const inter = aabbAreaIntersect(cardR, pillR);
+    const field = pitchFieldRect(wrapRect);
+    field.width = Math.max(0, field.right - field.left);
+    field.height = Math.max(0, field.bottom - field.top);
+    const fieldArea = field.width * field.height;
+    // Only count UI pixels that cover the playable grass field (Leisu: cards sit in stands dead space)
+    const uiOnPitch = aabbOverlapArea(cardR, field) + aabbOverlapArea(pillR, field);
+    const rawUi = cardR.width * cardR.height + pillR.width * pillR.height;
+    return {
+      card: cardR,
+      pill: pillR,
+      field: field,
+      intersectArea: inter,
+      uiOnPitchArea: uiOnPitch,
+      rawUiArea: rawUi,
+      uiPitchCoveragePct: fieldArea ? (uiOnPitch / fieldArea) * 100 : 0,
+      wrapW: wrapRect.width,
+      wrapH: wrapRect.height,
+      camera: window.__cameraState()
+    };
+  };
+
+  function updatePossessionUI(sample) {
+    const p = playerById(sample.player);
+    if (!p) return;
+    const teamName = sample.team === "home" ? "曼城" : "阿森纳";
+    const key = sample.team + "|" + sample.player + "|" + sample.action + "|" + (sample.kind || "");
+    if (key !== lastPillKey) {
+      lastPillKey = key;
+      const pill = document.getElementById("pill");
+      let cls = "pill " + sample.team;
+      if (sample.kind === "tackle" || sample.action === "抢断") cls += " tackle";
+      if (sample.kind === "shot" || sample.action === "射门" || sample.action === "进球" || sample.action === "扑救" || sample.action === "射偏") cls += " shot";
+      if (sample.kind === "corner" || sample.action === "角球" || sample.action === "头球") cls += " corner";
+      if (sample.kind === "freekick" || sample.action === "定位球" || sample.action === "传中") cls += " freekick";
+      if (sample.kind === "carry" || sample.action === "带球") cls += " carry";
+      pill.className = cls;
+      document.getElementById("pillTeam").textContent = teamName;
+      document.getElementById("pillAction").textContent = sample.action;
+      document.getElementById("pillPlayer").textContent = p.name;
+      drawCrest(crestCv, sample.team);
+    }
+    if (sample.player !== lastCardKey) {
+      lastCardKey = sample.player;
+      document.getElementById("pcName").textContent = p.name;
+      document.getElementById("pcPos").textContent = p.pos + " · " + teamName;
+      document.getElementById("pcMin").textContent = p.min + "'";
+      document.getElementById("pcG").textContent = String(p.g);
+      document.getElementById("pcA").textContent = String(p.a);
+      document.getElementById("pcC").textContent = p.cards;
+      drawAvatar(avatarCv, p, sample.team);
+      drawCrest(cardCrestCv, sample.team);
+    } else {
+      document.getElementById("pcMin").textContent = p.min + "'";
+      document.getElementById("pcG").textContent = String(p.g);
+    }
+  }
+
+  const passLogEl = document.getElementById("passLog");
+  let lastLoggedArrival = -1;
+
+  function actionLogText(dest) {
+    let extra = "";
+    if (dest.kind === "lofted") extra = "（过顶）";
+    if (dest.kind === "carry" || dest.action === "带球") extra = "（持球跑动）";
+    if (dest.kind === "tackle") extra = "（抢断）";
+    if (dest.kind === "shot") {
+      if (dest.shotResult === "goal") extra = "（进球！）";
+      else if (dest.shotResult === "save") extra = "（扑救）";
+      else extra = "（射偏）";
+    }
+    if (dest.kind === "corner" || dest.kind === "corner_set") {
+      if (dest.swing === "in") extra = "（内旋）";
+      else if (dest.swing === "out") extra = "（外旋）";
+      else if (dest.kind === "corner_set") extra = "（开出）";
+      if (dest.cornerResult === "header") extra = "（头球）";
+      if (dest.cornerResult === "clear") extra = "（解围）";
+    }
+    if (dest.kind === "freekick" || dest.kind === "freekick_set") {
+      if (dest.curl === "goal") extra = "（射门）";
+      else if (dest.curl === "cross") extra = "（传中）";
+      else if (dest.kind === "freekick_set") extra = "（摆墙）";
+      if (dest.fkResult === "save") extra = "（扑救）";
+      if (dest.fkResult === "goal") extra = "（进球！）";
+    }
+    const pl = playerById(dest.player);
+    return (pl ? pl.name : "") + " · " + dest.action + extra;
+  }
+
+  function appendLog(destIdx) {
+    if (destIdx <= 0 || destIdx >= EVENTS.length) return;
+    if (destIdx <= lastLoggedArrival) return;
+    lastLoggedArrival = destIdx;
+    const dest = EVENTS[destIdx];
+    const item = document.createElement("div");
+    let cls = "pass-log-item " + dest.team;
+    if (dest.kind === "tackle") cls += " tackle";
+    if (dest.kind === "shot") cls += dest.shotResult === "goal" ? " goal" : " shot";
+    if (dest.kind === "corner" || dest.kind === "corner_set") cls += " corner";
+    if (dest.kind === "freekick" || dest.kind === "freekick_set") cls += " freekick";
+    item.className = cls;
+    const mm = Math.floor((MATCH_CLOCK_START + dest.t) / 60);
+    const ss = Math.floor((MATCH_CLOCK_START + dest.t) % 60);
+    item.innerHTML = '<span class="t">' + mm + "'" + String(ss).padStart(2, "0") +
+      '</span><span class="dot"></span><span>' + actionLogText(dest) + "</span>";
+    passLogEl.insertBefore(item, passLogEl.firstChild);
+    while (passLogEl.children.length > 14) passLogEl.removeChild(passLogEl.lastChild);
+  }
+
+  function maybeLog(sample) {
+    if (sample && sample.u >= 0.88) appendLog(sample.seg + 1);
+  }
+
+  function rebuildLogFromTime(t) {
+    passLogEl.innerHTML = "";
+    lastLoggedArrival = -1;
+    for (let k = 1; k < EVENTS.length; k++) {
+      if (EVENTS[k].t <= t + 0.001) appendLog(k);
+      else break;
+    }
+  }
+
+  function syncScoreFromTime(t) {
+    scoreHome = 0; scoreAway = 0;
+    const hp = playerById("h3"); if (hp) hp.g = 0;
+    for (let k = 0; k < EVENTS.length; k++) {
+      const e = EVENTS[k];
+      if (e.kind === "shot" && e.shotResult === "goal" && e.t <= t + 0.05) {
+        if (e.team === "home") { scoreHome = 1; if (hp) hp.g = 1; }
+        else scoreAway = 1;
+      }
+    }
+    const el = document.getElementById("scoreText");
+    if (el) el.textContent = scoreHome + " - " + scoreAway;
+  }
+
+  function triggerEventFX(sample, t) {
+    const destIdx = sample.seg + 1;
+    const dest = EVENTS[destIdx];
+    if (!dest) return;
+    if (dest.kind === "tackle" && sample.u >= 0.70 && sample.u < 0.90) {
+      if (lastFxSeg !== destIdx || lastFxKind !== "tackle") {
+        lastFxSeg = destIdx; lastFxKind = "tackle";
+        spawnSparks(sample.x, sample.y, 14, "255,210,120");
+        pitchWrapEl.classList.remove("pitch-shake");
+        void pitchWrapEl.offsetWidth;
+        pitchWrapEl.classList.add("pitch-shake");
+      }
+    }
+    if (dest.kind === "shot" && sample.u >= 0.75) {
+      if (lastFxSeg !== destIdx || lastFxKind !== "shot-" + (dest.shotResult || "")) {
+        lastFxSeg = destIdx; lastFxKind = "shot-" + (dest.shotResult || "");
+        spawnSparks(dest.x, dest.y, dest.shotResult === "goal" ? 20 : 10,
+          dest.shotResult === "goal" ? "180,255,200" : "255,160,190");
+        if (dest.shotResult === "goal") {
+          netRipple = { t0: t, x: dest.x, y: dest.y, team: dest.team };
+          if (dest.team === "home") {
+            scoreHome = 1;
+            const pl = playerById(dest.player); if (pl) pl.g = 1;
+          } else scoreAway = 1;
+          const el = document.getElementById("scoreText");
+          if (el) el.textContent = scoreHome + " - " + scoreAway;
+        }
+      }
+    }
+    if (dest.kind === "corner" && sample.u >= 0.80) {
+      if (lastFxSeg !== destIdx || lastFxKind !== "corner") {
+        lastFxSeg = destIdx; lastFxKind = "corner";
+        spawnSparks(sample.x, sample.y, 12, "120,255,200");
+      }
+    }
+    if (dest.kind === "freekick" && sample.u >= 0.85) {
+      if (lastFxSeg !== destIdx || lastFxKind !== "freekick-" + (dest.fkResult || "")) {
+        lastFxSeg = destIdx; lastFxKind = "freekick-" + (dest.fkResult || "");
+        spawnSparks(dest.x, dest.y, dest.fkResult === "goal" ? 18 : 10,
+          dest.fkResult === "goal" ? "180,255,200" : "190,160,255");
+      }
+    }
+  }
+
+  let playing = true;
+  let speed = 1;
+  let demoT = 0;
+  let lastTs = 0;
+
+  const btnPlay = document.getElementById("btnPlay");
+  const btn1x = document.getElementById("btn1x");
+  const btn2x = document.getElementById("btn2x");
+  const btnReset = document.getElementById("btnReset");
+  const btnNext = document.getElementById("btnNext");
+  const btnLand = document.getElementById("btnLand");
+
+  let landMode = false;
+  function setLandMode(on) {
+    landMode = !!on;
+    document.body.classList.toggle("land-mode", landMode);
+    if (btnLand) {
+      btnLand.setAttribute("aria-label", landMode ? "退出横屏" : "横屏观看");
+      btnLand.title = landMode ? "退出横屏" : "横屏观看";
+    }
+    camInitialized = false;
+    requestAnimationFrame(function () {
+      const s0 = sampleBall(demoT);
+      updateCamera(s0, 0.05);
+    });
+  }
+  if (btnLand) btnLand.addEventListener("click", function () { setLandMode(!landMode); });
+  window.__setLandMode = setLandMode;
+  window.__isLandMode = function () { return landMode; };
+
+  btnPlay.addEventListener("click", function () {
+    playing = !playing;
+    btnPlay.textContent = playing ? "暂停" : "播放";
+    if (playing) lastTs = performance.now();
+  });
+  btn1x.addEventListener("click", function () {
+    speed = 1; btn1x.classList.add("active-speed"); btn2x.classList.remove("active-speed");
+  });
+  btn2x.addEventListener("click", function () {
+    speed = 2; btn2x.classList.add("active-speed"); btn1x.classList.remove("active-speed");
+  });
+  btnReset.addEventListener("click", function () {
+    demoT = 0; lastLoggedArrival = -1; passLogEl.innerHTML = "";
+    lastPillKey = ""; lastCardKey = "";
+    lastFxSeg = -1; lastFxKind = "";
+    trail.length = 0; sparks.length = 0; netRipple = null;
+    syncScoreFromTime(0);
+    camInitialized = false;
+    lastTs = performance.now();
+  });
+  btnNext.addEventListener("click", function () {
+    const i = findSegment(demoT);
+    let nextIdx = Math.min(i + 1, EVENTS.length - 1);
+    let target = EVENTS[nextIdx].t;
+    if (demoT >= EVENTS[nextIdx].t - 0.05 && nextIdx < EVENTS.length - 1) {
+      target = EVENTS[nextIdx + 1].t;
+    }
+    demoT = target;
+    rebuildLogFromTime(demoT);
+    syncScoreFromTime(demoT);
+    lastPillKey = ""; lastCardKey = "";
+    lastTs = performance.now();
+  });
+
+  function frame(ts) {
+    if (!lastTs) lastTs = ts;
+    const dt = Math.min(0.05, (ts - lastTs) / 1000);
+    lastTs = ts;
+
+    if (playing) {
+      demoT += dt * speed;
+      if (demoT >= LOOP_END) {
+        demoT = 0;
+        lastLoggedArrival = -1;
+        passLogEl.innerHTML = "";
+        lastPillKey = ""; lastCardKey = "";
+        lastFxSeg = -1; lastFxKind = "";
+        trail.length = 0; sparks.length = 0; netRipple = null;
+        syncScoreFromTime(0);
+        camInitialized = false;
+      }
+    }
+
+    const sample = sampleBall(demoT);
+    pushTrail(sample.x, sample.y, sample.lift, sample.kind, demoT);
+    triggerEventFX(sample, demoT);
+
+    const camInfo = updateCamera(sample, dt);
+    updatePossessionUI(sample);
+    positionPillAboveBall(sample, camInfo);
+    maybeLog(sample);
+
+    document.getElementById("segLabel").textContent = (sample.seg + 1) + " / " + (EVENTS.length - 1);
+    document.getElementById("demoTime").textContent = demoT.toFixed(1) + "s";
+    document.getElementById("clock").textContent = formatClock(MATCH_CLOCK_START + demoT);
+
+    ctx.clearRect(0, 0, IMG_W, IMG_H);
+    drawPassMarkers(sample.seg, sample.u);
+    drawSetPieceMarkings(sample);
+    drawTrail(dt * speed);
+    drawNetRipple(demoT);
+    drawDefender(sample.defender);
+    drawClashFlash(sample);
+    drawSparks(dt * speed);
+    drawBallRing(sample.x, sample.y, sample.team, demoT, sample.kind);
+    drawBall(sample.x, sample.y, sample.lift);
+
+    tickLedPhase(performance.now());
+    requestAnimationFrame(frame);
+  }
+
+
+  /* ---- v9d LED ribbon phase cycle (HTML-side plate crossfade) ---- */
+  const LED_PHASE_MS = 6000;
+  window.__LED_PHASE_MS = LED_PHASE_MS;
+  const LED_PHASE_COUNT = 3;
+  let ledPhase = 0;
+  let ledLastSwap = performance.now();
+  Object.defineProperty(window, "__ledLastSwap", { get(){return ledLastSwap;}, set(v){ledLastSwap=v;} });
+  window.__ledPhase = function () { return ledPhase; };
+  window.__setLedPhase = function (p) {
+    ledPhase = ((p % LED_PHASE_COUNT) + LED_PHASE_COUNT) % LED_PHASE_COUNT;
+    const stack = document.getElementById('pitchBgStack');
+    if (stack) stack.setAttribute('data-led-phase', String(ledPhase));
+    document.querySelectorAll('.pitch-bg-stack .pitch-bg').forEach((img) => {
+      const ph = parseInt(img.getAttribute('data-phase') || '0', 10);
+      img.classList.toggle('is-active', ph === ledPhase);
+    });
+    ledLastSwap = performance.now();
+    return ledPhase;
+  };
+  function tickLedPhase(now) {
+    if (typeof playing !== 'undefined' && !playing) {
+      // still allow cycle when paused? yes — LED boards keep cycling in broadcast
+    }
+    if (now - ledLastSwap >= LED_PHASE_MS) {
+      window.__setLedPhase(ledPhase + 1);
+    }
+  }
+
+
+  /** v10 debug: UV→CSS mapping should match plate (fill) at any wrap size. */
+  window.__projectCss = function (u, v) {
+    const p = project(u, v);
+    const wrap = pitchWrapEl.getBoundingClientRect();
+    return {
+      img: p,
+      css: { x: (p.x / IMG_W) * wrap.width, y: (p.y / IMG_H) * wrap.height },
+      wrap: { w: wrap.width, h: wrap.height, ar: wrap.width / Math.max(1, wrap.height) },
+      targetAr: 16 / 9,
+      objectFit: (getComputedStyle(document.getElementById("pitchBg")).objectFit || "")
+    };
+  };
+
+  (function bootstrapT() {
+    try {
+      const params = new URLSearchParams(location.search);
+      const q = params.get("t");
+      const h = (location.hash || "").match(/t=([\d.]+)/);
+      const v = q != null ? q : (h && h[1]);
+      if (v != null && !isNaN(parseFloat(v))) {
+        demoT = clamp(parseFloat(v), 0, LOOP_END - 0.05);
+      }
+      const w = parseInt(params.get("w") || "", 10);
+      if (w >= 560) {
+        document.body.classList.add("wide-demo");
+        const phone = document.querySelector(".phone");
+        if (phone) phone.classList.add("wide");
+      }
+      if (params.get("pause") === "1") {
+        playing = false;
+        const bp = document.getElementById("btnPlay");
+        if (bp) bp.textContent = "播放";
+      }
+      if (params.get("land") === "1") {
+        setLandMode(true);
+      }
+
+      const ledQ = params.get("led");
+      if (ledQ != null && !isNaN(parseInt(ledQ, 10))) {
+        window.__setLedPhase(parseInt(ledQ, 10));
+        // freeze cycle when explicitly pinned
+        ledLastSwap = performance.now() + 1e12;
+      }
+    } catch (e) {}
+  })();
+
+  drawCrest(document.getElementById("sbHomeCrest"), "home");
+  drawCrest(document.getElementById("sbAwayCrest"), "away");
+
+  syncScoreFromTime(demoT);
+  rebuildLogFromTime(demoT);
+  const boot = sampleBall(demoT);
+  updatePossessionUI(boot);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

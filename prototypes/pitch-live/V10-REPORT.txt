@@ -1,0 +1,26 @@
+yunqiumi-pitch-pass-v10 — internal report (2026-11-04 Asia/Shanghai)
+
+## Fixes
+1) 小屏足球落点
+   Root cause: `.pitch-bg` used object-fit:cover while the canvas bitmap is CSS-stretched
+   (fill). Whenever `.pitch-wrap` aspect ≠ 16:9 — e.g. `min-height:220px` forcing 375×220
+   on a phone, or media queries changing AR to 16/9.2 and 16/9.35 — cover cropped the
+   plate horizontally/vertically and white start/end dots drifted off the grass vs the
+   Blender UV. Fullscreen/landscape often looked fine when the box was closer to 16:9.
+   Fix: lock pitch-wrap to aspect-ratio 16/9 (drop min-height + AR media tweaks);
+   switch plate images to object-fit:fill so they match canvas stretch; wrap plate+canvas
+   in `.pitch-world` so the soft LED drift no longer desyncs overlay from grass.
+
+2) 持球跑动
+   Generalized set-piece runFrom/runner into normal possession: between receive and the
+   next pass/loft, sampleBall does a short on-ground carry (带球) along carryTo/auto path
+   with a runner glyph, then the Bezier/Catmull pass leaves the feet. Demo events 0–3 and
+   post-tackle away sequence have explicit carryTo/carryFrac; other same-team ground/loft
+   segments auto-carry (~28–42% of segment). LED/v9d cycle unchanged (~6s, grey 云足球).
+
+## Verify
+- Playwright assert_v10_ui.mjs: portrait 390/375, wide ?w=720, land mode — AR/fill/carry/overlap OK.
+
+## Paths
+- /workspace/yunqiumi-pitch-pass-v10.html
+- /workspace/yunqiumi-pitch-pass-v10.zip

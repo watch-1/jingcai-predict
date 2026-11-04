@@ -1,0 +1,304 @@
+{
+  "image": {
+    "width": 1600,
+    "height": 900,
+    "file": "pitch45_v9b.png"
+  },
+  "pitch_meters": {
+    "length": 105.0,
+    "width": 68.0
+  },
+  "coord_system": {
+    "x": "0..105 along length (left goal → right goal in render)",
+    "y": "0..68 near touchline (camera side) → far touchline",
+    "normalized": "pitch_norm = [x/105, y/68]",
+    "pixel_origin": "top-left of PNG",
+    "z_surface": 0.65
+  },
+  "camera": {
+    "elevation_deg_approx": 45,
+    "location": [
+      55.5,
+      -82.0,
+      64.0
+    ],
+    "lens_mm": 28.0
+  },
+  "corners": {
+    "bl": {
+      "pitch": [
+        0.0,
+        0.0
+      ],
+      "pixel": [
+        156.88,
+        651.73
+      ]
+    },
+    "br": {
+      "pitch": [
+        105.0,
+        0.0
+      ],
+      "pixel": [
+        1435.01,
+        671.71
+      ]
+    },
+    "tr": {
+      "pitch": [
+        105.0,
+        68.0
+      ],
+      "pixel": [
+        1211.62,
+        342.29
+      ]
+    },
+    "tl": {
+      "pitch": [
+        0.0,
+        68.0
+      ],
+      "pixel": [
+        406.17,
+        334.36
+      ]
+    }
+  },
+  "samples": [
+    {
+      "pitch_m": [
+        0.0,
+        0.0
+      ],
+      "pitch_norm": [
+        0.0,
+        0.0
+      ],
+      "pixel": [
+        156.88,
+        651.73
+      ]
+    },
+    {
+      "pitch_m": [
+        0.0,
+        34.0
+      ],
+      "pitch_norm": [
+        0.0,
+        0.5
+      ],
+      "pixel": [
+        309.57,
+        457.35
+      ]
+    },
+    {
+      "pitch_m": [
+        0.0,
+        68.0
+      ],
+      "pitch_norm": [
+        0.0,
+        1.0
+      ],
+      "pixel": [
+        406.17,
+        334.36
+      ]
+    },
+    {
+      "pitch_m": [
+        52.5,
+        0.0
+      ],
+      "pitch_norm": [
+        0.5,
+        0.0
+      ],
+      "pixel": [
+        788.64,
+        661.61
+      ]
+    },
+    {
+      "pitch_m": [
+        52.5,
+        34.0
+      ],
+      "pitch_norm": [
+        0.5,
+        0.5
+      ],
+      "pixel": [
+        799.29,
+        463.26
+      ]
+    },
+    {
+      "pitch_m": [
+        52.5,
+        68.0
+      ],
+      "pitch_norm": [
+        0.5,
+        1.0
+      ],
+      "pixel": [
+        805.99,
+        338.3
+      ]
+    },
+    {
+      "pitch_m": [
+        105.0,
+        0.0
+      ],
+      "pitch_norm": [
+        1.0,
+        0.0
+      ],
+      "pixel": [
+        1435.01,
+        671.71
+      ]
+    },
+    {
+      "pitch_m": [
+        105.0,
+        34.0
+      ],
+      "pitch_norm": [
+        1.0,
+        0.5
+      ],
+      "pixel": [
+        1297.74,
+        469.29
+      ]
+    },
+    {
+      "pitch_m": [
+        105.0,
+        68.0
+      ],
+      "pitch_norm": [
+        1.0,
+        1.0
+      ],
+      "pixel": [
+        1211.62,
+        342.29
+      ]
+    },
+    {
+      "pitch_m": [
+        52.5,
+        0
+      ],
+      "pitch_norm": [
+        0.5,
+        0.0
+      ],
+      "pixel": [
+        788.64,
+        661.61
+      ]
+    },
+    {
+      "pitch_m": [
+        52.5,
+        68.0
+      ],
+      "pitch_norm": [
+        0.5,
+        1.0
+      ],
+      "pixel": [
+        805.99,
+        338.3
+      ]
+    },
+    {
+      "pitch_m": [
+        0,
+        34.0
+      ],
+      "pitch_norm": [
+        0.0,
+        0.5
+      ],
+      "pixel": [
+        309.57,
+        457.35
+      ]
+    },
+    {
+      "pitch_m": [
+        105.0,
+        34.0
+      ],
+      "pitch_norm": [
+        1.0,
+        0.5
+      ],
+      "pixel": [
+        1297.74,
+        469.29
+      ]
+    },
+    {
+      "pitch_m": [
+        11,
+        34.0
+      ],
+      "pitch_norm": [
+        0.10476190476190476,
+        0.5
+      ],
+      "pixel": [
+        411.47,
+        458.58
+      ]
+    },
+    {
+      "pitch_m": [
+        94.0,
+        34.0
+      ],
+      "pitch_norm": [
+        0.8952380952380953,
+        0.5
+      ],
+      "pixel": [
+        1192.57,
+        468.01
+      ]
+    },
+    {
+      "pitch_m": [
+        52.5,
+        34.0
+      ],
+      "pitch_norm": [
+        0.5,
+        0.5
+      ],
+      "pixel": [
+        799.29,
+        463.26
+      ]
+    }
+  ],
+  "mapping": "Use perspective (homography) from pitch_norm to pixel using corners.",
+  "version": "v9d",
+  "led_phases": 3,
+  "plates": [
+    "pitch45_v9d_p0.png",
+    "pitch45_v9d_p1.png",
+    "pitch45_v9d_p2.png"
+  ],
+  "led_near_far_offset": true
+}

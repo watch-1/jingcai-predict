@@ -1,0 +1,569 @@
+{
+  "results": [
+    {
+      "label": "kickoff",
+      "ui": {
+        "card": {
+          "left": 6,
+          "top": 6,
+          "right": 96,
+          "bottom": 66.796875,
+          "width": 90,
+          "height": 60.796875
+        },
+        "pill": {
+          "left": 120.34375,
+          "top": 61.1875,
+          "right": 191.34375,
+          "bottom": 88.1875,
+          "width": 71,
+          "height": 27
+        },
+        "field": {
+          "left": 53.80297650000001,
+          "right": 492.14564831250004,
+          "top": 70.37997903982576,
+          "bottom": 186.40588903982575,
+          "width": 438.34267181250004,
+          "height": 116.02591
+        },
+        "intersectArea": 0,
+        "uiOnPitchArea": 1264.3339881723714,
+        "rawUiArea": 7388.71875,
+        "uiPitchCoveragePct": 2.4859539482379756,
+        "wrapW": 390,
+        "wrapH": 220,
+        "camera": {
+          "x": 0.2840112832340468,
+          "y": 0.4995075605527802,
+          "z": 1.4070000000000003,
+          "tx": 0,
+          "ty": -44.61757029350761,
+          "tz": 1.4070000000000003,
+          "scaleBase": 1.34,
+          "transform": "translate3d(0px, -44.62px, 0px) scale(1.407)"
+        }
+      },
+      "cam": {
+        "x": 0.2840112832340468,
+        "y": 0.4995075605527802,
+        "z": 1.4070000000000003,
+        "tx": 0,
+        "ty": -44.61757029350761,
+        "tz": 1.4070000000000003,
+        "scaleBase": 1.34,
+        "transform": "translate3d(0px, -44.62px, 0px) scale(1.407)"
+      },
+      "land": false,
+      "pillAction": "传球"
+    },
+    {
+      "label": "left-pan",
+      "ui": {
+        "card": {
+          "left": 6,
+          "top": 6,
+          "right": 96,
+          "bottom": 66.796875,
+          "width": 90,
+          "height": 60.796875
+        },
+        "pill": {
+          "left": 159.5,
+          "top": 58.40625,
+          "right": 230.5,
+          "bottom": 85.40625,
+          "width": 71,
+          "height": 27
+        },
+        "field": {
+          "left": 29.541486997888754,
+          "right": 447.01069824788874,
+          "top": 88.5833515943274,
+          "bottom": 199.08421826099408,
+          "width": 417.46921125,
+          "height": 110.50086666666668
+        },
+        "intersectArea": 0,
+        "uiOnPitchArea": 0,
+        "rawUiArea": 7388.71875,
+        "uiPitchCoveragePct": 0,
+        "wrapW": 390,
+        "wrapH": 220,
+        "camera": {
+          "x": 0.41465641600097825,
+          "y": 0.444159172188698,
+          "z": 1.34,
+          "tx": -21.699443002111252,
+          "ty": -20.93812396122817,
+          "tz": 1.34,
+          "scaleBase": 1.34,
+          "transform": "translate3d(-21.7px, -20.94px, 0px) scale(1.34)"
+        }
+      },
+      "cam": {
+        "x": 0.41465641600097825,
+        "y": 0.444159172188698,
+        "z": 1.34,
+        "tx": -21.699443002111252,
+        "ty": -20.93812396122817,
+        "tz": 1.34,
+        "scaleBase": 1.34,
+        "transform": "translate3d(-21.7px, -20.94px, 0px) scale(1.34)"
+      },
+      "land": false,
+      "pillAction": "传球"
+    },
+    {
+      "label": "right-pan",
+      "ui": {
+        "card": {
+          "left": 6,
+          "top": 6,
+          "right": 96,
+          "bottom": 66.796875,
+          "width": 90,
+          "height": 60.796875
+        },
+        "pill": {
+          "left": 167.09375,
+          "top": 61.0625,
+          "right": 238.09375,
+          "bottom": 88.0625,
+          "width": 71,
+          "height": 27
+        },
+        "field": {
+          "left": -119.0677956000001,
+          "right": 331.79895254999997,
+          "top": 69.68979348208742,
+          "bottom": 189.03072948208742,
+          "width": 450.86674815000003,
+          "height": 119.340936
+        },
+        "intersectArea": 0,
+        "uiOnPitchArea": 1304.462162771793,
+        "rawUiArea": 7388.71875,
+        "uiPitchCoveragePct": 2.4243417459860006,
+        "wrapW": 390,
+        "wrapH": 220,
+        "camera": {
+          "x": 0.6680096093934312,
+          "y": 0.4981198807663469,
+          "z": 1.4472000000000003,
+          "tx": -174.4080000000001,
+          "ty": -48.59340011791261,
+          "tz": 1.4472000000000003,
+          "scaleBase": 1.34,
+          "transform": "translate3d(-174.41px, -48.59px, 0px) scale(1.4472)"
+        }
+      },
+      "cam": {
+        "x": 0.6680096093934312,
+        "y": 0.4981198807663469,
+        "z": 1.4472000000000003,
+        "tx": -174.4080000000001,
+        "ty": -48.59340011791261,
+        "tz": 1.4472000000000003,
+        "scaleBase": 1.34,
+        "transform": "translate3d(-174.41px, -48.59px, 0px) scale(1.4472)"
+      },
+      "land": false,
+      "pillAction": "传球"
+    },
+    {
+      "label": "tackle",
+      "ui": {
+        "card": {
+          "left": 6,
+          "top": 6,
+          "right": 96,
+          "bottom": 66.796875,
+          "width": 90,
+          "height": 60.796875
+        },
+        "pill": {
+          "left": 155,
+          "top": 62.828125,
+          "right": 235,
+          "bottom": 89.828125,
+          "width": 80,
+          "height": 27
+        },
+        "field": {
+          "left": -8.312513243367604,
+          "right": 409.1566980066324,
+          "top": 63.492456761002344,
+          "bottom": 173.99332342766903,
+          "width": 417.46921125,
+          "height": 110.50086666666668
+        },
+        "intersectArea": 0,
+        "uiOnPitchArea": 2404.2511006296013,
+        "rawUiArea": 7631.71875,
+        "uiPitchCoveragePct": 5.211823357764757,
+        "wrapW": 390,
+        "wrapH": 220,
+        "camera": {
+          "x": 0.4870904003891458,
+          "y": 0.5292707557481452,
+          "z": 1.34,
+          "tx": -59.55344324336761,
+          "ty": -46.029018794553224,
+          "tz": 1.34,
+          "scaleBase": 1.34,
+          "transform": "translate3d(-59.55px, -46.03px, 0px) scale(1.34)"
+        }
+      },
+      "cam": {
+        "x": 0.4870904003891458,
+        "y": 0.5292707557481452,
+        "z": 1.34,
+        "tx": -59.55344324336761,
+        "ty": -46.029018794553224,
+        "tz": 1.34,
+        "scaleBase": 1.34,
+        "transform": "translate3d(-59.55px, -46.03px, 0px) scale(1.34)"
+      },
+      "land": false,
+      "pillAction": "抢断"
+    },
+    {
+      "label": "shot",
+      "ui": {
+        "card": {
+          "left": 6,
+          "top": 6,
+          "right": 96,
+          "bottom": 66.796875,
+          "width": 90,
+          "height": 60.796875
+        },
+        "pill": {
+          "left": 226.578125,
+          "top": 62.421875,
+          "right": 297.578125,
+          "bottom": 89.421875,
+          "width": 71,
+          "height": 27
+        },
+        "field": {
+          "left": -119.0677956000001,
+          "right": 331.79895254999997,
+          "top": 61.92415118761639,
+          "bottom": 181.2650871876164,
+          "width": 450.86674815000003,
+          "height": 119.340936
+        },
+        "intersectArea": 0,
+        "uiOnPitchArea": 2355.545143114525,
+        "rawUiArea": 7388.71875,
+        "uiPitchCoveragePct": 4.377778511315971,
+        "wrapW": 390,
+        "wrapH": 220,
+        "camera": {
+          "x": 0.7733539978572207,
+          "y": 0.5225106865055519,
+          "z": 1.4472000000000003,
+          "tx": -174.4080000000001,
+          "ty": -56.359042412383644,
+          "tz": 1.4472000000000003,
+          "scaleBase": 1.34,
+          "transform": "translate3d(-174.41px, -56.36px, 0px) scale(1.4472)"
+        }
+      },
+      "cam": {
+        "x": 0.7733539978572207,
+        "y": 0.5225106865055519,
+        "z": 1.4472000000000003,
+        "tx": -174.4080000000001,
+        "ty": -56.359042412383644,
+        "tz": 1.4472000000000003,
+        "scaleBase": 1.34,
+        "transform": "translate3d(-174.41px, -56.36px, 0px) scale(1.4472)"
+      },
+      "land": false,
+      "pillAction": "射门"
+    },
+    {
+      "label": "corner-place",
+      "ui": {
+        "card": {
+          "left": 6,
+          "top": 6,
+          "right": 96,
+          "bottom": 66.796875,
+          "width": 90,
+          "height": 60.796875
+        },
+        "pill": {
+          "left": 279.375,
+          "top": 90.84375,
+          "right": 350.375,
+          "bottom": 117.84375,
+          "width": 71,
+          "height": 27
+        },
+        "field": {
+          "left": -137.92215840000003,
+          "right": 329.64335819999997,
+          "top": 22.384383432629562,
+          "bottom": 146.14535409929624,
+          "width": 467.5655166,
+          "height": 123.76097066666668
+        },
+        "intersectArea": 0,
+        "uiOnPitchArea": 5354.369912463339,
+        "rawUiArea": 7388.71875,
+        "uiPitchCoveragePct": 9.252992084373904,
+        "wrapW": 390,
+        "wrapH": 220,
+        "camera": {
+          "x": 0.8619095617567507,
+          "y": 0.6368714539808848,
+          "z": 1.5008000000000001,
+          "tx": -195.31200000000004,
+          "ty": -100.27966918959268,
+          "tz": 1.5008000000000001,
+          "scaleBase": 1.34,
+          "transform": "translate3d(-195.31px, -100.28px, 0px) scale(1.5008)"
+        }
+      },
+      "cam": {
+        "x": 0.8619095617567507,
+        "y": 0.6368714539808848,
+        "z": 1.5008000000000001,
+        "tx": -195.31200000000004,
+        "ty": -100.27966918959268,
+        "tz": 1.5008000000000001,
+        "scaleBase": 1.34,
+        "transform": "translate3d(-195.31px, -100.28px, 0px) scale(1.5008)"
+      },
+      "land": false,
+      "pillAction": "角球"
+    },
+    {
+      "label": "corner-swing",
+      "ui": {
+        "card": {
+          "left": 6,
+          "top": 6,
+          "right": 96,
+          "bottom": 66.796875,
+          "width": 90,
+          "height": 60.796875
+        },
+        "pill": {
+          "left": 205.75,
+          "top": 78.859375,
+          "right": 276.75,
+          "bottom": 105.859375,
+          "width": 71,
+          "height": 27
+        },
+        "field": {
+          "left": -137.92215840000003,
+          "right": 329.64335819999997,
+          "top": 70.33289249633549,
+          "bottom": 194.09386316300217,
+          "width": 467.5655166,
+          "height": 123.76097066666668
+        },
+        "intersectArea": 0,
+        "uiOnPitchArea": 1917,
+        "rawUiArea": 7388.71875,
+        "uiPitchCoveragePct": 3.3128054497049515,
+        "wrapW": 390,
+        "wrapH": 220,
+        "camera": {
+          "x": 0.7461930328195177,
+          "y": 0.4916503928992014,
+          "z": 1.5008000000000001,
+          "tx": -195.31200000000004,
+          "ty": -52.331160125886754,
+          "tz": 1.5008000000000001,
+          "scaleBase": 1.34,
+          "transform": "translate3d(-195.31px, -52.33px, 0px) scale(1.5008)"
+        }
+      },
+      "cam": {
+        "x": 0.7461930328195177,
+        "y": 0.4916503928992014,
+        "z": 1.5008000000000001,
+        "tx": -195.31200000000004,
+        "ty": -52.331160125886754,
+        "tz": 1.5008000000000001,
+        "scaleBase": 1.34,
+        "transform": "translate3d(-195.31px, -52.33px, 0px) scale(1.5008)"
+      },
+      "land": false,
+      "pillAction": "角球"
+    },
+    {
+      "label": "freekick",
+      "ui": {
+        "card": {
+          "left": 6,
+          "top": 6,
+          "right": 96,
+          "bottom": 66.796875,
+          "width": 90,
+          "height": 60.796875
+        },
+        "pill": {
+          "left": 155.5,
+          "top": 62.625,
+          "right": 234.5,
+          "bottom": 89.625,
+          "width": 79,
+          "height": 27
+        },
+        "field": {
+          "left": -122.04133335363713,
+          "right": 337.17479902136296,
+          "top": 59.85799521257876,
+          "bottom": 181.4089485459121,
+          "width": 459.2161323750001,
+          "height": 121.55095333333334
+        },
+        "intersectArea": 0,
+        "uiOnPitchArea": 2757.499180867912,
+        "rawUiArea": 7604.71875,
+        "uiPitchCoveragePct": 4.94014716046574,
+        "wrapW": 390,
+        "wrapH": 220,
+        "camera": {
+          "x": 0.649560512739862,
+          "y": 0.5261367580440741,
+          "z": 1.4740000000000002,
+          "tx": -178.40635635363714,
+          "ty": -60.61562789853238,
+          "tz": 1.4740000000000002,
+          "scaleBase": 1.34,
+          "transform": "translate3d(-178.41px, -60.62px, 0px) scale(1.474)"
+        }
+      },
+      "cam": {
+        "x": 0.649560512739862,
+        "y": 0.5261367580440741,
+        "z": 1.4740000000000002,
+        "tx": -178.40635635363714,
+        "ty": -60.61562789853238,
+        "tz": 1.4740000000000002,
+        "scaleBase": 1.34,
+        "transform": "translate3d(-178.41px, -60.62px, 0px) scale(1.474)"
+      },
+      "land": false,
+      "pillAction": "定位球"
+    },
+    {
+      "label": "freekick-flight",
+      "ui": {
+        "card": {
+          "left": 6,
+          "top": 6,
+          "right": 96,
+          "bottom": 66.796875,
+          "width": 90,
+          "height": 60.796875
+        },
+        "pill": {
+          "left": 155.5,
+          "top": 62.71875,
+          "right": 234.5,
+          "bottom": 89.71875,
+          "width": 79,
+          "height": 27
+        },
+        "field": {
+          "left": -124.23276664855018,
+          "right": 334.9833657264499,
+          "top": 59.379912511864646,
+          "bottom": 180.93086584519799,
+          "width": 459.2161323750001,
+          "height": 121.55095333333334
+        },
+        "intersectArea": 0,
+        "uiOnPitchArea": 2800.526623932182,
+        "rawUiArea": 7604.71875,
+        "uiPitchCoveragePct": 5.017232188142575,
+        "wrapW": 390,
+        "wrapH": 220,
+        "camera": {
+          "x": 0.6533726292463384,
+          "y": 0.5276110478575504,
+          "z": 1.4740000000000002,
+          "tx": -180.5977896485502,
+          "ty": -61.09371059924649,
+          "tz": 1.4740000000000002,
+          "scaleBase": 1.34,
+          "transform": "translate3d(-180.6px, -61.09px, 0px) scale(1.474)"
+        }
+      },
+      "cam": {
+        "x": 0.6533726292463384,
+        "y": 0.5276110478575504,
+        "z": 1.4740000000000002,
+        "tx": -180.5977896485502,
+        "ty": -61.09371059924649,
+        "tz": 1.4740000000000002,
+        "scaleBase": 1.34,
+        "transform": "translate3d(-180.6px, -61.09px, 0px) scale(1.474)"
+      },
+      "land": false,
+      "pillAction": "定位球"
+    },
+    {
+      "label": "led-start",
+      "phase": 0,
+      "activeSrc": "pitch-blender/pitch45_v9d_p0.png",
+      "activePhase": "0",
+      "stack": "0"
+    },
+    {
+      "label": "led-p1",
+      "phase": 1,
+      "activeSrc": "pitch-blender/pitch45_v9d_p1.png",
+      "activePhase": "1",
+      "stack": "1",
+      "activeCount": 1
+    },
+    {
+      "label": "led-p2",
+      "phase": 2,
+      "activeSrc": "pitch-blender/pitch45_v9d_p2.png",
+      "activePhase": "2",
+      "stack": "2",
+      "activeCount": 1
+    },
+    {
+      "label": "led-p0",
+      "phase": 0,
+      "activeSrc": "pitch-blender/pitch45_v9d_p0.png",
+      "activePhase": "0",
+      "stack": "0",
+      "activeCount": 1
+    },
+    {
+      "label": "led-interval-ms",
+      "ms": 6000
+    },
+    {
+      "label": "led-no-early-swap",
+      "before": 0,
+      "mid": 0
+    },
+    {
+      "label": "led-cycle",
+      "before": 0,
+      "phase": 1,
+      "activeSrc": "pitch-blender/pitch45_v9d_p1.png",
+      "stack": "1"
+    },
+    {
+      "label": "led-crossfade-ms",
+      "ms": 1100
+    }
+  ],
+  "failures": []
+}
