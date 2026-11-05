@@ -133,6 +133,11 @@ const html = surface.renderPredictSurface({
     hhad: { h: 1.9, d: 3.4, a: 3.6, goalLine: '-1' },
   },
 });
+assert.ok(!html.includes('pr-brief-hd'));
+assert.ok(!html.includes('赛前预测'));
+assert.ok(html.includes('半全场'));
+assert.ok(html.includes('先不排九宫'));
+assert.ok(!html.includes('pr-htft"'));
 assert.ok(html.includes('伤停 / 核心'));
 assert.ok(html.includes('伤停和近况核心暂时没有'));
 assert.ok(html.includes('胜平负 · 模型概率'));
@@ -202,7 +207,55 @@ assert.ok(rich.includes('pr-side core'));
 assert.ok(rich.includes('pr-core-card'));
 assert.ok(rich.includes('评分'));
 assert.ok(rich.includes('主队近况核心'));
+assert.ok(rich.includes('>G</i>'));
+assert.ok(!rich.includes('img.example'));
+assert.ok(!rich.includes('pr-brief-hd'));
 assert.ok(!/触发：|要点覆盖|Pipeline|近况积分/.test(rich));
+const smRich = surface.renderPredictSurface({
+  home: '雷恩',
+  away: '奥林匹亚科斯',
+  concl: { lean: 'a', pickText: '客胜', conf: 0.7, speakMode: 'amplify', _speakResolved: true },
+  squad: {
+    available: true,
+    sidelined: [{
+      side: 'home', core: true, name: 'Goncalo Oliveira', reason: '伤病',
+      image: 'https://cdn.sportmonks.com/images/soccer/players/2/18.png',
+    }],
+    cores: { home: [], away: [] },
+    half: {
+      home: { lead: 4, draw: 1, trail: 1, n: 6 },
+      away: { lead: 1, draw: 2, trail: 3, n: 6 },
+    },
+  },
+  oddsEdge: { exp: { expH: 0.9, expA: 1.6 }, over25: 0.48 },
+  market: { p: { h: 0.2, d: 0.24, a: 0.56 }, had: { h: 4.5, d: 3.4, a: 1.7 } },
+});
+assert.ok(smRich.includes('class="pr-htft"'));
+assert.ok(smRich.includes('/api/logo?url='));
+assert.ok(smRich.includes('cdn.sportmonks.com'));
+assert.ok(!smRich.includes('pr-brief-hd'));
+assert.strictEqual(surface.htftGrid(null, smRich && {}), null);
+const grid = surface.htftGrid(
+  { h: 0.5, d: 0.25, a: 0.25 },
+  { home: { lead: 4, draw: 1, trail: 1, n: 6 }, away: { lead: 1, draw: 2, trail: 3, n: 6 } }
+);
+const gridSum = Object.values(grid.cells).reduce((a, b) => a + b, 0);
+assert.ok(Math.abs(gridSum - 1) < 1e-6);
+assert.strictEqual(surface.htftGrid({ h: 0.4, d: 0.3, a: 0.3 }, { home: { n: 1, lead: 1, draw: 0, trail: 0 }, away: { n: 6, lead: 1, draw: 2, trail: 3 } }), null);
+const halfOnly = sq.tallyHalf([{
+  participants: [
+    { id: 10, meta: { location: 'home' } },
+    { id: 20, meta: { location: 'away' } },
+  ],
+  scores: [
+    { description: '1ST_HALF', score: { participant: 'home', goals: 1 } },
+    { description: '1ST_HALF', score: { participant: 'away', goals: 0 } },
+    { description: 'CURRENT', score: { participant: 'home', goals: 2 } },
+  ],
+}], 10);
+assert.strictEqual(halfOnly.lead, 1);
+assert.strictEqual(halfOnly.n, 1);
+assert.strictEqual(sq.tallyHalf([{ scores: [] }], 10).n, 0);
 
 assert.ok(/没有落点/.test(reportHtml));
 assert.ok(/胜平负 · 模型概率/.test(reportHtml));
@@ -286,7 +339,17 @@ assert.ok(!/要点覆盖|Pipeline|触发：/.test(reportHtml));
         return { data: { sidelined: [{ participant_id: 10, player_id: 1, player: { display_name: 'Goncalo Oliveira' }, type: { name: 'Unknown Injury' } }] } };
       }
       if (u.includes('/fixtures/7')) {
-        return { data: { lineups: [{ team_id: 10, player_id: 1, player_name: 'Goncalo Oliveira', details: [{ type_id: 118, data: { value: 7.4 } }, { type_id: 52, data: { value: 1 } }] }] } };
+        return { data: {
+          participants: [
+            { id: 10, meta: { location: 'home' } },
+            { id: 30, meta: { location: 'away' } },
+          ],
+          scores: [
+            { description: '1ST_HALF', score: { participant: 'home', goals: 2 } },
+            { description: '1ST_HALF', score: { participant: 'away', goals: 0 } },
+          ],
+          lineups: [{ team_id: 10, player_id: 1, player_name: 'Goncalo Oliveira', details: [{ type_id: 118, data: { value: 7.4 } }, { type_id: 52, data: { value: 1 } }] }],
+        } };
       }
       throw new Error(u);
     },
@@ -294,6 +357,9 @@ assert.ok(!/要点覆盖|Pipeline|触发：/.test(reportHtml));
   assert.strictEqual(squadPack.available, true);
   assert.strictEqual(squadPack.sidelined[0].core, true);
   assert.ok(squadPack.cores.home[0].avg_rating >= 7);
+  assert.strictEqual(squadPack.half.home.lead, 1);
+  assert.strictEqual(squadPack.half.home.n, 1);
+  assert.strictEqual(squadPack.half.away.n, 0);
   if (prev == null) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = prev;
   console.log('strength-calib-test OK');
