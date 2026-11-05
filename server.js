@@ -1391,6 +1391,26 @@ app.get('/api/lineup', async (req, res) => {
   }
 });
 
+app.get('/api/sm-bracket', async (req, res) => {
+  try {
+    const q = req.query || {};
+    const matchId = String(q.matchId || '').trim();
+    if (!matchId) return res.status(400).json({ show: false, reason: 'no-match' });
+    const kickoffMs = Date.parse(`${q.date || ''}T${String(q.time || '00:00').slice(0, 5)}:00+08:00`);
+    const pack = await require('./lib/sm-bracket').ensureBracket({
+      matchId,
+      homeTeamId: q.homeTeamId,
+      awayTeamId: q.awayTeamId,
+      homeZh: q.home,
+      awayZh: q.away,
+      kickoffMs: Number.isFinite(kickoffMs) ? kickoffMs : Date.now(),
+    });
+    res.json({ show: !!pack.show, html: pack.show ? (pack.html || '') : '', reason: pack.reason || '' });
+  } catch (e) {
+    res.json({ show: false, html: '', reason: 'unavailable' });
+  }
+});
+
 app.get('/api/sm-surface', async (req, res) => {
   try {
     const q = req.query || {};
@@ -1410,6 +1430,9 @@ app.get('/api/sm-surface', async (req, res) => {
       ok: true,
       formHtml: surface.renderFormHtml(pack),
       barsHtml: surface.renderBarsHtml(pack),
+      growthHtml: surface.renderGrowthHtml(pack),
+      liveHtml: surface.renderLiveHtml(pack),
+      photos: surface.photoList(pack),
       reason: pack.reason || '',
     });
   } catch (e) {

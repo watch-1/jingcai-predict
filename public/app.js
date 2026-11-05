@@ -2365,7 +2365,7 @@ function back() {
     }
   } else { NAV.length = 0; go('#/home', true); navNote('#/home'); }
 }
-window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || (detailTabOf(route().arg) !== 'data' && detailTabOf(route().arg) !== 'events')) stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'events') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); if (route().name !== 'home') { stopHomeFocusRotate(); stopHomeLiveScorePoll(); } render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); if (route().name !== 'home') { stopHomeFocusRotate(); stopHomeLiveScorePoll(); } render(); window.scrollTo(0, 0); });
 // Android back button hook (MainActivity calls this): returns 1 if handled in-page, 0 to exit the app
 window.__appBack = () => {
   if (!$('#dialog').classList.contains('hidden')) { $('#dialog').querySelector('[data-r="0"]').click(); return 1; }
@@ -7149,12 +7149,28 @@ function luLat(pos) {
   if (/^L/.test(p)) return -2; if (/^R/.test(p)) return 2;
   return 0;
 }
+function luPhotoUrl(p) {
+  if (!p) return '';
+  if (p.image) return p.image;
+  if (p.photo) return p.photo;
+  if (p.espnId) return espnSoccerHeadshotUrl(p.espnId);
+  return '';
+}
 function luAvatar(p, cls) {
   const disp = p.nameZh || p.name || '?';
   const ini = esc([...disp][0] || '?');
-  return p.photo
-    ? `<span class="${cls}"><img src="${logoProxy(p.photo)}" alt="" onerror="this.parentNode.textContent='${ini}'"/></span>`
+  const url = luPhotoUrl(p);
+  return url
+    ? `<span class="${cls}"><img src="${logoProxy(url)}" alt="" onerror="this.parentNode.textContent='${ini}'"/></span>`
     : `<span class="${cls}">${ini}</span>`;
+}
+function smFace(p) {
+  const url = luPhotoUrl(p);
+  const num = esc(p.number || '');
+  const img = url
+    ? `<img src="${logoProxy(url)}" alt="" onerror="this.remove();this.parentNode.classList.remove('has-photo')"/>`
+    : '';
+  return `<span class="smd-no${url ? ' has-photo' : ''}">${img}<b>${num}</b></span>`;
 }
 function luShort(p) {
   if (p.nameZh) {
@@ -7163,48 +7179,138 @@ function luShort(p) {
   }
   const parts = String(p.name || '').split(' '); return parts[parts.length - 1] || p.name || '';
 }
-function pitchHtml(side) {
-  const lines = {};
-  side.starters.forEach((p, i) => { const l = luLine(p.pos); (lines[l] = lines[l] || []).push({ p, i }); });
-  const order = Object.keys(lines).map(Number).sort((x, y) => y - x); // attack at top
-  return `<div class="pitch">${order.map(l => `<div class="pitch-row">${lines[l].sort((x, y) => luLat(x.p.pos) - luLat(y.p.pos) || x.i - y.i).map(({ p }) =>
-    `<div class="pp">${luAvatar(p, 'pp-ph')}<span class="pp-no">${esc(p.number || '')}</span><span class="pp-nm">${esc(luShort(p))}${yiMark(p.nameZhSrc === 'auto')}${p.subbedOut ? '<i class="lu-out">↓</i>' : ''}</span></div>`).join('')}</div>`).join('')}</div>`;
+function luFold(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
 }
-function lineupSide(label, side, opts = {}) {
-  if (!side) return `<div class="lu-side"><div class="lu-hd"><b>${esc(label)}</b></div><p class="note">${esc(opts.emptyText || '暂无可用首发数据')}</p></div>`;
-  const used = side.bench.filter(p => p.subbedIn);
-  const unused = side.bench.filter(p => !p.subbedIn);
-  const brow = p => `<li>${luAvatar(p, 'lu-ph')}<span class="lu-no">${esc(p.number || '')}</span><span class="lu-nm">${esc(p.nameZh || p.name)}${yiMark(p.nameZhSrc === 'auto')}${p.nameZh && p.name ? ` <small class="muted">${esc(p.name)}</small>` : ''}</span>${p.subbedIn ? `<em class="lu-in">↑${p.subFor ? ' 换下 ' + esc(p.subFor) : ''}</em>` : ''}</li>`;
-  const benchHtml = opts.hideBench || !side.bench.length ? '' : `<div class="lu-sub-h">替补${used.length ? `（登场 ${used.length}）` : ''}</div><ul class="lu-list">${[...used, ...unused].map(brow).join('')}</ul>`;
-  const from = side.fromEvent ? `<div class="note">上一场：${esc(side.fromEvent.date)} ${esc(side.fromEvent.home)} ${esc(side.fromEvent.score)} ${esc(side.fromEvent.away)}${side.fromEvent.league ? ' · ' + esc(side.fromEvent.league) : ''}</div>` : '';
-  const ph = side.photoCount != null ? ` · 照片 ${side.photoCount}/${side.playerCount}` : '';
-  return `<div class="lu-side"><div class="lu-hd"><b>${esc(label)}</b><span class="note">${side.formation ? esc(side.formation) : ''}${ph}</span></div>${from}${pitchHtml(side)}${benchHtml}</div>`;
+function luSame(p, name) {
+  const n = luFold(name);
+  if (!n || n.length < 2) return false;
+  const lastEn = luFold(String(p.name || '').split(' ').pop());
+  const lastZh = luFold(String(p.nameZh || '').split(/[·・•]/).pop());
+  return [luFold(p.name), luFold(p.nameZh), lastEn, lastZh].some(c => c && (c === n || (c.length >= 4 && (n.endsWith(c) || c.endsWith(n)))));
+}
+function absorbSmPhotos(x, side) {
+  if (!side) return;
+  const pack = S.smSurface && S.smSurface[String(x.id)];
+  const photos = (pack && pack.photos) || [];
+  if (!photos.length) return;
+  for (const p of [...(side.starters || []), ...(side.bench || [])]) {
+    if (p.image) continue;
+    const hit = photos.find(r => luSame(p, r.name) || luSame(p, r.nameZh));
+    if (hit && hit.image) p.image = hit.image;
+  }
+}
+function stampLuMarks(x, side, sideKey) {
+  if (!side) return;
+  absorbSmPhotos(x, side);
+  const people = [...(side.starters || []), ...(side.bench || [])];
+  for (const p of people) { p._g = 0; p._y = 0; p._r = 0; }
+  const live = S.liveStatsCache && S.liveStatsCache[String(x.id)];
+  const events = (live && live.ok && live.events) || [];
+  for (const e of events) {
+    if (e.side !== sideKey) continue;
+    if (e.kind === 'subst') {
+      const on = people.find(p => luSame(p, e.playerZh) || luSame(p, e.player));
+      const off = people.find(p => luSame(p, e.assistZh) || luSame(p, e.assist));
+      if (on) on._on = true;
+      if (off) off._off = true;
+      continue;
+    }
+    const hit = people.find(p => luSame(p, e.playerZh) || luSame(p, e.player));
+    if (!hit) continue;
+    if (e.kind === 'goal') {
+      const gk = eventGoalKind(e);
+      if (gk !== 'own' && gk !== 'missed_pen') hit._g = (hit._g || 0) + 1;
+    } else if (e.kind === 'yellow') hit._y = (hit._y || 0) + 1;
+    else if (e.kind === 'red') hit._r = (hit._r || 0) + 1;
+  }
+}
+function luMarkHtml(p) {
+  const bits = [];
+  if (p.captain) bits.push('<i class="mk c" title="队长">C</i>');
+  for (let i = 0; i < Math.min(p._g || 0, 3); i++) bits.push('<i class="mk g" title="进球">⚽</i>');
+  if (p._y) bits.push('<i class="mk y" title="黄牌"></i>');
+  if (p._r) bits.push('<i class="mk r" title="红牌"></i>');
+  if (p.subbedOut || p._off) bits.push('<i class="mk dn" title="被换下">↓</i>');
+  if (p.subbedIn || p._on) bits.push('<i class="mk up" title="替补登场">↑</i>');
+  return bits.length ? `<span class="sml-mks">${bits.join('')}</span>` : '';
+}
+function luColumns(starters, dir) {
+  const lines = {};
+  (starters || []).forEach((p, i) => { const l = luLine(p.pos); (lines[l] = lines[l] || []).push({ p, i }); });
+  let keys = Object.keys(lines).map(Number).sort((a, b) => a - b);
+  if (dir === 'away') keys.reverse();
+  return keys.map(k => lines[k].sort((a, b) => luLat(a.p.pos) - luLat(b.p.pos) || a.i - b.i));
+}
+function luGridRow(n, i) {
+  if (n <= 1) return 2;
+  return 1 + Math.round(i * 3 / (n - 1));
+}
+function smPitchHalf(side, dir) {
+  if (!side || !(side.starters || []).length) return `<div class="smd-half ${dir}"></div>`;
+  const cols = luColumns(side.starters, dir);
+  const cells = cols.map((group, ci) => group.map(({ p }, i) =>
+    `<div class="smd ${dir}" style="grid-column:${ci + 1};grid-row:${luGridRow(group.length, i)}">${smFace(p)}<span class="smd-nm">${esc(luShort(p))}${yiMark(p.nameZhSrc === 'auto')}${p.subbedOut ? '<i class="mk dn">↓</i>' : ''}</span></div>`).join('')).join('');
+  return `<div class="smd-half ${dir}" style="grid-template-columns:repeat(${Math.max(cols.length, 1)},minmax(0,1fr))">${cells}</div>`;
+}
+function smListRows(people, dir) {
+  return (people || []).map(p => {
+    const num = `<span class="sml-no">${esc(p.number || '')}</span>`;
+    const av = luAvatar(p, 'sml-av');
+    const nm = `<span class="sml-nm">${esc(p.nameZh || p.name)}${yiMark(p.nameZhSrc === 'auto')}</span>`;
+    const mk = luMarkHtml(p);
+    return dir === 'away'
+      ? `<li class="sml-row away">${mk}${nm}${av}${num}</li>`
+      : `<li class="sml-row home">${num}${av}${nm}${mk}</li>`;
+  }).join('');
+}
+function smListCol(label, side, dir) {
+  if (!side) return `<div class="sml-col"><p class="note">暂无</p></div>`;
+  const xi = smListRows(side.starters, dir);
+  const bench = (side.bench || []).length ? `<div class="sml-h">替补</div><ul class="sml-list">${smListRows(side.bench, dir)}</ul>` : '';
+  return `<div class="sml-col ${dir}"><div class="sml-h">${esc(label)}</div><ul class="sml-list">${xi}</ul>${bench}</div>`;
+}
+function luScrub(x) {
+  const live = S.liveStatsCache && S.liveStatsCache[String(x.id)];
+  const n = live && live.status ? Number(live.status.elapsed) : NaN;
+  if (!Number.isFinite(n)) return '';
+  const pct = Math.max(4, Math.min(100, (n / 90) * 100));
+  return `<div class="sml-scrub" title="${esc(n)}'"><i style="width:${pct.toFixed(0)}%"></i></div>`;
 }
 function lineupHtml(x, L) {
   if (!L) return '<div class="spinner"></div>';
   if (!L.ok) return empty(esc(L.error || '阵容数据暂时不可用'));
-  const sideK = (S.squadTab && S.squadTab[x.id]) || 'home';
-  const real = L.home || L.away;
-  const stateLab = { final: '本场实际阵容 · 完场', live: '本场首发 · 进行中', announced: '本场首发 · 已公布' }[L.state] || '';
-  const chips = `<div class="chips squad-chips"><button class="${sideK === 'home' ? 'on' : ''}" data-act="squadTab" data-id="${esc(x.id)}" data-side="home">${esc(x.home)}</button><button class="${sideK === 'away' ? 'on' : ''}" data-act="squadTab" data-id="${esc(x.id)}" data-side="away">${esc(x.away)}</button></div>`;
-  const lab = sideK === 'home' ? x.home : x.away;
+  const real = !!(L.home || L.away);
+  const homeSide = real ? L.home : L.prevHome;
+  const awaySide = real ? L.away : L.prevAway;
+  stampLuMarks(x, homeSide, 'home');
+  stampLuMarks(x, awaySide, 'away');
+  const both = !!(homeSide && (homeSide.starters || []).length && awaySide && (awaySide.starters || []).length);
+  const view = (S.luView && S.luView[x.id]) || (both ? 'pitch' : 'list');
+  const pitchOn = view !== 'list';
+  const stateLab = real
+    ? ({ final: '本场实际阵容', live: '本场首发', announced: '本场首发' }[L.state] || '本场阵容')
+    : '参考上一场首发';
+  const coachBit = (side, dir) => (side && side.coachZh) ? `<small class="${dir}">${esc(side.coachZh)}</small>` : '';
+  const formBit = side => (side && side.formation) ? `<small>${esc(side.formation)}</small>` : '';
+  const head = `<div class="smd-hd"><div class="home"><b>${esc(x.home)}</b>${formBit(homeSide)}${coachBit(homeSide, 'home')}</div><div class="mid">阵容</div><div class="away">${coachBit(awaySide, 'away')}${formBit(awaySide)}<b>${esc(x.away)}</b></div></div>`;
+  const tog = `<div class="sm-switch"><button type="button" class="${pitchOn ? 'on' : ''}" data-act="luView" data-id="${esc(x.id)}" data-view="pitch">阵型</button><button type="button" class="${pitchOn ? '' : 'on'}" data-act="luView" data-id="${esc(x.id)}" data-view="list">名单</button></div>`;
+  const pitch = `<div class="smd-view" ${pitchOn ? '' : 'hidden'}><div class="smd-pitch">${smPitchHalf(homeSide, 'home')}${smPitchHalf(awaySide, 'away')}</div></div>`;
+  const list = `<div class="smd-view" ${pitchOn ? 'hidden' : ''}><div class="sml-cols">${smListCol(x.home, homeSide, 'home')}${smListCol(x.away, awaySide, 'away')}</div></div>`;
   let h = '';
-  if (real) {
-    h += `<div class="list-meta"><span>${esc(stateLab)}</span><span>来源综合公开数据</span></div>${chips}${lineupSide(lab, sideK === 'home' ? L.home : L.away)}`;
-  } else {
+  if (!real) {
     const pend = L.state === 'pending' ? '首发未公布（通常赛前约1小时）' : L.state === 'no-event' ? '未收录本场，无法获取本场首发' : '暂无本场阵容数据';
     h += `<div class="warn-bar">${esc(pend)}</div>`;
-    if (L.prevHome || L.prevAway) {
-      h += `<div class="list-meta"><span>参考：上一场实际首发（非本场）</span><span>来源综合公开数据</span></div>${chips}${lineupSide(lab, sideK === 'home' ? L.prevHome : L.prevAway, { hideBench: true, emptyText: '未获取到上一场首发' })}`;
-    }
+    if (!homeSide && !awaySide) return h;
+    h += `<p class="note">下面是上一场实际首发，不是本场。</p>`;
   }
-  if (L.noteZh) h += `<p class="note" style="margin:8px 0 0">${esc(L.noteZh)} 照片来自公开名单匹配，无照片显示首字。</p>`;
+  h += `<section class="smd-card sm-kit">${head}<div class="smd-sub">${esc(stateLab)}</div>${tog}${pitch}${list}${luScrub(x)}</section>`;
+  if (L.noteZh) h += `<p class="note" style="margin:8px 12px 0">${esc(L.noteZh)}</p>`;
   return h;
 }
 function squadSectionHtml(x) {
   const L = S.lineupCache && S.lineupCache[x.id];
-  return '<div class="dsec lineup-sec"><h3>本场阵容 <small>首发 · 阵型 · 替补</small></h3><div id="lineup-box-' + esc(x.id) + '">' + lineupHtml(x, L) + '</div></div>'
-    + '<div id="sm-form-' + esc(x.id) + '" class="sm-slot"><p class="note">正在整理双方近况上场数据…</p></div>';
+  return '<div class="dsec lineup-sec"><div id="lineup-box-' + esc(x.id) + '">' + lineupHtml(x, L) + '</div></div>';
 }
 async function ensureLineup(x) {
   S.lineupCache = S.lineupCache || {};
@@ -7217,13 +7323,20 @@ async function ensureLineup(x) {
   try { L = await api('/lineup?' + q.join('&'), { timeout: 45000 }); } catch (e) { L = { ok: false, error: e.message || '加载失败' }; }
   L._at = Date.now();
   S.lineupCache[x.id] = L;
-  const box = document.getElementById('lineup-box-' + x.id);
-  if (box) box.innerHTML = lineupHtml(x, L);
+  const paint = () => {
+    const box = document.getElementById('lineup-box-' + x.id);
+    if (box) box.innerHTML = lineupHtml(x, L);
+  };
+  paint();
+  const ko = matchKickoffMs(x);
+  if (Number.isFinite(ko) && Date.now() >= ko) {
+    try { await loadLiveStats(x); } catch (_) {}
+    paint();
+  }
 }
 async function ensureSquad(x) {
   if (!x) return;
   ensureLineup(x);
-  ensureSmSurface(x);
 }
 async function ensureSmSurface(x) {
   if (!x || !x.id) return;
@@ -7247,14 +7360,26 @@ async function ensureSmSurface(x) {
 function paintSmSurface(id, pack) {
   const form = document.getElementById('sm-form-' + id);
   const bars = document.getElementById('sm-bars-' + id);
+  const growth = document.getElementById('sm-growth-' + id);
+  const liveBox = document.getElementById('sm-live-' + id);
   if (!pack || pack.ok === false) {
     const note = '<p class="note">近况数据暂时没有。</p>';
     if (form) form.innerHTML = note;
     if (bars) bars.innerHTML = note;
+    if (growth) growth.innerHTML = note;
+    if (liveBox) liveBox.innerHTML = note;
     return;
   }
   if (form && pack.formHtml) form.innerHTML = pack.formHtml;
   if (bars && pack.barsHtml) bars.innerHTML = pack.barsHtml;
+  if (growth && pack.growthHtml) growth.innerHTML = pack.growthHtml;
+  if (liveBox && pack.liveHtml) liveBox.innerHTML = pack.liveHtml;
+  const lu = document.getElementById('lineup-box-' + id);
+  const L = S.lineupCache && S.lineupCache[id];
+  if (lu && L && pack.photos && pack.photos.length) {
+    const x = (typeof findMatch === 'function' && findMatch(id)) || (S.results || []).find(z => String(z.id) === String(id));
+    if (x) lu.innerHTML = lineupHtml(x, L);
+  }
 }
 async function enrichSquadZh(x, key, teamId, teamName) {
   try {
@@ -7319,7 +7444,7 @@ async function fillPlayer(id) {
 
 // ----- match detail tabs: 情报 / 数据 / 阵容 / 预测 -----
 // 1.9.107: chat merged under events tab
-const DETAIL_TABS_BASE = [['attitude', '态度'], ['intel', '情报'], ['odds', '赔率'], ['data', '数据'], ['events', '事件'], ['squad', '阵容'], ['pred', '预测']];
+const DETAIL_TABS_BASE = [['attitude', '态度'], ['intel', '情报'], ['odds', '赔率'], ['data', '数据'], ['live', '实时'], ['squad', '阵容'], ['pred', '预测']];
 function isMatchFinished(x) {
   if (!x) return false;
   if (x._t === 'r' || x.full) return true;
@@ -7354,16 +7479,18 @@ function detailTabsFor(x) {
 function detailTabOf(id) {
   S.detailTab = S.detailTab || {};
   let t = S.detailTab[id] || 'attitude';
-  // 1.9.107: legacy chat tab / deep-link -> events + scroll to chat
-  if (t === 'chat') {
-    S.detailTab[id] = 'events';
-    S.scrollToChat = S.scrollToChat || {};
-    S.scrollToChat[id] = true;
-    t = 'events';
+  // legacy chat / 事件 deep-link -> 实时
+  if (t === 'chat' || t === 'events') {
+    if (t === 'chat') {
+      S.scrollToChat = S.scrollToChat || {};
+      S.scrollToChat[id] = true;
+    }
+    S.detailTab[id] = 'live';
+    t = 'live';
   }
   return t;
 }
-function isEventsTab(id) { return detailTabOf(id) === 'events'; }
+function isEventsTab(id) { return detailTabOf(id) === 'live'; }
 function maybeScrollToChat(id) {
   if (!(S.scrollToChat && S.scrollToChat[id])) return;
   S.scrollToChat[id] = false;
@@ -8618,6 +8745,7 @@ function intelTabHtml(x, m, stats) {
   h += h2hBlock(stats && stats.h2h, x.home, x.away, { n: ui.h2hN, matchId: x.id, h2hSource: stats && stats.h2hSource });
   h += formAnalysisCard(x, stats, ui);
   h += processStatsCard(x, stats);
+  h += bracketBlock(x);
   h += nextFixturesCard(x);
   if (m) h += oddsCompareBlock(m);
   const qHome = encodeURIComponent(x.home || '');
@@ -8638,6 +8766,26 @@ function intelTabHtml(x, m, stats) {
   return h;
 }
 
+function bracketBlock(x) {
+  const pack = S.smBracket && S.smBracket[String(x.id)];
+  if (!pack || !pack.show || !pack.html) return '';
+  return pack.html;
+}
+async function ensureSmBracket(x) {
+  if (!x || !x.id) return;
+  S.smBracket = S.smBracket || {};
+  const key = String(x.id);
+  const hit = S.smBracket[key];
+  if (hit && hit._at && Date.now() - hit._at < 10 * 60 * 1000) return;
+  const q = ['matchId=' + encodeURIComponent(key), 'date=' + encodeURIComponent(x.date || ''), 'time=' + encodeURIComponent(x.time || ''),
+    'homeTeamId=' + encodeURIComponent(x.homeTeamId || ''), 'awayTeamId=' + encodeURIComponent(x.awayTeamId || ''),
+    'home=' + encodeURIComponent(x.home || ''), 'away=' + encodeURIComponent(x.away || '')];
+  let pack;
+  try { pack = await api('/sm-bracket?' + q.join('&'), { timeout: 45000 }); }
+  catch (e) { pack = { show: false, reason: 'unavailable' }; }
+  pack._at = Date.now();
+  S.smBracket[key] = pack;
+}
 function eventGoalKind(e) {
   if (e && e.goalKind) return e.goalKind;
   const d = String((e && e.detail) || '');
@@ -9034,7 +9182,7 @@ function patchEventsTabIfVisible(x) {
   if (!x) return;
   const id = String(x.id || '');
   if (route().name !== 'match' || String(route().arg) !== id) return;
-  if (detailTabOf(id) !== 'events') return;
+  if (detailTabOf(id) !== 'live') return;
   const live = (S.liveStatsCache && S.liveStatsCache[id]) || null;
   const pane = document.getElementById('detail-pane-' + id);
   if (!pane) return;
@@ -9063,7 +9211,7 @@ function scheduleLiveStatsRecover(x, key) {
     try { await loadLiveStats(x, { force: true }); } catch (_) {}
     const live = S.liveStatsCache && S.liveStatsCache[key];
     patchEventsTabIfVisible(x);
-    if (detailTabOf(x.id) === 'data') renderLivePitch(x);
+    if (detailTabOf(x.id) === 'live') renderLivePitch(x);
     if (liveStatsNeedsRecover(live, x)) scheduleLiveStatsRecover(x, key);
   }, delay);
   S._liveEvRetry[key] = { n, timer };
@@ -9141,12 +9289,12 @@ function ensureLivePoll(x) {
     if (document.hidden) return;
     if (route().name !== 'match' || String(route().arg) !== String(x.id)) return stopLivePoll();
     const tabNow = detailTabOf(x.id);
-    if (tabNow !== 'data' && tabNow !== 'events') return stopLivePoll();
+    if (tabNow !== 'live') return stopLivePoll();
     const hadReview = detailTabsFor(x).some(t => t[0] === 'review');
     await loadLiveStats(x, { force: true });
-    if (route().name === 'match' && String(route().arg) === String(x.id) && (detailTabOf(x.id) === 'data' || detailTabOf(x.id) === 'events')) {
-      if (detailTabOf(x.id) === 'events') patchEventsTabIfVisible(x);
-      else renderLivePitch(x);
+    if (route().name === 'match' && String(route().arg) === String(x.id) && detailTabOf(x.id) === 'live') {
+      patchEventsTabIfVisible(x);
+      renderLivePitch(x);
       if (!hadReview && detailTabsFor(x).some(t => t[0] === 'review')) refreshDetailTabs(x);
       const again = S.liveStatsCache[key];
       if (again && again.ok && !again.live && !liveStatsNeedsEventsRetry(again, x)) stopLivePoll();
@@ -9536,22 +9684,17 @@ function fixturePlayersHtml(x) {
   return h;
 }
 
-function dataTabHtml(x, m, stats) {
-  const key = String(x.id || '');
-  const live = (S.liveStatsCache && S.liveStatsCache[key]) || null;
-  const ui = statsUiOf(x.id);
-  let h = `<div id="sm-bars-${esc(key)}" class="sm-slot"><p class="note">正在整理控球、射门和角球…</p></div>`;
-  h += livePitchHtml(x, live);
-  // 1.9.58: 本场球员 moved to 赛后复盘 tab
-  if (m) h += oddsCompareBlock(m);
-  h += `<div class="ana-card"><div class="ana-hd"><h3>近期战绩</h3><small>摘要 · 完整筛选见「情报」</small></div>
-    ${formStrip(stats && stats.homeForm, x.home, { teamId: x.homeTeamId, venue: 'all', n: 5, compact: true })}
-    ${formStrip(stats && stats.awayForm, x.away, { teamId: x.awayTeamId, venue: 'all', n: 5, compact: true })}
-    <p class="note" style="margin:8px 0 0">${esc((stats && stats.noteZh) || '以上为历史赛果推导。')} 可到「情报」切换近10场或主/客场。</p></div>`;
-  h += processStatsCard(x, stats);
-  h += h2hBlock(stats && stats.h2h, x.home, x.away, { n: ui.h2hN, matchId: x.id, h2hSource: stats && stats.h2hSource });
-  h += nextFixturesCard(x);
-  return h;
+function dataTabHtml(x) {
+  const key = esc(String(x.id || ''));
+  return `<div id="sm-form-${key}" class="sm-slot"><p class="note">正在整理球员近况…</p></div>`
+    + `<div id="sm-bars-${key}" class="sm-slot"><p class="note">正在整理球队统计…</p></div>`
+    + `<div id="sm-growth-${key}" class="sm-slot"></div>`;
+}
+function liveTabHtml(x, live) {
+  const key = esc(String(x.id || ''));
+  return livePitchHtml(x, live)
+    + `<div id="sm-live-${key}" class="sm-slot"><p class="note">正在整理本场球员数据…</p></div>`
+    + eventsTabHtml(x, live);
 }
 function matchHero(x, m, r, { favBtn = '' } = {}) {
   const started = !!(m && Date.now() > kickoff(m)) || !!(x && Date.now() > kickoff(x));
@@ -9755,8 +9898,8 @@ function detailPaneInnerHtml(x, tab) {
   if (tab === 'attitude') h = matchAttitudeTabHtml(x);
   else if (tab === 'intel') h = intelTabHtml(x, m, stats);
   else if (tab === 'odds') h = oddsTabHtml(x, oddsSnapCache()[String(x.id) + '|' + (x.date || '')]);
-  else if (tab === 'data') h = dataTabHtml(x, m, stats);
-  else if (tab === 'events') h = eventsTabHtml(x, (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null);
+  else if (tab === 'data') h = dataTabHtml(x);
+  else if (tab === 'live') h = liveTabHtml(x, (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null);
   else if (tab === 'squad') h = squadSectionHtml(x);
   else if (tab === 'review') h = reviewTabHtml(x);
   else h = predTabHtml(m || null);
@@ -9891,8 +10034,8 @@ function ensureMatchStatusPoll(x) {
 async function enrichMatchDetail(x) {
   if (!x) return;
   const tab = detailTabOf(x.id);
-  if (tab !== 'data' && tab !== 'events') stopLivePoll();
-  if (tab !== 'events') stopChatPoll();
+  if (tab !== 'live') stopLivePoll();
+  if (tab !== 'live') stopChatPoll();
   if (route().name !== 'match') stopMatchStatusPoll();
   // 1.9.107: prefetch lineup when match detail opens so squad tab paints from cache
   try { ensureLineup(x); } catch (_) {}
@@ -9956,13 +10099,14 @@ async function enrichMatchDetail(x) {
       if (pane) pane.innerHTML = reviewTabHtml(x);
     }
   }
-  if (tab === 'intel' || tab === 'data' || tab === 'events') {
+  if (tab === 'intel' || tab === 'data' || tab === 'live') {
     const tasks = [];
-    if (tab === 'intel' || tab === 'data') tasks.push(loadMatchStats(x));
+    if (tab === 'intel') tasks.push(loadMatchStats(x));
     if (tab === 'intel') tasks.push(loadPredictReport(findMatch(x.id) || x));
-    // live-stats already warmed above when kickedOff; still refresh on data/events
-    if (tab === 'data' || tab === 'events') tasks.push(loadLiveStats(x, { force: tab === 'events' }));
-    if (tab === 'events') {
+    if (tab === 'intel') tasks.push(ensureSmBracket(x));
+    if (tab === 'data' || tab === 'live') tasks.push(ensureSmSurface(x));
+    if (tab === 'live') tasks.push(loadLiveStats(x, { force: true }));
+    if (tab === 'live') {
       tasks.push(loadChat(String(x.id)));
       tasks.push(loadAiChatHistory(String(x.id)).then(() => loadAiChatQuota(String(x.id))));
     }
@@ -9977,14 +10121,15 @@ async function enrichMatchDetail(x) {
         const m = findMatch(x.id);
         if (tab === 'intel') { pane.innerHTML = intelTabHtml(x, m, stats); loadVote(x.id); }
         else if (tab === 'data') {
-          pane.innerHTML = dataTabHtml(x, m, stats);
-          ensureLivePoll(x);
+          pane.innerHTML = dataTabHtml(x);
           const sm = S.smSurface && S.smSurface[String(x.id)];
           if (sm) paintSmSurface(String(x.id), sm);
         }
-        else if (tab === 'events') {
+        else if (tab === 'live') {
           const live = (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null;
-          pane.innerHTML = eventsTabHtml(x, live);
+          pane.innerHTML = liveTabHtml(x, live);
+          const sm = S.smSurface && S.smSurface[String(x.id)];
+          if (sm) paintSmSurface(String(x.id), sm);
           ensureLivePoll(x);
           ensureChatPoll(x);
           renderAiChatList(String(x.id));
@@ -13100,10 +13245,12 @@ document.addEventListener('click', async e => {
       const id = el.dataset.id;
       let tab = el.dataset.tab;
       S.detailTab = S.detailTab || {};
-      if (tab === 'chat') {
-        tab = 'events';
-        S.scrollToChat = S.scrollToChat || {};
-        S.scrollToChat[id] = true;
+      if (tab === 'chat' || tab === 'events') {
+        if (tab === 'chat') {
+          S.scrollToChat = S.scrollToChat || {};
+          S.scrollToChat[id] = true;
+        }
+        tab = 'live';
       }
       S.detailTab[id] = tab;
       // 1.9.129: soft-patch pane/tabs — avoid full view paint-hold navy flash
@@ -13117,6 +13264,16 @@ document.addEventListener('click', async e => {
       const x = findMatch(id) || (S.results || []).find(z => z.id === String(id));
       render({ force: true });
       ensureSquad(x);
+      return;
+    }
+    case 'luView': {
+      const id = el.dataset.id;
+      S.luView = S.luView || {};
+      S.luView[id] = el.dataset.view === 'list' ? 'list' : 'pitch';
+      const x = findMatch(id) || (S.results || []).find(z => z.id === String(id));
+      const box = document.getElementById('lineup-box-' + id);
+      const L = S.lineupCache && S.lineupCache[id];
+      if (box && x) box.innerHTML = lineupHtml(x, L);
       return;
     }
     case 'vote': {
