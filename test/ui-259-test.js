@@ -14,13 +14,13 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=1\.9\.279/.test(ver));
-assert.ok(/VERSION_CODE=315/.test(ver));
-assert.ok(/jc-v1\.9\.279/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.279');
-assert.strictEqual(cfg.version, '1.9.279');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.279\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-315\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.280/.test(ver));
+assert.ok(/VERSION_CODE=316/.test(ver));
+assert.ok(/jc-v1\.9\.280/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.280');
+assert.strictEqual(cfg.version, '1.9.280');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.280\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-316\}"/.test(apkSh));
 
 assert.ok(/--match-mid-col:\s*120px/.test(css), 'shared center column token');
 
