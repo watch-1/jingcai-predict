@@ -3,6 +3,11 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const surface = require('../lib/sm-surface');
+const names = require('../lib/league-tables');
+assert.strictEqual(names.playerZh('Julián Alvarez'), '阿尔瓦雷斯');
+assert.strictEqual(names.teamZh('Atlético de Madrid'), '马竞');
+assert.strictEqual(names.teamZh('FC Bayern München'), '拜仁慕尼黑');
+assert.strictEqual(require('../lib/squad-source').reasonZh('Hamstring Injury'), '腿筋');
 
 const fx = (id, teamId, opp, shots, rating) => ({
   id,
@@ -40,6 +45,7 @@ const fx = (id, teamId, opp, shots, rating) => ({
 const players = surface.aggregatePlayers([fx(1, 10, 99, 12, 7.4), fx(2, 10, 98, 8, 7.0)], 10);
 assert.strictEqual(players.length, 1);
 assert.strictEqual(players[0].name, 'Griezmann');
+assert.strictEqual(players[0].nameZh, '格列兹曼');
 assert.strictEqual(players[0].label, '近2场有数据');
 assert.strictEqual(players[0].goals, 2);
 assert.strictEqual(players[0].passPct, 80);
@@ -68,12 +74,18 @@ const live = surface.currentBars({
 assert.strictEqual(live.mode, '本场');
 assert.strictEqual(live.rows[0].home, 55);
 
-const html = surface.renderFormHtml({ players: { home: players, away: [] } });
-const barHtml = surface.renderBarsHtml({ bars });
+const html = surface.renderFormHtml({ players: { home: players, away: [] }, homeName: 'Atlético de Madrid', awayName: 'FC Bayern München' });
+const barHtml = surface.renderBarsHtml({ bars, homeName: 'Atlético de Madrid', awayName: 'FC Bayern München' });
 assert.ok(html.includes('ps-row'));
+assert.ok(html.includes('格列兹曼'));
+assert.ok(html.includes('进/助'));
+assert.ok(!html.includes('Griezmann'));
+assert.ok(!html.includes('G/A'));
 assert.ok(html.includes('/api/logo?url='));
 assert.ok(html.includes('近2场有数据'));
 assert.ok(barHtml.includes('控球率'));
+assert.ok(html.includes('马竞'));
+assert.ok(barHtml.includes('拜仁慕尼黑'));
 assert.ok(barHtml.includes('stat-row'));
 assert.ok(!/触发：|要点覆盖|Pipeline|近况积分/.test(html + barHtml));
 assert.ok(surface.renderBarsHtml({ bars: { rows: [] }, barNote: '近期完场没有这项统计。' }).includes('没有这项统计'));

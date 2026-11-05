@@ -3233,6 +3233,11 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .sm-kit .ps-rating.mid { background: #7b8cff; }
 .sm-kit .ps-rating.lo { background: #6b6e85; color: #fff; }
 .sm-kit .ps-ga { margin-top: 3px; text-align: right; }
+.sm-kit .yi { background: rgba(255,255,255,.16); color: #f2d48a; }
+.sm-kit .sm-legend { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 11px; color: #c5cae0; font-weight: 700; }
+.sm-kit .sm-legend i { width: 10px; height: 6px; border-radius: 3px; display: inline-block; }
+.sm-kit .sm-legend i.h { background: #7b8cff; }
+.sm-kit .sm-legend i.a { background: #ff4d6d; }
 .sm-kit .stat-row { display: grid; grid-template-columns: 42px 1fr 42px; gap: 8px; align-items: center; margin: 0 0 10px; }
 .sm-kit .stat-row .num { font-size: 12px; font-weight: 800; color: #fff; }
 .sm-kit .stat-row .num.right { text-align: right; }
