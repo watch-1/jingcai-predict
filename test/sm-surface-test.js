@@ -87,6 +87,27 @@ assert.ok(barHtml.includes('控球率'));
 assert.ok(html.includes('马竞'));
 assert.ok(barHtml.includes('拜仁慕尼黑'));
 assert.ok(barHtml.includes('stat-row'));
+assert.ok(barHtml.includes('sm-ring'));
+const growth = surface.growthPack({
+  statistics: [
+    { type_id: 580, participant_id: 10, data: { value: 2 }, location: 'home' },
+    { type_id: 580, participant_id: 20, data: { value: 4 }, location: 'away' },
+    { type_id: 49, participant_id: 10, data: { value: 6 }, location: 'home' },
+    { type_id: 49, participant_id: 20, data: { value: 10 }, location: 'away' },
+  ],
+}, [], [], 10, 20, '本场');
+assert.strictEqual(growth.rows.find(r => r.label === '绝佳机会创造').home, 2);
+assert.ok(surface.renderGrowthHtml({ growth }).includes('禁区内射门'));
+assert.ok(surface.renderLiveHtml({ livePlayers: { home: [], away: [] } }).includes('不是定位热力图'));
+const appSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8');
+assert.ok(appSrc.includes("['live', '实时']"));
+const dataFn = appSrc.slice(appSrc.indexOf('function dataTabHtml'), appSrc.indexOf('function liveTabHtml'));
+const liveFn = appSrc.slice(appSrc.indexOf('function liveTabHtml'), appSrc.indexOf('function matchHero'));
+assert.ok(dataFn.includes('sm-form-') && dataFn.includes('sm-bars-') && dataFn.includes('sm-growth-'));
+assert.ok(!dataFn.includes('livePitchHtml') && !dataFn.includes('processStatsCard'));
+assert.ok(liveFn.includes('livePitchHtml') && liveFn.includes('eventsTabHtml') && liveFn.includes('sm-live-'));
+assert.ok(appSrc.includes('function intelQuickLinks'));
+assert.ok(appSrc.includes('function processStatsCard'));
 assert.ok(!/触发：|要点覆盖|Pipeline|近况积分/.test(html + barHtml));
 assert.ok(surface.renderBarsHtml({ bars: { rows: [] }, barNote: '近期完场没有这项统计。' }).includes('没有这项统计'));
 

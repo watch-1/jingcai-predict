@@ -2365,7 +2365,7 @@ function back() {
     }
   } else { NAV.length = 0; go('#/home', true); navNote('#/home'); }
 }
-window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || (detailTabOf(route().arg) !== 'data' && detailTabOf(route().arg) !== 'events')) stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'events') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); if (route().name !== 'home') { stopHomeFocusRotate(); stopHomeLiveScorePoll(); } render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); if (route().name !== 'home') { stopHomeFocusRotate(); stopHomeLiveScorePoll(); } render(); window.scrollTo(0, 0); });
 // Android back button hook (MainActivity calls this): returns 1 if handled in-page, 0 to exit the app
 window.__appBack = () => {
   if (!$('#dialog').classList.contains('hidden')) { $('#dialog').querySelector('[data-r="0"]').click(); return 1; }
@@ -7203,8 +7203,7 @@ function lineupHtml(x, L) {
 }
 function squadSectionHtml(x) {
   const L = S.lineupCache && S.lineupCache[x.id];
-  return '<div class="dsec lineup-sec"><h3>本场阵容 <small>首发 · 阵型 · 替补</small></h3><div id="lineup-box-' + esc(x.id) + '">' + lineupHtml(x, L) + '</div></div>'
-    + '<div id="sm-form-' + esc(x.id) + '" class="sm-slot"><p class="note">正在整理双方近况上场数据…</p></div>';
+  return '<div class="dsec lineup-sec"><h3>本场阵容 <small>首发 · 阵型 · 替补</small></h3><div id="lineup-box-' + esc(x.id) + '">' + lineupHtml(x, L) + '</div></div>';
 }
 async function ensureLineup(x) {
   S.lineupCache = S.lineupCache || {};
@@ -7223,7 +7222,6 @@ async function ensureLineup(x) {
 async function ensureSquad(x) {
   if (!x) return;
   ensureLineup(x);
-  ensureSmSurface(x);
 }
 async function ensureSmSurface(x) {
   if (!x || !x.id) return;
@@ -7247,14 +7245,20 @@ async function ensureSmSurface(x) {
 function paintSmSurface(id, pack) {
   const form = document.getElementById('sm-form-' + id);
   const bars = document.getElementById('sm-bars-' + id);
+  const growth = document.getElementById('sm-growth-' + id);
+  const liveBox = document.getElementById('sm-live-' + id);
   if (!pack || pack.ok === false) {
     const note = '<p class="note">近况数据暂时没有。</p>';
     if (form) form.innerHTML = note;
     if (bars) bars.innerHTML = note;
+    if (growth) growth.innerHTML = note;
+    if (liveBox) liveBox.innerHTML = note;
     return;
   }
   if (form && pack.formHtml) form.innerHTML = pack.formHtml;
   if (bars && pack.barsHtml) bars.innerHTML = pack.barsHtml;
+  if (growth && pack.growthHtml) growth.innerHTML = pack.growthHtml;
+  if (liveBox && pack.liveHtml) liveBox.innerHTML = pack.liveHtml;
 }
 async function enrichSquadZh(x, key, teamId, teamName) {
   try {
@@ -7319,7 +7323,7 @@ async function fillPlayer(id) {
 
 // ----- match detail tabs: 情报 / 数据 / 阵容 / 预测 -----
 // 1.9.107: chat merged under events tab
-const DETAIL_TABS_BASE = [['attitude', '态度'], ['intel', '情报'], ['odds', '赔率'], ['data', '数据'], ['events', '事件'], ['squad', '阵容'], ['pred', '预测']];
+const DETAIL_TABS_BASE = [['attitude', '态度'], ['intel', '情报'], ['odds', '赔率'], ['data', '数据'], ['live', '实时'], ['squad', '阵容'], ['pred', '预测']];
 function isMatchFinished(x) {
   if (!x) return false;
   if (x._t === 'r' || x.full) return true;
@@ -7354,16 +7358,18 @@ function detailTabsFor(x) {
 function detailTabOf(id) {
   S.detailTab = S.detailTab || {};
   let t = S.detailTab[id] || 'attitude';
-  // 1.9.107: legacy chat tab / deep-link -> events + scroll to chat
-  if (t === 'chat') {
-    S.detailTab[id] = 'events';
-    S.scrollToChat = S.scrollToChat || {};
-    S.scrollToChat[id] = true;
-    t = 'events';
+  // legacy chat / 事件 deep-link -> 实时
+  if (t === 'chat' || t === 'events') {
+    if (t === 'chat') {
+      S.scrollToChat = S.scrollToChat || {};
+      S.scrollToChat[id] = true;
+    }
+    S.detailTab[id] = 'live';
+    t = 'live';
   }
   return t;
 }
-function isEventsTab(id) { return detailTabOf(id) === 'events'; }
+function isEventsTab(id) { return detailTabOf(id) === 'live'; }
 function maybeScrollToChat(id) {
   if (!(S.scrollToChat && S.scrollToChat[id])) return;
   S.scrollToChat[id] = false;
@@ -9034,7 +9040,7 @@ function patchEventsTabIfVisible(x) {
   if (!x) return;
   const id = String(x.id || '');
   if (route().name !== 'match' || String(route().arg) !== id) return;
-  if (detailTabOf(id) !== 'events') return;
+  if (detailTabOf(id) !== 'live') return;
   const live = (S.liveStatsCache && S.liveStatsCache[id]) || null;
   const pane = document.getElementById('detail-pane-' + id);
   if (!pane) return;
@@ -9063,7 +9069,7 @@ function scheduleLiveStatsRecover(x, key) {
     try { await loadLiveStats(x, { force: true }); } catch (_) {}
     const live = S.liveStatsCache && S.liveStatsCache[key];
     patchEventsTabIfVisible(x);
-    if (detailTabOf(x.id) === 'data') renderLivePitch(x);
+    if (detailTabOf(x.id) === 'live') renderLivePitch(x);
     if (liveStatsNeedsRecover(live, x)) scheduleLiveStatsRecover(x, key);
   }, delay);
   S._liveEvRetry[key] = { n, timer };
@@ -9141,12 +9147,12 @@ function ensureLivePoll(x) {
     if (document.hidden) return;
     if (route().name !== 'match' || String(route().arg) !== String(x.id)) return stopLivePoll();
     const tabNow = detailTabOf(x.id);
-    if (tabNow !== 'data' && tabNow !== 'events') return stopLivePoll();
+    if (tabNow !== 'live') return stopLivePoll();
     const hadReview = detailTabsFor(x).some(t => t[0] === 'review');
     await loadLiveStats(x, { force: true });
-    if (route().name === 'match' && String(route().arg) === String(x.id) && (detailTabOf(x.id) === 'data' || detailTabOf(x.id) === 'events')) {
-      if (detailTabOf(x.id) === 'events') patchEventsTabIfVisible(x);
-      else renderLivePitch(x);
+    if (route().name === 'match' && String(route().arg) === String(x.id) && detailTabOf(x.id) === 'live') {
+      patchEventsTabIfVisible(x);
+      renderLivePitch(x);
       if (!hadReview && detailTabsFor(x).some(t => t[0] === 'review')) refreshDetailTabs(x);
       const again = S.liveStatsCache[key];
       if (again && again.ok && !again.live && !liveStatsNeedsEventsRetry(again, x)) stopLivePoll();
@@ -9536,22 +9542,17 @@ function fixturePlayersHtml(x) {
   return h;
 }
 
-function dataTabHtml(x, m, stats) {
-  const key = String(x.id || '');
-  const live = (S.liveStatsCache && S.liveStatsCache[key]) || null;
-  const ui = statsUiOf(x.id);
-  let h = `<div id="sm-bars-${esc(key)}" class="sm-slot"><p class="note">正在整理控球、射门和角球…</p></div>`;
-  h += livePitchHtml(x, live);
-  // 1.9.58: 本场球员 moved to 赛后复盘 tab
-  if (m) h += oddsCompareBlock(m);
-  h += `<div class="ana-card"><div class="ana-hd"><h3>近期战绩</h3><small>摘要 · 完整筛选见「情报」</small></div>
-    ${formStrip(stats && stats.homeForm, x.home, { teamId: x.homeTeamId, venue: 'all', n: 5, compact: true })}
-    ${formStrip(stats && stats.awayForm, x.away, { teamId: x.awayTeamId, venue: 'all', n: 5, compact: true })}
-    <p class="note" style="margin:8px 0 0">${esc((stats && stats.noteZh) || '以上为历史赛果推导。')} 可到「情报」切换近10场或主/客场。</p></div>`;
-  h += processStatsCard(x, stats);
-  h += h2hBlock(stats && stats.h2h, x.home, x.away, { n: ui.h2hN, matchId: x.id, h2hSource: stats && stats.h2hSource });
-  h += nextFixturesCard(x);
-  return h;
+function dataTabHtml(x) {
+  const key = esc(String(x.id || ''));
+  return `<div id="sm-form-${key}" class="sm-slot"><p class="note">正在整理球员近况…</p></div>`
+    + `<div id="sm-bars-${key}" class="sm-slot"><p class="note">正在整理球队统计…</p></div>`
+    + `<div id="sm-growth-${key}" class="sm-slot"></div>`;
+}
+function liveTabHtml(x, live) {
+  const key = esc(String(x.id || ''));
+  return livePitchHtml(x, live)
+    + `<div id="sm-live-${key}" class="sm-slot"><p class="note">正在整理本场球员数据…</p></div>`
+    + eventsTabHtml(x, live);
 }
 function matchHero(x, m, r, { favBtn = '' } = {}) {
   const started = !!(m && Date.now() > kickoff(m)) || !!(x && Date.now() > kickoff(x));
@@ -9755,8 +9756,8 @@ function detailPaneInnerHtml(x, tab) {
   if (tab === 'attitude') h = matchAttitudeTabHtml(x);
   else if (tab === 'intel') h = intelTabHtml(x, m, stats);
   else if (tab === 'odds') h = oddsTabHtml(x, oddsSnapCache()[String(x.id) + '|' + (x.date || '')]);
-  else if (tab === 'data') h = dataTabHtml(x, m, stats);
-  else if (tab === 'events') h = eventsTabHtml(x, (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null);
+  else if (tab === 'data') h = dataTabHtml(x);
+  else if (tab === 'live') h = liveTabHtml(x, (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null);
   else if (tab === 'squad') h = squadSectionHtml(x);
   else if (tab === 'review') h = reviewTabHtml(x);
   else h = predTabHtml(m || null);
@@ -9891,8 +9892,8 @@ function ensureMatchStatusPoll(x) {
 async function enrichMatchDetail(x) {
   if (!x) return;
   const tab = detailTabOf(x.id);
-  if (tab !== 'data' && tab !== 'events') stopLivePoll();
-  if (tab !== 'events') stopChatPoll();
+  if (tab !== 'live') stopLivePoll();
+  if (tab !== 'live') stopChatPoll();
   if (route().name !== 'match') stopMatchStatusPoll();
   // 1.9.107: prefetch lineup when match detail opens so squad tab paints from cache
   try { ensureLineup(x); } catch (_) {}
@@ -9956,13 +9957,13 @@ async function enrichMatchDetail(x) {
       if (pane) pane.innerHTML = reviewTabHtml(x);
     }
   }
-  if (tab === 'intel' || tab === 'data' || tab === 'events') {
+  if (tab === 'intel' || tab === 'data' || tab === 'live') {
     const tasks = [];
-    if (tab === 'intel' || tab === 'data') tasks.push(loadMatchStats(x));
+    if (tab === 'intel') tasks.push(loadMatchStats(x));
     if (tab === 'intel') tasks.push(loadPredictReport(findMatch(x.id) || x));
-    // live-stats already warmed above when kickedOff; still refresh on data/events
-    if (tab === 'data' || tab === 'events') tasks.push(loadLiveStats(x, { force: tab === 'events' }));
-    if (tab === 'events') {
+    if (tab === 'data' || tab === 'live') tasks.push(ensureSmSurface(x));
+    if (tab === 'live') tasks.push(loadLiveStats(x, { force: true }));
+    if (tab === 'live') {
       tasks.push(loadChat(String(x.id)));
       tasks.push(loadAiChatHistory(String(x.id)).then(() => loadAiChatQuota(String(x.id))));
     }
@@ -9977,14 +9978,15 @@ async function enrichMatchDetail(x) {
         const m = findMatch(x.id);
         if (tab === 'intel') { pane.innerHTML = intelTabHtml(x, m, stats); loadVote(x.id); }
         else if (tab === 'data') {
-          pane.innerHTML = dataTabHtml(x, m, stats);
-          ensureLivePoll(x);
+          pane.innerHTML = dataTabHtml(x);
           const sm = S.smSurface && S.smSurface[String(x.id)];
           if (sm) paintSmSurface(String(x.id), sm);
         }
-        else if (tab === 'events') {
+        else if (tab === 'live') {
           const live = (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null;
-          pane.innerHTML = eventsTabHtml(x, live);
+          pane.innerHTML = liveTabHtml(x, live);
+          const sm = S.smSurface && S.smSurface[String(x.id)];
+          if (sm) paintSmSurface(String(x.id), sm);
           ensureLivePoll(x);
           ensureChatPoll(x);
           renderAiChatList(String(x.id));
@@ -13100,10 +13102,12 @@ document.addEventListener('click', async e => {
       const id = el.dataset.id;
       let tab = el.dataset.tab;
       S.detailTab = S.detailTab || {};
-      if (tab === 'chat') {
-        tab = 'events';
-        S.scrollToChat = S.scrollToChat || {};
-        S.scrollToChat[id] = true;
+      if (tab === 'chat' || tab === 'events') {
+        if (tab === 'chat') {
+          S.scrollToChat = S.scrollToChat || {};
+          S.scrollToChat[id] = true;
+        }
+        tab = 'live';
       }
       S.detailTab[id] = tab;
       // 1.9.129: soft-patch pane/tabs — avoid full view paint-hold navy flash

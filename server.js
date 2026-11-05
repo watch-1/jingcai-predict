@@ -1410,6 +1410,8 @@ app.get('/api/sm-surface', async (req, res) => {
       ok: true,
       formHtml: surface.renderFormHtml(pack),
       barsHtml: surface.renderBarsHtml(pack),
+      growthHtml: surface.renderGrowthHtml(pack),
+      liveHtml: surface.renderLiveHtml(pack),
       reason: pack.reason || '',
     });
   } catch (e) {
