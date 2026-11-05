@@ -133,6 +133,8 @@ const html = surface.renderPredictSurface({
     hhad: { h: 1.9, d: 3.4, a: 3.6, goalLine: '-1' },
   },
 });
+assert.ok(html.includes('伤停 / 核心'));
+assert.ok(html.includes('伤停和近况核心暂时没有'));
 assert.ok(html.includes('胜平负 · 模型概率'));
 assert.ok(html.includes('pr-1x2'));
 assert.ok(html.includes('pr-value-table'));
@@ -164,6 +166,44 @@ const reportHtml = pr._renderHtml(
 );
 assert.ok(/额外表态/.test(reportHtml));
 assert.ok(!/近况积分|触发：|pr-reasons|要点覆盖/.test(reportHtml));
+const sq = require('../lib/squad-source');
+const coreRows = sq.scoreCores([{
+  lineups: [{
+    team_id: 10,
+    player_id: 1,
+    player_name: 'Goncalo Oliveira',
+    player: { image_path: 'https://img.example/g.png' },
+    details: [
+      { type_id: 118, data: { value: 7.6 } },
+      { type_id: 52, data: { value: 2 } },
+      { type_id: 79, data: { value: 1 } },
+    ],
+  }],
+}], 10);
+assert.strictEqual(coreRows[0].name, 'Goncalo Oliveira');
+assert.ok(coreRows[0].avg_rating >= 7);
+const marked = sq.markCore(sq.mapSidelined([
+  { participant_id: 10, player_id: 1, player: { display_name: 'Goncalo Oliveira', image_path: 'https://img.example/g.png' }, type: { name: 'Unknown Injury' } },
+  { participant_id: 20, player_id: 9, player: { display_name: 'Other' }, type: { name: 'Knock' } },
+], 10, 20), { home: coreRows, away: [] });
+assert.strictEqual(marked[0].core, true);
+assert.strictEqual(marked[0].reason, '伤病');
+assert.strictEqual(marked[1].core, false);
+const rich = surface.renderPredictSurface({
+  home: '雷恩',
+  away: '奥林匹亚科斯',
+  concl: { lean: 'a', pickText: '客胜', conf: 0.7, speakMode: 'amplify', _speakResolved: true },
+  squad: { available: true, sidelined: marked, cores: { home: coreRows, away: [] } },
+  oddsEdge: { exp: { expH: 0.9, expA: 1.6 }, over25: 0.48 },
+  market: { p: { h: 0.2, d: 0.24, a: 0.56 }, had: { h: 4.5, d: 3.4, a: 1.7 } },
+  heat: { available: false, checked: true, note: '近期完场没有落点，画不出攻防路线。' },
+});
+assert.ok(rich.includes('pr-side core'));
+assert.ok(rich.includes('pr-core-card'));
+assert.ok(rich.includes('评分'));
+assert.ok(rich.includes('主队近况核心'));
+assert.ok(!/触发：|要点覆盖|Pipeline|近况积分/.test(rich));
+
 assert.ok(/没有落点/.test(reportHtml));
 assert.ok(/胜平负 · 模型概率/.test(reportHtml));
 assert.ok(/pr-value-table/.test(reportHtml));
@@ -226,6 +266,34 @@ assert.ok(!/要点覆盖|Pipeline|触发：/.test(reportHtml));
   });
   assert.strictEqual(again.fixtures.length, 1);
   assert.ok(calls >= 2);
+  const squadPack = await sq.ensureSquad({
+    matchId: 'm-ren-oly',
+    homeTeamId: 'h',
+    awayTeamId: 'a',
+    homeZh: '雷恩',
+    awayZh: '奥林匹亚科斯',
+    homeSmId: 10,
+    awaySmId: 20,
+    homeFixtureIds: [7],
+    kickoffMs: Date.parse('2026-11-04T15:30:00Z'),
+    now: Date.parse('2026-11-05T00:00:00Z'),
+    fetchImpl: async (urlPath) => {
+      const u = String(urlPath);
+      if (u.includes('/fixtures/between/')) {
+        return { data: [{ id: 99, participants: [{ id: 10 }, { id: 20 }] }] };
+      }
+      if (u.includes('/fixtures/99')) {
+        return { data: { sidelined: [{ participant_id: 10, player_id: 1, player: { display_name: 'Goncalo Oliveira' }, type: { name: 'Unknown Injury' } }] } };
+      }
+      if (u.includes('/fixtures/7')) {
+        return { data: { lineups: [{ team_id: 10, player_id: 1, player_name: 'Goncalo Oliveira', details: [{ type_id: 118, data: { value: 7.4 } }, { type_id: 52, data: { value: 1 } }] }] } };
+      }
+      throw new Error(u);
+    },
+  });
+  assert.strictEqual(squadPack.available, true);
+  assert.strictEqual(squadPack.sidelined[0].core, true);
+  assert.ok(squadPack.cores.home[0].avg_rating >= 7);
   if (prev == null) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = prev;
   console.log('strength-calib-test OK');

@@ -12,13 +12,13 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=1\.9\.276/.test(ver));
-assert.ok(/VERSION_CODE=312/.test(ver));
-assert.ok(/jc-v1\.9\.276/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.276');
-assert.strictEqual(cfg.version, '1.9.276');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.276\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-312\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.277/.test(ver));
+assert.ok(/VERSION_CODE=313/.test(ver));
+assert.ok(/jc-v1\.9\.277/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.277');
+assert.strictEqual(cfg.version, '1.9.277');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.277\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-313\}"/.test(apkSh));
 
 // Empty calculator must not skip completeMatches / schedule salvage
 assert.ok(

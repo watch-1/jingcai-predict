@@ -8388,7 +8388,7 @@ function predTabHtml(m) {
   let h = '';
   // 1.9.127: slim cache (ok, no html) → still loading, not 「未知」
   if (!rep || (rep.ok && !rep.html)) {
-    h += `<div class="dsec reason"><h3>赛前预测</h3><div class="spinner"></div><p class="note">正在整理胜平负、让球对照、大小球和攻防热区…</p></div>`;
+    h += `<div class="dsec reason"><h3>赛前预测</h3><div class="spinner"></div><p class="note">正在整理胜平负、让球对照、大小球、伤停和攻防热区…</p></div>`;
   } else if (predictReportFull(rep)) {
     h += `<div class="dsec reason pr-report">${productizePredictHtml(rep.html)}</div>`;
     h += `<div class="pr-src-bar"><span>更新于 ${esc(rep.generatedAtLocal || '')}</span>

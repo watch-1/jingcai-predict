@@ -21,19 +21,19 @@ const styles31 = fs.readFileSync(path.join(root, 'android/res/values-v31/styles.
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const main = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.276/.test(ver));
-assert.ok(/VERSION_CODE=312/.test(ver));
-assert.ok(/jc-v1\.9\.276/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.276');
-assert.strictEqual(cfg.version, '1.9.276');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.276\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-312\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.277/.test(ver));
+assert.ok(/VERSION_CODE=313/.test(ver));
+assert.ok(/jc-v1\.9\.277/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.277');
+assert.strictEqual(cfg.version, '1.9.277');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.277\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-313\}"/.test(apkSh));
 assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.272.md')));
 
 // package id unchanged
 assert.ok(/package="com\.tiicai\.jingcai"/.test(androidManifest), 'package id unchanged');
-assert.ok(/android:versionCode="312"/.test(androidManifest));
-assert.ok(/android:versionName="1\.9\.276"/.test(androidManifest));
+assert.ok(/android:versionCode="313"/.test(androidManifest));
+assert.ok(/android:versionName="1\.9\.277"/.test(androidManifest));
 
 // 1) display name 云球迷
 assert.ok(/<string name="app_name">云球迷<\/string>/.test(strings), 'Android label 云球迷');
