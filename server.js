@@ -1391,6 +1391,32 @@ app.get('/api/lineup', async (req, res) => {
   }
 });
 
+app.get('/api/sm-surface', async (req, res) => {
+  try {
+    const q = req.query || {};
+    const matchId = String(q.matchId || '').trim();
+    if (!matchId) return res.status(400).json({ ok: false, error: '缺少比赛' });
+    const kickoffMs = Date.parse(`${q.date || ''}T${String(q.time || '00:00').slice(0, 5)}:00+08:00`);
+    const pack = await require('./lib/sm-surface').ensureSurface({
+      matchId,
+      homeTeamId: q.homeTeamId,
+      awayTeamId: q.awayTeamId,
+      homeZh: q.home,
+      awayZh: q.away,
+      kickoffMs: Number.isFinite(kickoffMs) ? kickoffMs : Date.now(),
+    });
+    const surface = require('./lib/sm-surface');
+    res.json({
+      ok: true,
+      formHtml: surface.renderFormHtml(pack),
+      barsHtml: surface.renderBarsHtml(pack),
+      reason: pack.reason || '',
+    });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: '近况数据暂时不可用' });
+  }
+});
+
 app.get('/api/player', async (req, res) => {
   try {
     const id = String(req.query.id || '').trim();

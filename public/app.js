@@ -7203,7 +7203,8 @@ function lineupHtml(x, L) {
 }
 function squadSectionHtml(x) {
   const L = S.lineupCache && S.lineupCache[x.id];
-  return '<div class="dsec lineup-sec"><h3>本场阵容 <small>首发 · 阵型 · 替补</small></h3><div id="lineup-box-' + esc(x.id) + '">' + lineupHtml(x, L) + '</div></div>';
+  return '<div class="dsec lineup-sec"><h3>本场阵容 <small>首发 · 阵型 · 替补</small></h3><div id="lineup-box-' + esc(x.id) + '">' + lineupHtml(x, L) + '</div></div>'
+    + '<div id="sm-form-' + esc(x.id) + '" class="sm-slot"><p class="note">正在整理双方近况上场数据…</p></div>';
 }
 async function ensureLineup(x) {
   S.lineupCache = S.lineupCache || {};
@@ -7222,6 +7223,38 @@ async function ensureLineup(x) {
 async function ensureSquad(x) {
   if (!x) return;
   ensureLineup(x);
+  ensureSmSurface(x);
+}
+async function ensureSmSurface(x) {
+  if (!x || !x.id) return;
+  S.smSurface = S.smSurface || {};
+  const key = String(x.id);
+  const hit = S.smSurface[key];
+  if (hit && hit._at && Date.now() - hit._at < 10 * 60 * 1000) {
+    paintSmSurface(key, hit);
+    return;
+  }
+  const q = ['matchId=' + encodeURIComponent(key), 'date=' + encodeURIComponent(x.date || ''), 'time=' + encodeURIComponent(x.time || ''),
+    'homeTeamId=' + encodeURIComponent(x.homeTeamId || ''), 'awayTeamId=' + encodeURIComponent(x.awayTeamId || ''),
+    'home=' + encodeURIComponent(x.home || ''), 'away=' + encodeURIComponent(x.away || '')];
+  let pack;
+  try { pack = await api('/sm-surface?' + q.join('&'), { timeout: 60000 }); }
+  catch (e) { pack = { ok: false, error: e.message || '加载失败' }; }
+  pack._at = Date.now();
+  S.smSurface[key] = pack;
+  paintSmSurface(key, pack);
+}
+function paintSmSurface(id, pack) {
+  const form = document.getElementById('sm-form-' + id);
+  const bars = document.getElementById('sm-bars-' + id);
+  if (!pack || pack.ok === false) {
+    const note = '<p class="note">近况数据暂时没有。</p>';
+    if (form) form.innerHTML = note;
+    if (bars) bars.innerHTML = note;
+    return;
+  }
+  if (form && pack.formHtml) form.innerHTML = pack.formHtml;
+  if (bars && pack.barsHtml) bars.innerHTML = pack.barsHtml;
 }
 async function enrichSquadZh(x, key, teamId, teamName) {
   try {
@@ -9507,7 +9540,8 @@ function dataTabHtml(x, m, stats) {
   const key = String(x.id || '');
   const live = (S.liveStatsCache && S.liveStatsCache[key]) || null;
   const ui = statsUiOf(x.id);
-  let h = livePitchHtml(x, live);
+  let h = `<div id="sm-bars-${esc(key)}" class="sm-slot"><p class="note">正在整理控球、射门和角球…</p></div>`;
+  h += livePitchHtml(x, live);
   // 1.9.58: 本场球员 moved to 赛后复盘 tab
   if (m) h += oddsCompareBlock(m);
   h += `<div class="ana-card"><div class="ana-hd"><h3>近期战绩</h3><small>摘要 · 完整筛选见「情报」</small></div>
@@ -9862,6 +9896,7 @@ async function enrichMatchDetail(x) {
   if (route().name !== 'match') stopMatchStatusPoll();
   // 1.9.107: prefetch lineup when match detail opens so squad tab paints from cache
   try { ensureLineup(x); } catch (_) {}
+  try { ensureSmSurface(x); } catch (_) {}
 
   // Bug 2: after kickoff, always warm live-stats so FT → 赛后复盘 tab without switching tabs
   const ko = matchKickoffMs(x);
@@ -9941,7 +9976,12 @@ async function enrichMatchDetail(x) {
         const stats = S.statsCache[String(x.homeTeamId || '') + '|' + String(x.awayTeamId || '')];
         const m = findMatch(x.id);
         if (tab === 'intel') { pane.innerHTML = intelTabHtml(x, m, stats); loadVote(x.id); }
-        else if (tab === 'data') { pane.innerHTML = dataTabHtml(x, m, stats); ensureLivePoll(x); }
+        else if (tab === 'data') {
+          pane.innerHTML = dataTabHtml(x, m, stats);
+          ensureLivePoll(x);
+          const sm = S.smSurface && S.smSurface[String(x.id)];
+          if (sm) paintSmSurface(String(x.id), sm);
+        }
         else if (tab === 'events') {
           const live = (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null;
           pane.innerHTML = eventsTabHtml(x, live);
@@ -13035,6 +13075,14 @@ document.addEventListener('click', async e => {
       return;
     }
     case 'modelCheck': { e.stopPropagation && e.stopPropagation(); return openModelCheck(); }
+    case 'smFormSide': {
+      const box = el.closest('.sm-form');
+      if (!box) return;
+      const side = el.dataset.side || 'home';
+      box.querySelectorAll('[data-act="smFormSide"]').forEach(b => b.classList.toggle('on', b.dataset.side === side));
+      box.querySelectorAll('.sm-form-list').forEach(n => { n.hidden = n.getAttribute('data-for') !== side; });
+      return;
+    }
     case 'refreshPredict': {
       const id = String(el.dataset.id || '');
       const m = findMatch(id);

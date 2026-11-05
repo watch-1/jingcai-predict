@@ -3191,6 +3191,62 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
   margin: 0; padding: 8px 10px; border-radius: 12px;
   background: #f4f6f8; color: #64748b; font-size: 11px; line-height: 1.45;
 }
+/* 1.9.280: kit player form cards + match-centre stat bars */
+.sm-slot { margin: 10px 12px 0; }
+.sm-kit {
+  background: #14182a; color: #f2f3f8; border-radius: 16px;
+  padding: 12px; border: 1px solid rgba(255,255,255,.06);
+}
+.sm-kit h3 { margin: 0; font-size: 15px; font-weight: 800; color: #fff; }
+.sm-kit-hd { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+.sm-kit-hd small, .sm-kit .sm-empty { color: #8b93b8; font-size: 11px; line-height: 1.45; }
+.sm-kit .sm-empty { margin: 8px 0 0; }
+.sm-switch { display: flex; gap: 6px; margin-bottom: 8px; }
+.sm-switch button {
+  flex: 1; height: 32px; border-radius: 8px; background: rgba(255,255,255,.06);
+  color: #c5cae0; font-size: 12px; font-weight: 800;
+}
+.sm-switch button.on { background: #fff; color: #14182a; }
+.sm-form-list[hidden] { display: none !important; }
+.sm-kit .ps-row {
+  display: grid; grid-template-columns: 32px 28px 1fr auto; gap: 8px; align-items: center;
+  padding: 8px; margin-bottom: 6px; border-radius: 12px;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06);
+}
+.sm-kit .ps-row .av { position: relative; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background: #2a3148; }
+.sm-kit .ps-row .av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.sm-kit .ps-row .av i { display: grid; place-items: center; width: 100%; height: 100%; font-style: normal; font-size: 12px; font-weight: 800; color: #c5cae0; }
+.sm-kit .ps-row .av:has(img) i { display: none; }
+.sm-kit .ps-row .num {
+  width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: rgba(255,255,255,.06); font-size: 11px; font-weight: 800; color: #c5cae0;
+}
+.sm-kit .ps-row .nm { font-size: 13px; font-weight: 800; }
+.sm-kit .ps-row .sub, .sm-kit .ps-ga, .sm-kit .ps-chips-mini { font-size: 10px; color: #8b93b8; }
+.sm-kit .ps-chips-mini { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.sm-kit .ps-chips-mini span { padding: 1px 5px; border-radius: 6px; background: rgba(123,140,255,.15); color: #c5cdf8; }
+.sm-kit .ps-rating {
+  display: inline-block; min-width: 36px; padding: 3px 6px; border-radius: 7px;
+  font-size: 12px; font-weight: 900; text-align: center; color: #0b0c16; background: #7b8cff;
+}
+.sm-kit .ps-rating.hi { background: #12d18e; }
+.sm-kit .ps-rating.mid { background: #7b8cff; }
+.sm-kit .ps-rating.lo { background: #6b6e85; color: #fff; }
+.sm-kit .ps-ga { margin-top: 3px; text-align: right; }
+.sm-kit .yi { background: rgba(255,255,255,.16); color: #f2d48a; }
+.sm-kit .sm-legend { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 11px; color: #c5cae0; font-weight: 700; }
+.sm-kit .sm-legend i { width: 10px; height: 6px; border-radius: 3px; display: inline-block; }
+.sm-kit .sm-legend i.h { background: #7b8cff; }
+.sm-kit .sm-legend i.a { background: #ff4d6d; }
+.sm-kit .stat-row { display: grid; grid-template-columns: 42px 1fr 42px; gap: 8px; align-items: center; margin: 0 0 10px; }
+.sm-kit .stat-row .num { font-size: 12px; font-weight: 800; color: #fff; }
+.sm-kit .stat-row .num.right { text-align: right; }
+.sm-kit .stat-mid .label { text-align: center; font-size: 10px; color: #8b93b8; margin-bottom: 4px; font-weight: 700; }
+.sm-kit .bars { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; height: 6px; }
+.sm-kit .bars .h, .sm-kit .bars .a { height: 100%; border-radius: 4px; background: #2a2c42; overflow: hidden; }
+.sm-kit .bars .h > i, .sm-kit .bars .a > i { display: block; height: 100%; background: #7b8cff; }
+.sm-kit .bars .a { direction: rtl; }
+.sm-kit .bars .a > i { background: #ff4d6d; }
 .pr-disclaimer { margin: 0; padding: 10px 14px 14px; font-size: 12px; line-height: 1.55; color: var(--t3); }
 .pr-sec h4 {
   margin: 0 0 8px; font-size: 13.5px; font-weight: 700; color: var(--pri-d);
