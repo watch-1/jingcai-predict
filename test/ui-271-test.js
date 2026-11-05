@@ -17,17 +17,17 @@ const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const main = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
 
-assert.ok(/VERSION=1\.9\.275/.test(ver));
-assert.ok(/VERSION_CODE=311/.test(ver));
-assert.ok(/jc-v1\.9\.275/.test(swJs));
-assert.strictEqual(pkg.version, '1.9.275');
-assert.strictEqual(cfg.version, '1.9.275');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.275\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-311\}"/.test(apkSh));
+assert.ok(/VERSION=1\.9\.279/.test(ver));
+assert.ok(/VERSION_CODE=315/.test(ver));
+assert.ok(/jc-v1\.9\.279/.test(swJs));
+assert.strictEqual(pkg.version, '1.9.279');
+assert.strictEqual(cfg.version, '1.9.279');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-1\.9\.279\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-315\}"/.test(apkSh));
 assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.272.md')));
 assert.ok(/package="com\.tiicai\.jingcai"/.test(androidManifest), 'package id unchanged');
-assert.ok(/android:versionCode="311"/.test(androidManifest));
-assert.ok(/android:versionName="1\.9\.275"/.test(androidManifest));
+assert.ok(/android:versionCode="315"/.test(androidManifest));
+assert.ok(/android:versionName="1\.9\.279"/.test(androidManifest));
 
 // 1) fav star reserved column — time is not a sibling that space-between can shove inward
 const metaFn = appJs.match(/function matchCardMeta\([\s\S]*?^\}/m);
