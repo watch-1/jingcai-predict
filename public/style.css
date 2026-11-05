@@ -3035,6 +3035,30 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
   padding: 12px 14px; border-bottom: 1px solid var(--line);
 }
 .pr-sec:last-child { border-bottom: 0; }
+.pr-surface .pr-stance-pick { font-size: 18px; font-weight: 800; color: var(--pri-d, #1565e0); margin: 0 0 4px; }
+.pr-surface .pr-stance-pick b { font-size: 22px; }
+.pr-surface .pr-stance-conf { font-size: 13px; color: var(--t2); margin-bottom: 6px; }
+.pr-surface .pr-stance-note,
+.pr-surface .pr-mkt,
+.pr-surface .pr-vernacular,
+.pr-surface .pr-calib-line,
+.pr-surface .pr-had-edge,
+.pr-surface .pr-o25 { margin: 6px 0 0; font-size: 13.5px; line-height: 1.65; }
+.pr-surface .pr-calib-line { font-weight: 700; }
+.pr-surface .pr-rq { margin-top: 10px; display: grid; gap: 4px; }
+.pr-surface .pr-rq-hd { font-size: 12px; color: var(--t2); }
+.pr-surface .pr-rq-row { display: grid; grid-template-columns: 42px 1fr 1fr 42px; gap: 6px; align-items: baseline; font-size: 13px; }
+.pr-surface .pr-rq-row em { font-style: normal; font-weight: 700; text-align: right; }
+.pr-surface .pr-rq-row em.up { color: #c2410c; }
+.pr-surface .pr-rq-row em.down { color: #1d4f9c; }
+.pr-surface .pr-heat-hd { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 14px; }
+.pr-surface .pr-heat-caps { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--t2); }
+.pr-surface .pr-heat-caps i { width: 8px; height: 8px; border-radius: 99px; display: inline-block; }
+.pr-surface .pr-heat-caps i.a { background: #e23d3d; }
+.pr-surface .pr-heat-caps i.b { background: #2f6fe0; margin-left: 6px; }
+.pr-heat-svg { width: 100%; height: auto; display: block; border-radius: 12px; }
+.pr-heat-empty { padding: 18px 12px; border-radius: 12px; background: #eef3ea; color: #3d4a42; font-size: 13.5px; line-height: 1.6; }
+.pr-disclaimer { margin: 0; padding: 10px 14px 14px; font-size: 12px; line-height: 1.55; color: var(--t3); }
 .pr-sec h4 {
   margin: 0 0 8px; font-size: 13.5px; font-weight: 700; color: var(--pri-d);
   display: flex; align-items: baseline; gap: 8px;
