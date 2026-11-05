@@ -3113,6 +3113,14 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
   border-radius: 0;
   overflow: visible;
 }
+/* 1.9.279: the report shell is transparent, so it must not clip the first card's top radius */
+.dsec.reason.pr-report,
+.view.sub.md-wrap .detail-pane > .dsec.reason.pr-report {
+  overflow: visible !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
 .pr-surface { display: flex; flex-direction: column; gap: 8px; }
 .pr-surface .pr-brief-hd { display: none !important; }
 .pr-surface .pr-sec {
@@ -3120,8 +3128,13 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
   padding: 14px 12px;
   background: #fff;
   border: 1px solid #f0f2f5;
-  border-radius: 12px;
+  border-radius: 16px;
   box-shadow: none;
+  overflow: hidden;
+}
+.pr-surface > .pr-sec:first-of-type {
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
 }
 .pr-surface .pr-sec + .pr-sec { margin: 0; padding-top: 12px; border-top: 0; }
 .pr-surface h3 { font-size: 15px; font-weight: 700; letter-spacing: 0; color: #1c1c1e; }
