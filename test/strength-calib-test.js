@@ -1,0 +1,158 @@
+'use strict';
+const assert = require('assert');
+const sc = require('../lib/strength-calib');
+const heat = require('../lib/heat-pitch');
+const surface = require('../lib/predict-surface');
+const pr = require('../lib/predict-report');
+
+const games = [
+  { gf: 2, ga: 0, oppStr: 0.95, venue: 'home' },
+  { gf: 2, ga: 0, oppStr: 0.9, venue: 'home' },
+  { gf: 2, ga: 0, oppStr: 0.85, venue: 'away' },
+  { gf: 2, ga: 0, oppStr: 0.9, venue: 'away' },
+  { gf: 2, ga: 0, oppStr: 0.92, venue: 'home' },
+  { gf: 2, ga: 0, oppStr: 0.88, venue: 'away' },
+];
+
+const early = sc.calibrateSide(games, { early: true });
+const warm = sc.calibrateSide(games, { early: false });
+assert.strictEqual(early.rawGf, 2);
+assert.ok(early.shrink < warm.shrink, 'early season shrinks the strength weight');
+assert.ok(early.shrink <= sc.EARLY_SHRINK + 1e-9);
+assert.ok(Math.abs(early.adjGf - early.rawGf) < Math.abs(warm.adjGf - warm.rawGf));
+assert.ok(warm.adjGf > early.adjGf, 'warm adjustment moves further from raw');
+
+const thin = sc.calibrateSide(games.slice(0, 2), { early: false });
+assert.ok(thin.nOpp < 5);
+assert.ok(thin.shrink < 0.5);
+assert.ok(Math.abs(thin.adjGf - thin.rawGf) < Math.abs(warm.adjGf - warm.rawGf));
+
+const bothThinAndEarly = sc.calibrateSide(games.slice(0, 2), { early: true });
+assert.ok(bothThinAndEarly.shrink < thin.shrink);
+
+const hotTable = sc.blendOppStr({
+  early: true, prior: 0.2, tablePct: 0.95, eloPct: 0.9, eloGames: 10,
+});
+assert.strictEqual(hotTable.source, 'prior');
+assert.ok(hotTable.weightTable <= 0.1);
+assert.ok(hotTable.oppStr < 0.35, 'early table must not dominate a weak prior');
+assert.ok(Math.abs(hotTable.oppStr - (0.2 * 0.9 + 0.95 * 0.1)) < 1e-9);
+
+const noPrior = sc.blendOppStr({ early: true, prior: null, tablePct: 0.95, eloPct: 0.8, eloGames: 8 });
+assert.strictEqual(noPrior.oppStr, null, 'early season does not use the table alone');
+
+const warmed = sc.blendOppStr({ early: false, prior: 0.2, tablePct: 0.4, eloPct: 0.8, eloGames: 8 });
+assert.strictEqual(warmed.source, 'elo');
+assert.strictEqual(warmed.oppStr, 0.8);
+
+const strongGoal = sc.adjustContribution(1, 0, 1);
+const weakGoal = sc.adjustContribution(1, 0, 0);
+assert.ok(strongGoal.gf > weakGoal.gf);
+const concedeWeak = sc.adjustContribution(0, 1, 0);
+const concedeStrong = sc.adjustContribution(0, 1, 1);
+assert.ok(concedeWeak.ga > concedeStrong.ga);
+
+assert.strictEqual(sc.contextualOppStr(0.9, { sampleLeague: '西甲', focusLeague: '英超' }), null);
+const cup = sc.contextualOppStr(0.9, { sampleLeague: '欧冠', focusLeague: '英超' });
+assert.ok(cup < 0.9 && cup > 0.5);
+
+const draw = sc.eloFromResults([
+  { homeId: 'A', awayId: 'B', homeGoals: 1, awayGoals: 1 },
+], { homeEdge: 70 });
+assert.ok(draw.elo.get('A') < 1500, 'home draw is below a 70-point home edge');
+assert.ok(draw.elo.get('B') > 1500);
+
+assert.strictEqual(sc.isEarlySeason({ roundsPlayed: 6, leagueSize: 20, oppSample: 12 }), true);
+assert.strictEqual(sc.isEarlySeason({ roundsPlayed: 12, leagueSize: 20, oppSample: 6 }), true);
+assert.strictEqual(sc.isEarlySeason({ roundsPlayed: 12, leagueSize: 20, oppSample: 14 }), false);
+
+const fx = {
+  id: 1,
+  participants: [
+    { id: 10, meta: { location: 'home' } },
+    { id: 20, meta: { location: 'away' } },
+  ],
+  periods: [{ id: 1, description: '1st-half' }],
+  ballcoordinates: Array.from({ length: 30 }, () => ({ x: 0.84, y: 0.12, period_id: 1 })),
+};
+const atk = heat.aggregateAttackHeat([fx], 10);
+assert.strictEqual(atk.available, true);
+assert.strictEqual(atk.dominant, 'left');
+const paths = heat.attackPaths(atk.cells);
+assert.ok(paths.length >= 1);
+assert.ok(!paths.some(p => p.band === 'right' && p.share > 0.5));
+
+const emptySvg = heat.renderFullPitchSvg({ available: false, checked: true, note: '近期完场没有落点，画不出攻防路线。' });
+assert.ok(emptySvg.includes('没有落点'));
+assert.ok(!/<path /.test(emptySvg));
+
+const svg = heat.renderFullPitchSvg({
+  available: true,
+  homeAttack: atk,
+  awayAttack: { available: false, cells: null },
+  homeDefend: heat.aggregateDefenseHeat([fx], 10),
+  awayDefend: heat.aggregateDefenseHeat([fx], 20),
+}, { home: '红队', away: '蓝队' });
+assert.ok(svg.includes('<path '));
+assert.ok(svg.includes('往这边打'));
+assert.ok(!/要点覆盖|Pipeline|ballCoordinates|Sportmonks/.test(svg));
+
+const html = surface.renderPredictSurface({
+  home: '红队',
+  away: '蓝队',
+  concl: {
+    lean: 'd', pickText: '平局', conf: 0.51, lvl: ['l2', '倾向'],
+    speakMode: 'amplify', _speakResolved: true, speakLabel: '',
+    value: { items: [{ side: 'h', isLean: true, our: 0.42, fair: 0.36, edge: 0.06 }] },
+  },
+  calib: {
+    ok: true,
+    note: '赛季还早，对手强弱主要看上赛季名次，校准往原始进球收了一截。',
+    home: { rawGf: 1.8, adjGf: 1.4, nOpp: 3, shrink: 0.21 },
+    away: { rawGf: 1.1, adjGf: 1.1, nOpp: 3, shrink: 0.21 },
+  },
+  heat: { available: false, checked: true, note: '近期完场没有落点，画不出攻防路线。' },
+  oddsEdge: {
+    exp: { expH: 1.2, expA: 0.9 },
+    over25: 0.46,
+    rq: {
+      line: -1,
+      rows: [
+        { lab: '让胜', model: 0.28, fair: 0.34, deltaPp: -6 },
+        { lab: '让平', model: 0.27, fair: 0.28, deltaPp: -1 },
+        { lab: '让负', model: 0.45, fair: 0.38, deltaPp: 7 },
+      ],
+    },
+  },
+  market: { p: { h: 0.45, d: 0.28, a: 0.27 } },
+});
+assert.ok(html.includes('额外表态'));
+assert.ok(html.includes('首选'));
+assert.ok(html.includes('信心 51%'));
+assert.ok(html.includes('不是「平局」会发生的概率'));
+assert.ok(html.includes('1.8 → 校准 1.4'));
+assert.ok(html.includes('让胜'));
+assert.ok(html.includes('让平'));
+assert.ok(html.includes('让负'));
+assert.ok(!/近况积分|触发：|要点覆盖|Pipeline|pr-reasons|射正/.test(html));
+
+const reportHtml = pr._renderHtml(
+  { home: '红队', away: '蓝队' },
+  {
+    market: { p: { h: 0.4, d: 0.3, a: 0.3 } },
+    heat: { available: false, checked: true, note: '近期完场没有落点，画不出攻防路线。' },
+    strengthCalib: early && { ok: true, note: early && '赛季还早，校准往原始进球收了一截。', home: early, away: early },
+  },
+  {
+    lean: 'h', pickText: '主胜', conf: 0.55, lvl: ['l2', '倾向'],
+    speakMode: 'amplify', speakLabel: '', _speakResolved: true,
+    reasons: ['双方近况接近（近况积分 21:18）'],
+    risks: ['积分/排名信息不足'],
+    text: '触发：过程与盘口分歧',
+  }
+);
+assert.ok(/额外表态/.test(reportHtml));
+assert.ok(!/近况积分|触发：|pr-reasons|要点覆盖/.test(reportHtml));
+assert.ok(/没有落点/.test(reportHtml));
+
+console.log('strength-calib-test OK');

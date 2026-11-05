@@ -8367,6 +8367,10 @@ function productizePredictHtml(html) {
     .replace(/本地规则为真相源[^<。]*/g, '')
     .replace(/AI\s*仅作中文解说[^<。]*/g, '')
     // 1.9.98: no data-source labels / 仅供参考 in end-user UI
+    .replace(/<ul class="pr-reasons">[\s\S]*?<\/ul>/g, '')
+    .replace(/<ul class="pr-risks">[\s\S]*?<\/ul>/g, '')
+    .replace(/触发：[^\n<。]*。?/g, '')
+    .replace(/要点覆盖|Pipeline\s*\d*/g, '')
     .replace(/<p class="pr-brief-meta">数据来源：[\s\S]*?<\/p>/g, '')
     .replace(/<small>第三方明细<\/small>/g, '')
     .replace(/第三方公开数据，/g, '公开数据')
@@ -8384,9 +8388,8 @@ function predTabHtml(m) {
   let h = '';
   // 1.9.127: slim cache (ok, no html) → still loading, not 「未知」
   if (!rep || (rep.ok && !rep.html)) {
-    h += `<div class="dsec reason"><h3>赛前情报简报</h3><div class="spinner"></div><p class="note">正在汇总战绩、过程数据、交锋、积分、伤停（若有）与赔率参考…</p></div>`;
+    h += `<div class="dsec reason"><h3>赛前预测</h3><div class="spinner"></div><p class="note">正在整理表态、校准后的进球和攻防热区…</p></div>`;
   } else if (predictReportFull(rep)) {
-    h += signalPanelHtml(rep);
     h += `<div class="dsec reason pr-report">${productizePredictHtml(rep.html)}</div>`;
     h += `<div class="pr-src-bar"><span>更新于 ${esc(rep.generatedAtLocal || '')}</span>
       <button type="button" class="btn ghost sm" data-act="refreshPredict" data-id="${esc(m.id)}">刷新报告</button></div>`;
