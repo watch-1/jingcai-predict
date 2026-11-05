@@ -1,5 +1,8 @@
 'use strict';
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const sc = require('../lib/strength-calib');
 const heat = require('../lib/heat-pitch');
 const surface = require('../lib/predict-surface');
@@ -124,8 +127,16 @@ const html = surface.renderPredictSurface({
       ],
     },
   },
-  market: { p: { h: 0.45, d: 0.28, a: 0.27 } },
+  market: {
+    p: { h: 0.45, d: 0.28, a: 0.27 },
+    had: { h: 2.1, d: 3.3, a: 3.5 },
+    hhad: { h: 1.9, d: 3.4, a: 3.6, goalLine: '-1' },
+  },
 });
+assert.ok(html.includes('胜平负 · 模型概率'));
+assert.ok(html.includes('pr-1x2'));
+assert.ok(html.includes('pr-value-table'));
+assert.ok(html.includes('大小球'));
 assert.ok(html.includes('额外表态'));
 assert.ok(html.includes('首选'));
 assert.ok(html.includes('信心 51%'));
@@ -154,5 +165,71 @@ const reportHtml = pr._renderHtml(
 assert.ok(/额外表态/.test(reportHtml));
 assert.ok(!/近况积分|触发：|pr-reasons|要点覆盖/.test(reportHtml));
 assert.ok(/没有落点/.test(reportHtml));
+assert.ok(/胜平负 · 模型概率/.test(reportHtml));
+assert.ok(/pr-value-table/.test(reportHtml));
+assert.ok(!/要点覆盖|Pipeline|触发：/.test(reportHtml));
 
-console.log('strength-calib-test OK');
+(async () => {
+  const hs = require('../lib/heat-source');
+  assert.strictEqual(hs.englishName('t-machida', '町田泽维'), 'Machida Zelvia');
+  const prev = process.env.DATA_DIR;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'heat-'));
+  process.env.DATA_DIR = dir;
+  const coords = Array.from({ length: 24 }, () => ({ x: 0.82, y: 0.18, period_id: 1 }));
+  const fx = {
+    id: 7,
+    state: { short_name: 'FT' },
+    starting_at: '2026-11-01 12:00:00',
+    participants: [
+      { id: 99, meta: { location: 'home' } },
+      { id: 50, meta: { location: 'away' } },
+    ],
+    periods: [{ id: 1, description: '1st-half' }],
+    ballcoordinates: coords,
+    events: [],
+  };
+  let calls = 0;
+  const fetchImpl = async (urlPath) => {
+    calls += 1;
+    const u = String(urlPath);
+    if (u.includes('/teams/search/')) return { data: [{ id: 99, name: 'Machida Zelvia' }] };
+    if (u.includes('/fixtures/between/')) {
+      return { data: [fx, { id: 8, state: { short_name: 'NS' }, starting_at: '2026-11-08 12:00:00' }] };
+    }
+    if (u.includes('/fixtures/7')) return { data: fx };
+    throw new Error('unexpected ' + u);
+  };
+  const pack = await hs.ensureTeamHeat({
+    teamId: 'machida',
+    nameZh: '町田泽维',
+    fetchImpl,
+    now: Date.parse('2026-11-05T00:00:00Z'),
+  });
+  assert.strictEqual(pack.sideId, 99);
+  assert.strictEqual(pack.fixtures.length, 1);
+  assert.ok(pack.fixtures[0].ballcoordinates.length > 0);
+  const built = heat.buildMatchHeat({
+    homeId: pack.sideId,
+    awayId: 1,
+    homeFixtures: pack.fixtures,
+    awayFixtures: [],
+  });
+  assert.strictEqual(built.available, true);
+  const drawn = heat.renderFullPitchSvg(built, { home: '町田泽维', away: '上海申花' });
+  assert.ok(drawn.includes('<path '));
+  assert.ok(!/Sportmonks|ballCoordinates/.test(drawn));
+  const again = await hs.ensureTeamHeat({
+    teamId: 'machida',
+    nameZh: '町田泽维',
+    fetchImpl: async () => { throw new Error('should use cache'); },
+    now: Date.parse('2026-11-05T02:00:00Z'),
+  });
+  assert.strictEqual(again.fixtures.length, 1);
+  assert.ok(calls >= 2);
+  if (prev == null) delete process.env.DATA_DIR;
+  else process.env.DATA_DIR = prev;
+  console.log('strength-calib-test OK');
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
