@@ -7149,12 +7149,28 @@ function luLat(pos) {
   if (/^L/.test(p)) return -2; if (/^R/.test(p)) return 2;
   return 0;
 }
+function luPhotoUrl(p) {
+  if (!p) return '';
+  if (p.image) return p.image;
+  if (p.photo) return p.photo;
+  if (p.espnId) return espnSoccerHeadshotUrl(p.espnId);
+  return '';
+}
 function luAvatar(p, cls) {
   const disp = p.nameZh || p.name || '?';
   const ini = esc([...disp][0] || '?');
-  return p.photo
-    ? `<span class="${cls}"><img src="${logoProxy(p.photo)}" alt="" onerror="this.parentNode.textContent='${ini}'"/></span>`
+  const url = luPhotoUrl(p);
+  return url
+    ? `<span class="${cls}"><img src="${logoProxy(url)}" alt="" onerror="this.parentNode.textContent='${ini}'"/></span>`
     : `<span class="${cls}">${ini}</span>`;
+}
+function smFace(p) {
+  const url = luPhotoUrl(p);
+  const num = esc(p.number || '');
+  const img = url
+    ? `<img src="${logoProxy(url)}" alt="" onerror="this.remove();this.parentNode.classList.remove('has-photo')"/>`
+    : '';
+  return `<span class="smd-no${url ? ' has-photo' : ''}">${img}<b>${num}</b></span>`;
 }
 function luShort(p) {
   if (p.nameZh) {
@@ -7173,8 +7189,20 @@ function luSame(p, name) {
   const lastZh = luFold(String(p.nameZh || '').split(/[·・•]/).pop());
   return [luFold(p.name), luFold(p.nameZh), lastEn, lastZh].some(c => c && (c === n || (c.length >= 4 && (n.endsWith(c) || c.endsWith(n)))));
 }
+function absorbSmPhotos(x, side) {
+  if (!side) return;
+  const pack = S.smSurface && S.smSurface[String(x.id)];
+  const photos = (pack && pack.photos) || [];
+  if (!photos.length) return;
+  for (const p of [...(side.starters || []), ...(side.bench || [])]) {
+    if (p.image) continue;
+    const hit = photos.find(r => luSame(p, r.name) || luSame(p, r.nameZh));
+    if (hit && hit.image) p.image = hit.image;
+  }
+}
 function stampLuMarks(x, side, sideKey) {
   if (!side) return;
+  absorbSmPhotos(x, side);
   const people = [...(side.starters || []), ...(side.bench || [])];
   for (const p of people) { p._g = 0; p._y = 0; p._r = 0; }
   const live = S.liveStatsCache && S.liveStatsCache[String(x.id)];
@@ -7222,7 +7250,7 @@ function smPitchHalf(side, dir) {
   if (!side || !(side.starters || []).length) return `<div class="smd-half ${dir}"></div>`;
   const cols = luColumns(side.starters, dir);
   const cells = cols.map((group, ci) => group.map(({ p }, i) =>
-    `<div class="smd ${dir}" style="grid-column:${ci + 1};grid-row:${luGridRow(group.length, i)}"><span class="smd-no">${esc(p.number || '')}</span><span class="smd-nm">${esc(luShort(p))}${yiMark(p.nameZhSrc === 'auto')}${p.subbedOut ? '<i class="mk dn">↓</i>' : ''}</span></div>`).join('')).join('');
+    `<div class="smd ${dir}" style="grid-column:${ci + 1};grid-row:${luGridRow(group.length, i)}">${smFace(p)}<span class="smd-nm">${esc(luShort(p))}${yiMark(p.nameZhSrc === 'auto')}${p.subbedOut ? '<i class="mk dn">↓</i>' : ''}</span></div>`).join('')).join('');
   return `<div class="smd-half ${dir}" style="grid-template-columns:repeat(${Math.max(cols.length, 1)},minmax(0,1fr))">${cells}</div>`;
 }
 function smListRows(people, dir) {
@@ -7346,6 +7374,12 @@ function paintSmSurface(id, pack) {
   if (bars && pack.barsHtml) bars.innerHTML = pack.barsHtml;
   if (growth && pack.growthHtml) growth.innerHTML = pack.growthHtml;
   if (liveBox && pack.liveHtml) liveBox.innerHTML = pack.liveHtml;
+  const lu = document.getElementById('lineup-box-' + id);
+  const L = S.lineupCache && S.lineupCache[id];
+  if (lu && L && pack.photos && pack.photos.length) {
+    const x = (typeof findMatch === 'function' && findMatch(id)) || (S.results || []).find(z => String(z.id) === String(id));
+    if (x) lu.innerHTML = lineupHtml(x, L);
+  }
 }
 async function enrichSquadZh(x, key, teamId, teamName) {
   try {
@@ -8823,16 +8857,7 @@ function eventsTabHtml(x, live) {
     return ae - be;
   });
   let sh = 0, sa = 0;
-  const built = [];
-  const evKey = e => (e.elapsed == null ? 999 : Number(e.elapsed)) + (e.extra ? Number(e.extra) / 100 : 0);
-  const evPhase = e => {
-    const t = evKey(e);
-    if (t >= 105) return 'pen';
-    if (t >= 91) return 'et';
-    if (t >= 46) return '2';
-    return '1';
-  };
-  const phaseLab = { '1': '上半场', '2': '下半场', et: '加时', pen: '点球' };
+  const rows = [];
   for (const e of raw) {
     const side = e.side === 'away' ? 'away' : (e.side === 'home' ? 'home' : 'mid');
     const min = eventMinuteLab(e);
@@ -8873,24 +8898,12 @@ function eventsTabHtml(x, live) {
     }
     const cardInner = `${eventIconHtml(e)}${scoreBit ? scoreBit : ''}
       <div class="ev-txt">${main}${auto ? yiMark(true) : ''}${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
-    built.push({
-      phase: evPhase(e),
-      html: `<div class="ev-row ${side}">
+    rows.push(`<div class="ev-row ${side}">
       <div class="ev-side home">${side === 'home' ? `<div class="ev-card">${cardInner}</div>` : ''}</div>
       <div class="ev-axis"><span class="ev-min">${esc(min || '·')}</span></div>
       <div class="ev-side away">${side === 'away' ? `<div class="ev-card">${cardInner}</div>` : (side === 'mid' ? `<div class="ev-card mid">${cardInner}</div>` : '')}</div>
-    </div>`,
-    });
+    </div>`);
   }
-  built.reverse();
-  const rows = [];
-  let prevPhase = null;
-  for (const b of built) {
-    if (prevPhase && prevPhase !== b.phase) rows.push(`<div class="ev-half"><span>${phaseLab[b.phase] || ''}</span></div>`);
-    prevPhase = b.phase;
-    rows.push(b.html);
-  }
-  if (built.length) rows.unshift(`<div class="ev-half"><span>${phaseLab[built[0].phase] || ''}</span></div>`);
   const finished = isMatchFinished(x) || (live.status && /^(FT|AET|PEN)$/.test(String(live.status.short || '')));
   const eventsGap = liveStatsNeedsEventsRetry(live, x);
   const gapHint = eventsGap && rows.length
@@ -8910,16 +8923,11 @@ function eventsTabHtml(x, live) {
     <span><i class="ev-ico subst"><b class="dn">↓</b></i>换下</span>
     <span><i class="ev-ico subst"><b class="up">↑</b></i>换上</span>
   </div>`;
-  const teams = `<div class="ev-teams"><b>${esc(x.home)}</b><span>事件</span><b>${esc(x.away)}</b></div>`;
-  const topMark = rows.length ? `<div class="ev-end"><span class="ev-whistle" title="${finished ? '完场' : '进行中'}">${finished ? '终' : '…'}</span></div>` : '';
-  const botMark = rows.length ? `<div class="ev-end"><span class="ev-whistle" title="开球">开</span></div>` : '';
   const tree = `<div class="ev-tree-wrap" id="${wrapId}">
-    ${teams}
     <div class="ev-tree">
       <div class="ev-rail"></div>
-      ${topMark}
       ${empty || rows.join('')}
-      ${botMark}
+      <div class="ev-end"><span class="ev-whistle" title="${finished ? '完场' : '进行中'}">${finished ? '终' : '…'}</span></div>
     </div>
     ${gapHint}
     ${legend}

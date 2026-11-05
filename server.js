@@ -1432,6 +1432,7 @@ app.get('/api/sm-surface', async (req, res) => {
       barsHtml: surface.renderBarsHtml(pack),
       growthHtml: surface.renderGrowthHtml(pack),
       liveHtml: surface.renderLiveHtml(pack),
+      photos: surface.photoList(pack),
       reason: pack.reason || '',
     });
   } catch (e) {
