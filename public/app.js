@@ -7163,47 +7163,126 @@ function luShort(p) {
   }
   const parts = String(p.name || '').split(' '); return parts[parts.length - 1] || p.name || '';
 }
-function pitchHtml(side) {
-  const lines = {};
-  side.starters.forEach((p, i) => { const l = luLine(p.pos); (lines[l] = lines[l] || []).push({ p, i }); });
-  const order = Object.keys(lines).map(Number).sort((x, y) => y - x); // attack at top
-  return `<div class="pitch">${order.map(l => `<div class="pitch-row">${lines[l].sort((x, y) => luLat(x.p.pos) - luLat(y.p.pos) || x.i - y.i).map(({ p }) =>
-    `<div class="pp">${luAvatar(p, 'pp-ph')}<span class="pp-no">${esc(p.number || '')}</span><span class="pp-nm">${esc(luShort(p))}${yiMark(p.nameZhSrc === 'auto')}${p.subbedOut ? '<i class="lu-out">↓</i>' : ''}</span></div>`).join('')}</div>`).join('')}</div>`;
+function luFold(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff]/g, '');
 }
-function lineupSide(label, side, opts = {}) {
-  if (!side) return `<div class="lu-side"><div class="lu-hd"><b>${esc(label)}</b></div><p class="note">${esc(opts.emptyText || '暂无可用首发数据')}</p></div>`;
-  const used = side.bench.filter(p => p.subbedIn);
-  const unused = side.bench.filter(p => !p.subbedIn);
-  const brow = p => `<li>${luAvatar(p, 'lu-ph')}<span class="lu-no">${esc(p.number || '')}</span><span class="lu-nm">${esc(p.nameZh || p.name)}${yiMark(p.nameZhSrc === 'auto')}${p.nameZh && p.name ? ` <small class="muted">${esc(p.name)}</small>` : ''}</span>${p.subbedIn ? `<em class="lu-in">↑${p.subFor ? ' 换下 ' + esc(p.subFor) : ''}</em>` : ''}</li>`;
-  const benchHtml = opts.hideBench || !side.bench.length ? '' : `<div class="lu-sub-h">替补${used.length ? `（登场 ${used.length}）` : ''}</div><ul class="lu-list">${[...used, ...unused].map(brow).join('')}</ul>`;
-  const from = side.fromEvent ? `<div class="note">上一场：${esc(side.fromEvent.date)} ${esc(side.fromEvent.home)} ${esc(side.fromEvent.score)} ${esc(side.fromEvent.away)}${side.fromEvent.league ? ' · ' + esc(side.fromEvent.league) : ''}</div>` : '';
-  const ph = side.photoCount != null ? ` · 照片 ${side.photoCount}/${side.playerCount}` : '';
-  return `<div class="lu-side"><div class="lu-hd"><b>${esc(label)}</b><span class="note">${side.formation ? esc(side.formation) : ''}${ph}</span></div>${from}${pitchHtml(side)}${benchHtml}</div>`;
+function luSame(p, name) {
+  const n = luFold(name);
+  if (!n || n.length < 2) return false;
+  const lastEn = luFold(String(p.name || '').split(' ').pop());
+  const lastZh = luFold(String(p.nameZh || '').split(/[·・•]/).pop());
+  return [luFold(p.name), luFold(p.nameZh), lastEn, lastZh].some(c => c && (c === n || (c.length >= 4 && (n.endsWith(c) || c.endsWith(n)))));
+}
+function stampLuMarks(x, side, sideKey) {
+  if (!side) return;
+  const people = [...(side.starters || []), ...(side.bench || [])];
+  for (const p of people) { p._g = 0; p._y = 0; p._r = 0; }
+  const live = S.liveStatsCache && S.liveStatsCache[String(x.id)];
+  const events = (live && live.ok && live.events) || [];
+  for (const e of events) {
+    if (e.side !== sideKey) continue;
+    if (e.kind === 'subst') {
+      const on = people.find(p => luSame(p, e.playerZh) || luSame(p, e.player));
+      const off = people.find(p => luSame(p, e.assistZh) || luSame(p, e.assist));
+      if (on) on._on = true;
+      if (off) off._off = true;
+      continue;
+    }
+    const hit = people.find(p => luSame(p, e.playerZh) || luSame(p, e.player));
+    if (!hit) continue;
+    if (e.kind === 'goal') {
+      const gk = eventGoalKind(e);
+      if (gk !== 'own' && gk !== 'missed_pen') hit._g = (hit._g || 0) + 1;
+    } else if (e.kind === 'yellow') hit._y = (hit._y || 0) + 1;
+    else if (e.kind === 'red') hit._r = (hit._r || 0) + 1;
+  }
+}
+function luMarkHtml(p) {
+  const bits = [];
+  if (p.captain) bits.push('<i class="mk c" title="队长">C</i>');
+  for (let i = 0; i < Math.min(p._g || 0, 3); i++) bits.push('<i class="mk g" title="进球">⚽</i>');
+  if (p._y) bits.push('<i class="mk y" title="黄牌"></i>');
+  if (p._r) bits.push('<i class="mk r" title="红牌"></i>');
+  if (p.subbedOut || p._off) bits.push('<i class="mk dn" title="被换下">↓</i>');
+  if (p.subbedIn || p._on) bits.push('<i class="mk up" title="替补登场">↑</i>');
+  return bits.length ? `<span class="sml-mks">${bits.join('')}</span>` : '';
+}
+function luColumns(starters, dir) {
+  const lines = {};
+  (starters || []).forEach((p, i) => { const l = luLine(p.pos); (lines[l] = lines[l] || []).push({ p, i }); });
+  let keys = Object.keys(lines).map(Number).sort((a, b) => a - b);
+  if (dir === 'away') keys.reverse();
+  return keys.map(k => lines[k].sort((a, b) => luLat(a.p.pos) - luLat(b.p.pos) || a.i - b.i));
+}
+function luGridRow(n, i) {
+  if (n <= 1) return 2;
+  return 1 + Math.round(i * 3 / (n - 1));
+}
+function smPitchHalf(side, dir) {
+  if (!side || !(side.starters || []).length) return `<div class="smd-half ${dir}"></div>`;
+  const cols = luColumns(side.starters, dir);
+  const cells = cols.map((group, ci) => group.map(({ p }, i) =>
+    `<div class="smd ${dir}" style="grid-column:${ci + 1};grid-row:${luGridRow(group.length, i)}"><span class="smd-no">${esc(p.number || '')}</span><span class="smd-nm">${esc(luShort(p))}${yiMark(p.nameZhSrc === 'auto')}${p.subbedOut ? '<i class="mk dn">↓</i>' : ''}</span></div>`).join('')).join('');
+  return `<div class="smd-half ${dir}" style="grid-template-columns:repeat(${Math.max(cols.length, 1)},minmax(0,1fr))">${cells}</div>`;
+}
+function smListRows(people, dir) {
+  return (people || []).map(p => {
+    const num = `<span class="sml-no">${esc(p.number || '')}</span>`;
+    const av = luAvatar(p, 'sml-av');
+    const nm = `<span class="sml-nm">${esc(p.nameZh || p.name)}${yiMark(p.nameZhSrc === 'auto')}</span>`;
+    const mk = luMarkHtml(p);
+    return dir === 'away'
+      ? `<li class="sml-row away">${mk}${nm}${av}${num}</li>`
+      : `<li class="sml-row home">${num}${av}${nm}${mk}</li>`;
+  }).join('');
+}
+function smListCol(label, side, dir) {
+  if (!side) return `<div class="sml-col"><p class="note">暂无</p></div>`;
+  const xi = smListRows(side.starters, dir);
+  const bench = (side.bench || []).length ? `<div class="sml-h">替补</div><ul class="sml-list">${smListRows(side.bench, dir)}</ul>` : '';
+  return `<div class="sml-col ${dir}"><div class="sml-h">${esc(label)}</div><ul class="sml-list">${xi}</ul>${bench}</div>`;
+}
+function luScrub(x) {
+  const live = S.liveStatsCache && S.liveStatsCache[String(x.id)];
+  const n = live && live.status ? Number(live.status.elapsed) : NaN;
+  if (!Number.isFinite(n)) return '';
+  const pct = Math.max(4, Math.min(100, (n / 90) * 100));
+  return `<div class="sml-scrub" title="${esc(n)}'"><i style="width:${pct.toFixed(0)}%"></i></div>`;
 }
 function lineupHtml(x, L) {
   if (!L) return '<div class="spinner"></div>';
   if (!L.ok) return empty(esc(L.error || '阵容数据暂时不可用'));
-  const sideK = (S.squadTab && S.squadTab[x.id]) || 'home';
-  const real = L.home || L.away;
-  const stateLab = { final: '本场实际阵容 · 完场', live: '本场首发 · 进行中', announced: '本场首发 · 已公布' }[L.state] || '';
-  const chips = `<div class="chips squad-chips"><button class="${sideK === 'home' ? 'on' : ''}" data-act="squadTab" data-id="${esc(x.id)}" data-side="home">${esc(x.home)}</button><button class="${sideK === 'away' ? 'on' : ''}" data-act="squadTab" data-id="${esc(x.id)}" data-side="away">${esc(x.away)}</button></div>`;
-  const lab = sideK === 'home' ? x.home : x.away;
+  const real = !!(L.home || L.away);
+  const homeSide = real ? L.home : L.prevHome;
+  const awaySide = real ? L.away : L.prevAway;
+  stampLuMarks(x, homeSide, 'home');
+  stampLuMarks(x, awaySide, 'away');
+  const both = !!(homeSide && (homeSide.starters || []).length && awaySide && (awaySide.starters || []).length);
+  const view = (S.luView && S.luView[x.id]) || (both ? 'pitch' : 'list');
+  const pitchOn = view !== 'list';
+  const stateLab = real
+    ? ({ final: '本场实际阵容', live: '本场首发', announced: '本场首发' }[L.state] || '本场阵容')
+    : '参考上一场首发';
+  const coachBit = (side, dir) => (side && side.coachZh) ? `<small class="${dir}">${esc(side.coachZh)}</small>` : '';
+  const formBit = side => (side && side.formation) ? `<small>${esc(side.formation)}</small>` : '';
+  const head = `<div class="smd-hd"><div class="home"><b>${esc(x.home)}</b>${formBit(homeSide)}${coachBit(homeSide, 'home')}</div><div class="mid">阵容</div><div class="away">${coachBit(awaySide, 'away')}${formBit(awaySide)}<b>${esc(x.away)}</b></div></div>`;
+  const tog = `<div class="sm-switch"><button type="button" class="${pitchOn ? 'on' : ''}" data-act="luView" data-id="${esc(x.id)}" data-view="pitch">阵型</button><button type="button" class="${pitchOn ? '' : 'on'}" data-act="luView" data-id="${esc(x.id)}" data-view="list">名单</button></div>`;
+  const pitch = `<div class="smd-view" ${pitchOn ? '' : 'hidden'}><div class="smd-pitch">${smPitchHalf(homeSide, 'home')}${smPitchHalf(awaySide, 'away')}</div></div>`;
+  const list = `<div class="smd-view" ${pitchOn ? 'hidden' : ''}><div class="sml-cols">${smListCol(x.home, homeSide, 'home')}${smListCol(x.away, awaySide, 'away')}</div></div>`;
   let h = '';
-  if (real) {
-    h += `<div class="list-meta"><span>${esc(stateLab)}</span><span>来源综合公开数据</span></div>${chips}${lineupSide(lab, sideK === 'home' ? L.home : L.away)}`;
-  } else {
+  if (!real) {
     const pend = L.state === 'pending' ? '首发未公布（通常赛前约1小时）' : L.state === 'no-event' ? '未收录本场，无法获取本场首发' : '暂无本场阵容数据';
     h += `<div class="warn-bar">${esc(pend)}</div>`;
-    if (L.prevHome || L.prevAway) {
-      h += `<div class="list-meta"><span>参考：上一场实际首发（非本场）</span><span>来源综合公开数据</span></div>${chips}${lineupSide(lab, sideK === 'home' ? L.prevHome : L.prevAway, { hideBench: true, emptyText: '未获取到上一场首发' })}`;
-    }
+    if (!homeSide && !awaySide) return h;
+    h += `<p class="note">下面是上一场实际首发，不是本场。</p>`;
   }
-  if (L.noteZh) h += `<p class="note" style="margin:8px 0 0">${esc(L.noteZh)} 照片来自公开名单匹配，无照片显示首字。</p>`;
+  h += `<section class="smd-card sm-kit">${head}<div class="smd-sub">${esc(stateLab)}</div>${tog}${pitch}${list}${luScrub(x)}</section>`;
+  if (L.noteZh) h += `<p class="note" style="margin:8px 12px 0">${esc(L.noteZh)}</p>`;
   return h;
 }
 function squadSectionHtml(x) {
   const L = S.lineupCache && S.lineupCache[x.id];
-  return '<div class="dsec lineup-sec"><h3>本场阵容 <small>首发 · 阵型 · 替补</small></h3><div id="lineup-box-' + esc(x.id) + '">' + lineupHtml(x, L) + '</div></div>';
+  return '<div class="dsec lineup-sec"><div id="lineup-box-' + esc(x.id) + '">' + lineupHtml(x, L) + '</div></div>';
 }
 async function ensureLineup(x) {
   S.lineupCache = S.lineupCache || {};
@@ -7216,8 +7295,16 @@ async function ensureLineup(x) {
   try { L = await api('/lineup?' + q.join('&'), { timeout: 45000 }); } catch (e) { L = { ok: false, error: e.message || '加载失败' }; }
   L._at = Date.now();
   S.lineupCache[x.id] = L;
-  const box = document.getElementById('lineup-box-' + x.id);
-  if (box) box.innerHTML = lineupHtml(x, L);
+  const paint = () => {
+    const box = document.getElementById('lineup-box-' + x.id);
+    if (box) box.innerHTML = lineupHtml(x, L);
+  };
+  paint();
+  const ko = matchKickoffMs(x);
+  if (Number.isFinite(ko) && Date.now() >= ko) {
+    try { await loadLiveStats(x); } catch (_) {}
+    paint();
+  }
 }
 async function ensureSquad(x) {
   if (!x) return;
@@ -8624,6 +8711,7 @@ function intelTabHtml(x, m, stats) {
   h += h2hBlock(stats && stats.h2h, x.home, x.away, { n: ui.h2hN, matchId: x.id, h2hSource: stats && stats.h2hSource });
   h += formAnalysisCard(x, stats, ui);
   h += processStatsCard(x, stats);
+  h += bracketBlock(x);
   h += nextFixturesCard(x);
   if (m) h += oddsCompareBlock(m);
   const qHome = encodeURIComponent(x.home || '');
@@ -8644,6 +8732,26 @@ function intelTabHtml(x, m, stats) {
   return h;
 }
 
+function bracketBlock(x) {
+  const pack = S.smBracket && S.smBracket[String(x.id)];
+  if (!pack || !pack.show || !pack.html) return '';
+  return pack.html;
+}
+async function ensureSmBracket(x) {
+  if (!x || !x.id) return;
+  S.smBracket = S.smBracket || {};
+  const key = String(x.id);
+  const hit = S.smBracket[key];
+  if (hit && hit._at && Date.now() - hit._at < 10 * 60 * 1000) return;
+  const q = ['matchId=' + encodeURIComponent(key), 'date=' + encodeURIComponent(x.date || ''), 'time=' + encodeURIComponent(x.time || ''),
+    'homeTeamId=' + encodeURIComponent(x.homeTeamId || ''), 'awayTeamId=' + encodeURIComponent(x.awayTeamId || ''),
+    'home=' + encodeURIComponent(x.home || ''), 'away=' + encodeURIComponent(x.away || '')];
+  let pack;
+  try { pack = await api('/sm-bracket?' + q.join('&'), { timeout: 45000 }); }
+  catch (e) { pack = { show: false, reason: 'unavailable' }; }
+  pack._at = Date.now();
+  S.smBracket[key] = pack;
+}
 function eventGoalKind(e) {
   if (e && e.goalKind) return e.goalKind;
   const d = String((e && e.detail) || '');
@@ -8715,7 +8823,16 @@ function eventsTabHtml(x, live) {
     return ae - be;
   });
   let sh = 0, sa = 0;
-  const rows = [];
+  const built = [];
+  const evKey = e => (e.elapsed == null ? 999 : Number(e.elapsed)) + (e.extra ? Number(e.extra) / 100 : 0);
+  const evPhase = e => {
+    const t = evKey(e);
+    if (t >= 105) return 'pen';
+    if (t >= 91) return 'et';
+    if (t >= 46) return '2';
+    return '1';
+  };
+  const phaseLab = { '1': '上半场', '2': '下半场', et: '加时', pen: '点球' };
   for (const e of raw) {
     const side = e.side === 'away' ? 'away' : (e.side === 'home' ? 'home' : 'mid');
     const min = eventMinuteLab(e);
@@ -8756,12 +8873,24 @@ function eventsTabHtml(x, live) {
     }
     const cardInner = `${eventIconHtml(e)}${scoreBit ? scoreBit : ''}
       <div class="ev-txt">${main}${auto ? yiMark(true) : ''}${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
-    rows.push(`<div class="ev-row ${side}">
+    built.push({
+      phase: evPhase(e),
+      html: `<div class="ev-row ${side}">
       <div class="ev-side home">${side === 'home' ? `<div class="ev-card">${cardInner}</div>` : ''}</div>
       <div class="ev-axis"><span class="ev-min">${esc(min || '·')}</span></div>
       <div class="ev-side away">${side === 'away' ? `<div class="ev-card">${cardInner}</div>` : (side === 'mid' ? `<div class="ev-card mid">${cardInner}</div>` : '')}</div>
-    </div>`);
+    </div>`,
+    });
   }
+  built.reverse();
+  const rows = [];
+  let prevPhase = null;
+  for (const b of built) {
+    if (prevPhase && prevPhase !== b.phase) rows.push(`<div class="ev-half"><span>${phaseLab[b.phase] || ''}</span></div>`);
+    prevPhase = b.phase;
+    rows.push(b.html);
+  }
+  if (built.length) rows.unshift(`<div class="ev-half"><span>${phaseLab[built[0].phase] || ''}</span></div>`);
   const finished = isMatchFinished(x) || (live.status && /^(FT|AET|PEN)$/.test(String(live.status.short || '')));
   const eventsGap = liveStatsNeedsEventsRetry(live, x);
   const gapHint = eventsGap && rows.length
@@ -8781,11 +8910,16 @@ function eventsTabHtml(x, live) {
     <span><i class="ev-ico subst"><b class="dn">↓</b></i>换下</span>
     <span><i class="ev-ico subst"><b class="up">↑</b></i>换上</span>
   </div>`;
+  const teams = `<div class="ev-teams"><b>${esc(x.home)}</b><span>事件</span><b>${esc(x.away)}</b></div>`;
+  const topMark = rows.length ? `<div class="ev-end"><span class="ev-whistle" title="${finished ? '完场' : '进行中'}">${finished ? '终' : '…'}</span></div>` : '';
+  const botMark = rows.length ? `<div class="ev-end"><span class="ev-whistle" title="开球">开</span></div>` : '';
   const tree = `<div class="ev-tree-wrap" id="${wrapId}">
+    ${teams}
     <div class="ev-tree">
       <div class="ev-rail"></div>
+      ${topMark}
       ${empty || rows.join('')}
-      <div class="ev-end"><span class="ev-whistle" title="${finished ? '完场' : '进行中'}">${finished ? '终' : '…'}</span></div>
+      ${botMark}
     </div>
     ${gapHint}
     ${legend}
@@ -9961,6 +10095,7 @@ async function enrichMatchDetail(x) {
     const tasks = [];
     if (tab === 'intel') tasks.push(loadMatchStats(x));
     if (tab === 'intel') tasks.push(loadPredictReport(findMatch(x.id) || x));
+    if (tab === 'intel') tasks.push(ensureSmBracket(x));
     if (tab === 'data' || tab === 'live') tasks.push(ensureSmSurface(x));
     if (tab === 'live') tasks.push(loadLiveStats(x, { force: true }));
     if (tab === 'live') {
@@ -13121,6 +13256,16 @@ document.addEventListener('click', async e => {
       const x = findMatch(id) || (S.results || []).find(z => z.id === String(id));
       render({ force: true });
       ensureSquad(x);
+      return;
+    }
+    case 'luView': {
+      const id = el.dataset.id;
+      S.luView = S.luView || {};
+      S.luView[id] = el.dataset.view === 'list' ? 'list' : 'pitch';
+      const x = findMatch(id) || (S.results || []).find(z => z.id === String(id));
+      const box = document.getElementById('lineup-box-' + id);
+      const L = S.lineupCache && S.lineupCache[id];
+      if (box && x) box.innerHTML = lineupHtml(x, L);
       return;
     }
     case 'vote': {
