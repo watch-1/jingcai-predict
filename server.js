@@ -1434,6 +1434,7 @@ app.get('/api/sm-surface', async (req, res) => {
       liveHtml: surface.renderLiveHtml(pack),
       photos: surface.photoList(pack),
       reason: pack.reason || '',
+      smReason: pack.reason || '',
     });
   } catch (e) {
     res.status(502).json({ ok: false, error: '近况数据暂时不可用' });
@@ -1651,8 +1652,9 @@ app.get('/api/predict-report', async (req, res) => {
     }
     // 1.9.60: default async AI enrich (non-blocking); ?aiWait=1 to await DeepSeek
     const aiWait = req.query.aiWait === '1' || req.query.aiSync === '1';
+    const prematchSnapshot = req.query.prematchSnapshot === '1' || req.query.snapshot === '1';
     const report = await require('./lib/predict-report').buildReport(m, {
-      schedulePool, force, aiAsync: !aiWait,
+      schedulePool, force, aiAsync: !aiWait, prematchSnapshot,
     });
     res.json(report);
   } catch (e) {
