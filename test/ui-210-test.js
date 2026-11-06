@@ -11,15 +11,15 @@ assert.ok(/function matchNumSortKey/.test(appJs), 'match num sort key');
 assert.ok(/finRank\(a\._kind\) - finRank\(b\._kind\)/.test(appJs), 'finished matches sink to bottom');
 assert.ok(/matchNumSortKey\(a\.num\) - matchNumSortKey\(b\.num\)/.test(appJs), 'sort by issue num within phase');
 
-assert.ok(/jc-v1\.9\.2\d\d/.test(swJs), 'SW VER 1.9.2xx');
+assert.ok(/jc-v1\.9\.2\d\d/.test(swJs) || /jc-v2\./.test(swJs), 'SW VER 1.9.2xx');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.ok(/^1\.9\.2\d\d$/.test(pkg.version));
+assert.ok(/^1\.9\.2\d\d$/.test(pkg.version) || /^2\./.test(pkg.version));
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.2\d\d/.test(ver));
-assert.ok(/VERSION_CODE=2[5-9]\d/.test(ver) || /VERSION_CODE=30\d/.test(ver) || /VERSION_CODE=31\d/.test(ver));
+assert.ok(/VERSION=(?:1\.9\.2\d\d|2\.)/.test(ver));
+assert.ok(/VERSION_CODE=2[5-9]\d/.test(ver) || /VERSION_CODE=30\d/.test(ver) || /VERSION_CODE=31\d/.test(ver) || /VERSION_CODE=32\d/.test(ver));
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
-assert.ok(/^1\.9\.2\d\d$/.test(cfg.version));
+assert.ok(/^1\.9\.2\d\d$/.test(cfg.version) || /^2\./.test(cfg.version));
 
 // Sort behavior smoke (mirrors scheduleListRows)
 function matchNumSortKey(num) {

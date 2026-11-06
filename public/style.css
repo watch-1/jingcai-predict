@@ -3150,6 +3150,26 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .pr-surface .pr-corridor-line { margin: 6px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--t2, #5c6b7a); }
 .pr-surface .pr-goal-clock h4 { margin: 10px 0 4px; font-size: 12.5px; font-weight: 800; color: var(--t2); }
 .pr-surface .pr-goal-seg { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: #3d4a42; font-variant-numeric: tabular-nums; }
+.pr-surface .pr-comp { margin: 8px 0 0; padding: 10px 12px; border: 1px solid #e7ebf2; border-radius: 12px; background: #fff; }
+.pr-surface .pr-comp header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.pr-surface .pr-comp header b { font-size: 14px; }
+.pr-surface .pr-comp header span { font-size: 11px; font-weight: 800; color: #15803d; }
+.pr-surface .pr-comp.is-idle header span { color: #8b95a8; font-weight: 700; }
+.pr-surface .pr-comp.is-idle { background: #fafbfc; }
+.pr-surface .pr-comp-meta { margin: 4px 0 0; font-size: 12px; color: #5c6b7a; }
+.pr-surface .pr-comp-chain { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.55; color: #3d4a5c; }
+.pr-surface .pr-comp-chain li { margin: 2px 0; }
+.pr-surface .pr-comp-defer { margin: 8px 0 0; font-size: 12px; line-height: 1.55; color: #7b8494; }
+.sm-kit.sm-logic { margin-top: 8px; }
+.sm-kit .sm-logic-sum { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: #5c6b7a; }
+.sm-kit .sm-comp { margin: 8px 0 0; padding: 10px; border: 1px solid #e6ebf5; border-radius: 12px; background: #fff; }
+.sm-kit .sm-comp header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.sm-kit .sm-comp header b { font-size: 13px; color: #1c2434; }
+.sm-kit .sm-comp header span { font-size: 11px; font-weight: 800; color: #15803d; }
+.sm-kit .sm-comp.is-idle header span { color: #8b95a8; font-weight: 700; }
+.sm-kit .sm-comp-meta, .sm-kit .sm-comp-effect { margin: 4px 0 0; font-size: 12px; color: #5c6b7a; }
+.sm-kit .sm-comp ol { margin: 6px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.5; color: #2c3648; }
+.sm-kit .sm-comp li { margin: 2px 0; }
 .pr-brief.pr-surface {
   background: transparent;
   box-shadow: none;

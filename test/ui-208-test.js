@@ -39,11 +39,11 @@ for (const id of manifest.playerIds) {
 }
 assert.strictEqual(gray5969, 0, 'no gray NO PHOTO placeholders in manifest');
 
-assert.ok(/jc-v1\.9\.2\d\d/.test(swJs), 'SW VER 1.9.2xx');
+assert.ok(/jc-v1\.9\.2\d\d/.test(swJs) || /jc-v2\./.test(swJs), 'SW VER 1.9.2xx');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.ok(/^1\.9\.2\d\d$/.test(pkg.version), 'package 1.9.2xx');
+assert.ok(/^1\.9\.2\d\d$/.test(pkg.version) || /^2\./.test(pkg.version), 'package 1.9.2xx');
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\.2\d\d/.test(ver));
-assert.ok(/VERSION_CODE=2[5-8]\d/.test(ver) || /VERSION_CODE=30\d/.test(ver) || /VERSION_CODE=31\d/.test(ver));
+assert.ok(/VERSION=(?:1\.9\.2\d\d|2\.)/.test(ver));
+assert.ok(/VERSION_CODE=2[5-8]\d/.test(ver) || /VERSION_CODE=30\d/.test(ver) || /VERSION_CODE=31\d/.test(ver) || /VERSION_CODE=32\d/.test(ver));
 
 console.log('ui-208-test OK', { players: manifest.playerIds.length });

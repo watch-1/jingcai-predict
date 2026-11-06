@@ -28,12 +28,12 @@ for (const id of manifest.playerIds.slice(0, 5)) {
   assert.ok(fs.existsSync(path.join(playerDir, id + '.png')), 'player png ' + id);
 }
 
-assert.ok(/jc-v1\.9\./.test(swJs), 'SW version tag');
+assert.ok(/jc-v1\.9\./.test(swJs) || /jc-v2\./.test(swJs), 'SW version tag');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.ok(/^1\.9\./.test(pkg.version));
+assert.ok(/^1\.9\./.test(pkg.version) || /^2\./.test(pkg.version));
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=1\.9\./.test(ver));
-assert.ok(/VERSION_CODE=24\d/.test(ver) || /VERSION_CODE=25\d/.test(ver) || /VERSION_CODE=26\d/.test(ver) || /VERSION_CODE=2[6-8]\d/.test(ver) || /VERSION_CODE=30\d/.test(ver) || /VERSION_CODE=31\d/.test(ver));
+assert.ok(/VERSION=(?:1\.9\.|2\.)/.test(ver));
+assert.ok(/VERSION_CODE=24\d/.test(ver) || /VERSION_CODE=25\d/.test(ver) || /VERSION_CODE=26\d/.test(ver) || /VERSION_CODE=2[6-8]\d/.test(ver) || /VERSION_CODE=30\d/.test(ver) || /VERSION_CODE=31\d/.test(ver) || /VERSION_CODE=32\d/.test(ver));
 assert.ok(fs.existsSync(path.join(root, 'tools/sync-bundled-players.js')));
 
 console.log('ui-204-test OK', { players: manifest.playerIds.length });

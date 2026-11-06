@@ -7471,6 +7471,7 @@ function paintSmSurface(id, pack) {
   const bars = document.getElementById('sm-bars-' + id);
   const growth = document.getElementById('sm-growth-' + id);
   const liveBox = document.getElementById('sm-live-' + id);
+  paintComponentLogic(id);
   if (pack && pack._loading) {
     const loadNote = '<p class="note sm-loading-note">正在拉取第三方近况与统计（球队名解析或冷启动可能需数十秒，并非卡住）…</p>';
     if (form) form.innerHTML = loadNote;
@@ -9820,9 +9821,17 @@ function fixturePlayersHtml(x) {
   return h;
 }
 
+function paintComponentLogic(id) {
+  const box = document.getElementById('sm-logic-' + id);
+  if (!box) return;
+  const rep = S.predictCache && S.predictCache[String(id)];
+  if (rep && rep.componentsSmHtml) box.innerHTML = rep.componentsSmHtml;
+  else box.innerHTML = '<section class="sm-kit sm-logic"><h3>推导组件</h3><p class="sm-empty">和预测页用的是同一套。预测简报出来后，卡片会出现在这里。</p></section>';
+}
 function dataTabHtml(x) {
   const key = esc(String(x.id || ''));
-  return `<div id="sm-form-${key}" class="sm-slot"><p class="note">正在整理球员近况…</p></div>`
+  return `<div id="sm-logic-${key}" class="sm-slot"></div>`
+    + `<div id="sm-form-${key}" class="sm-slot"><p class="note">正在整理球员近况…</p></div>`
     + `<div id="sm-bars-${key}" class="sm-slot"><p class="note">正在整理球队统计…</p></div>`
     + `<div id="sm-growth-${key}" class="sm-slot"></div>`;
 }
@@ -10241,6 +10250,7 @@ async function enrichMatchDetail(x) {
     if (tab === 'intel') tasks.push(loadPredictReport(findMatch(x.id) || x));
     if (tab === 'intel') tasks.push(ensureSmBracket(x));
     if (tab === 'data' || tab === 'live') tasks.push(ensureSmSurface(x));
+    if (tab === 'data') tasks.push(loadPredictReport(findMatch(x.id) || x));
     if (tab === 'live') tasks.push(loadLiveStats(x, { force: true }));
     if (tab === 'live') {
       tasks.push(loadChat(String(x.id)));
