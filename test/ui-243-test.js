@@ -13,13 +13,13 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=2.0.1/.test(ver));
-assert.ok(/VERSION_CODE=318/.test(ver));
-assert.ok(/jc-v2.0.1/.test(swJs));
-assert.strictEqual(pkg.version, '2.0.1');
-assert.strictEqual(cfg.version, '2.0.1');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.1\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-318\}"/.test(apkSh));
+assert.ok(/VERSION=2.0.2/.test(ver));
+assert.ok(/VERSION_CODE=319/.test(ver));
+assert.ok(/jc-v2.0.2/.test(swJs));
+assert.strictEqual(pkg.version, '2.0.2');
+assert.strictEqual(cfg.version, '2.0.2');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.2\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-319\}"/.test(apkSh));
 
 // Live 0-0 with empty events must NOT be treated as a perpetual events gap.
 const retryFnSrc = appJs.match(/function liveStatsNeedsEventsRetry\(live, x\) \{[\s\S]*?\n\}/)?.[0];
