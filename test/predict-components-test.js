@@ -222,11 +222,48 @@ assert.ok(html.includes('进攻走廊对防守走廊'));
 assert.ok(html.includes('模型与盘口分歧'));
 assert.ok(html.includes('无效控球'));
 assert.ok(html.includes('先不进权重'));
+assert.ok(html.includes('pc-card is-gold'));
+assert.ok(html.includes('pc-arrows is-twist'));
+assert.ok(html.includes('动到：'));
+assert.ok(html.includes('未触发：'));
+assert.ok(!html.includes('<ol'));
 assert.ok(!html.includes('GPS'));
+const order = ['额外表态', '模型与盘口', '近况攻防习惯', '对位提示', 'title="动机不对称"', '胜平负 · 模型概率', '大小球（O2.5）'];
+let prev = -1;
+for (const bit of order) {
+  const at = html.indexOf(bit);
+  assert.ok(at > prev, 'page order ' + bit);
+  prev = at;
+}
 const sm = pc.renderCards(after.components, { skin: 'sm', pack: after, deferred: after.deferred });
 assert.ok(sm.includes('sm-kit'));
+assert.ok(sm.includes('pc-card'));
 assert.ok(sm.includes('动机不对称'));
 assert.ok(sm.includes('高位逼抢'));
+assert.ok(sm.includes('先不进权重'));
+const clockHtml = pc.renderCards(clock.components, { skin: 'dqd', pack: clock });
+assert.ok(clockHtml.includes('pc-seg'));
+assert.ok(clockHtml.includes('pc-time'));
+const thinHtml = pc.renderCards(thin.components, { skin: 'dqd', pack: thin });
+assert.ok(thinHtml.includes('分钟不够，用半场回退'));
+const gkHtml = pc.renderCards(gk.components, { skin: 'sm', pack: gk });
+assert.ok(gkHtml.includes('pc-card is-weak'));
+assert.ok(gkHtml.includes('pc-saves'));
+const noGkHtml = pc.renderCards(noGk.components, { skin: 'dqd', pack: noGk });
+assert.ok(noGkHtml.includes('未触发：'));
+assert.ok(!noGkHtml.includes('pc-saves'));
+const laneHtml = pc.renderCards([{
+  id: 'lanecore',
+  name: '通道核心伤停',
+  evidence: '弱',
+  fired: true,
+  markets: ['胜平负', '让球'],
+  chain: ['启发式：只对了位置名称，不是球员跑位轨迹。'],
+  viz: { kind: 'cores', people: [{ who: '萨卡', lane: '左路', image: '', matched: true }] },
+}], { skin: 'dqd' });
+assert.ok(laneHtml.includes('pc-lane is-out'));
+assert.ok(laneHtml.includes('左路'));
+assert.ok(laneHtml.includes('不是球员跑位轨迹'));
 
 const signed = n => (n > 0 ? '+' : '') + Number(n).toFixed(2);
 console.log('EXAMPLE corridor mismatch / odds divergence');
