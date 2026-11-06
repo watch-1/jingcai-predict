@@ -2312,6 +2312,104 @@ function openSheetHtml(html) {
   syncSheetScrollLock();
 }
 
+// ----- sm-surface 球员明细（与 UI kit 对齐的环形率 + 网格） -----
+function smPlayerPhotoUrl(image) {
+  if (!image) return '';
+  try {
+    const u = new URL(String(image));
+    const host = u.hostname.toLowerCase();
+    if (u.protocol === 'https:' && (host === 'cdn.sportmonks.com' || host === 'media.sportmonks.com')
+      && u.pathname.startsWith('/images/') && /\.(png|jpe?g|webp)$/i.test(u.pathname)) {
+      return '/api/logo?url=' + encodeURIComponent(u.toString());
+    }
+  } catch { /* */ }
+  return String(image || '');
+}
+/** @param {{pct:number|null, mid:string, bot:string, tone?:string}} o */
+function smCircGauge(o) {
+  const pct = o.pct;
+  const v = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : null;
+  const r = 34;
+  const c = 2 * Math.PI * r;
+  const dash = v == null ? '0 ' + c.toFixed(1) : ((c * v / 100).toFixed(1) + ' ' + c.toFixed(1));
+  const tone = o.tone || 'blue';
+  const stroke = tone === 'rose' ? '#f06b8a' : (tone === 'green' ? '#12d18e' : '#5b7cfa');
+  const mid = o.mid || (v == null ? '—' : Math.round(v) + '%');
+  return `<div class="sm-pd-gauge sm-pd-gauge--${esc(tone)}"><svg viewBox="0 0 88 88" aria-hidden="true">
+    <circle cx="44" cy="44" r="${r}" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="9"/>
+    <circle cx="44" cy="44" r="${r}" fill="none" stroke="${stroke}" stroke-width="9" stroke-dasharray="${dash}" stroke-linecap="butt" transform="rotate(-90 44 44)"/>
+    <text x="44" y="42" text-anchor="middle" class="sm-pd-g-num">${esc(mid)}</text>
+  </svg><div class="sm-pd-g-sub"><small>${esc(o.bot)}</small></div></div>`;
+}
+function smStatCell(n, lab) {
+  return `<div class="sm-pd-cell"><b class="num">${esc(n)}</b><span>${esc(lab)}</span></div>`;
+}
+function openSmPlayerDetail(raw) {
+  let p;
+  try { p = JSON.parse(decodeURIComponent(raw)); }
+  catch { toast('无法打开球员明细'); return; }
+  const name = p.nameZh || '?';
+  const team = p.teamZh || '';
+  const pos = /近/.test(String(p.label || '')) ? '近况聚合' : '本场';
+  const yi = p.nameZhAuto ? yiMark(true) : '';
+  const ph = smPlayerPhotoUrl(p.image);
+  const headImg = ph
+    ? `<img class="sm-pd-ph" src="${esc(ph)}" alt="" onerror="this.style.display='none'"/>`
+    : `<div class="sm-pd-ph fallback">${esc([...String(name)][0] || '?')}</div>`;
+  const shotPct = p.shotOnPct;
+  const shotMid = (p.shotsOn != null && p.totalShots != null && p.totalShots > 0)
+    ? `${Math.round(p.shotsOn)}/${Math.round(p.totalShots)}`
+    : '—';
+  const shotBot = '射正率';
+  const passPctVal = p.passSuccPct != null ? p.passSuccPct : null;
+  const passMid = (p.totalAccurate != null && p.totalPasses != null && p.totalPasses > 0)
+    ? `${Math.round(p.totalAccurate)}/${Math.round(p.totalPasses)}`
+    : '—';
+  const passBot = '传球成功率';
+  const tkPct = p.tackleSuccPct;
+  const tkMid = (p.tacklesWon != null && p.tacklesSum != null && p.tacklesSum > 0)
+    ? `${Math.round(p.tacklesWon)}/${Math.round(p.tacklesSum)}`
+    : '—';
+  const tkBot = '抢断成功率';
+  const gauges = `
+    <div class="sm-pd-gauges">
+      ${smCircGauge({ pct: shotPct, mid: shotPct != null ? Math.round(shotPct) + '%' : '—', bot: shotBot + ' · ' + shotMid, tone: 'rose' })}
+      ${smCircGauge({ pct: passPctVal, mid: passPctVal != null ? Math.round(passPctVal) + '%' : '—', bot: passBot + ' · ' + passMid, tone: 'blue' })}
+      ${smCircGauge({ pct: tkPct, mid: tkPct != null ? Math.round(tkPct) + '%' : '—', bot: tkBot + ' · ' + tkMid, tone: 'green' })}
+    </div>`;
+  const g = p.goals != null ? p.goals : '—';
+  const a = p.assists != null ? p.assists : '—';
+  const shots = p.shots != null ? Number(p.shots).toFixed(1).replace(/\.0$/, '') : '—';
+  const shotsOnDisp = p.shotsOn != null ? String(Math.round(p.shotsOn)) : '—';
+  const passesDisp = p.totalPasses != null ? String(Math.round(p.totalPasses)) : '—';
+  const accDisp = p.totalAccurate != null ? String(Math.round(p.totalAccurate)) : '—';
+  const tkAvg = p.tackles != null ? Number(p.tackles).toFixed(1).replace(/\.0$/, '') : '—';
+  const grid = `
+    <div class="sm-pd-grid">
+      ${smStatCell(g, '进球')}
+      ${smStatCell(a, '助攻')}
+      ${smStatCell(shots, '射门')}
+      ${smStatCell(shotsOnDisp, '射正')}
+      ${smStatCell(passesDisp, '传球')}
+      ${smStatCell(accDisp, '成功传')}
+      ${smStatCell('—', '关键传')}
+      ${smStatCell(tkAvg, '抢断')}
+      ${smStatCell('—', '抢截')}
+      ${smStatCell('—', '对抗胜')}
+      ${smStatCell('—', '过人')}
+      ${smStatCell(p.minutes != null ? String(p.minutes) : '—', '分钟')}
+    </div>
+    <p class="note sm-pd-foot">射正/抢断成功率等由 SM  lineup 明细汇总；缺失项显示为「—」，不猜测。</p>`;
+  openSheetHtml(`<div class="sheet sm-player-sheet" role="dialog" aria-label="球员数据">
+    <div class="sm-pd-head"><button type="button" class="x" data-act="closeSheet">✕</button>
+      ${headImg}
+      <div class="sm-pd-titles"><h3>${esc(name)}${yi}</h3>
+      <p class="note">${esc([team, p.jersey ? '#' + p.jersey : '', pos, p.rating != null ? '评分 ' + Number(p.rating).toFixed(2) : ''].filter(Boolean).join(' · '))}</p></div></div>
+    ${gauges}
+    ${grid}
+  </div>`);
+}
+
 // ======================= router =======================
 /** 1.9.146: top feed tabs (部落/头条/开奖) + bottom tabs (首页/赛程/预测/数据). */
 const TOP_TABS = ['tribe', 'news', 'results'];
@@ -7343,15 +7441,26 @@ async function ensureSmSurface(x) {
   S.smSurface = S.smSurface || {};
   const key = String(x.id);
   const hit = S.smSurface[key];
-  if (hit && hit._at && Date.now() - hit._at < 10 * 60 * 1000) {
+  const staleErrMs = 90 * 1000;
+  const freshOkMs = 10 * 60 * 1000;
+  const age = hit && hit._at ? Date.now() - hit._at : Infinity;
+  const stillFresh = hit && !hit._loading && (
+    (hit.ok && age < freshOkMs)
+    || (hit.ok === false && hit.error && age < staleErrMs)
+  );
+  if (stillFresh) {
     paintSmSurface(key, hit);
     return;
   }
+  if (hit && hit._loading) return;
   const q = ['matchId=' + encodeURIComponent(key), 'date=' + encodeURIComponent(x.date || ''), 'time=' + encodeURIComponent(x.time || ''),
     'homeTeamId=' + encodeURIComponent(x.homeTeamId || ''), 'awayTeamId=' + encodeURIComponent(x.awayTeamId || ''),
     'home=' + encodeURIComponent(x.home || ''), 'away=' + encodeURIComponent(x.away || '')];
+  const loadingPack = { ok: true, _loading: true, _at: Date.now() };
+  S.smSurface[key] = loadingPack;
+  paintSmSurface(key, loadingPack);
   let pack;
-  try { pack = await api('/sm-surface?' + q.join('&'), { timeout: 60000 }); }
+  try { pack = await api('/sm-surface?' + q.join('&'), { timeout: 120000 }); }
   catch (e) { pack = { ok: false, error: e.message || '加载失败' }; }
   pack._at = Date.now();
   S.smSurface[key] = pack;
@@ -7362,8 +7471,22 @@ function paintSmSurface(id, pack) {
   const bars = document.getElementById('sm-bars-' + id);
   const growth = document.getElementById('sm-growth-' + id);
   const liveBox = document.getElementById('sm-live-' + id);
+  if (pack && pack._loading) {
+    const loadNote = '<p class="note sm-loading-note">正在拉取第三方近况与统计（球队名解析或冷启动可能需数十秒，并非卡住）…</p>';
+    if (form) form.innerHTML = loadNote;
+    if (bars) bars.innerHTML = loadNote;
+    if (growth) growth.innerHTML = '';
+    return;
+  }
   if (!pack || pack.ok === false) {
-    const note = '<p class="note">近况数据暂时没有。</p>';
+    const smReason = pack && (pack.smReason || pack.reason);
+    const detail = pack && (pack.error || pack.detail || '');
+    let msg = '近况数据暂时没有。';
+    if (smReason === 'no-token') msg = '服务器未配置 SportMonks 密钥，无法拉取近况（请联系运维检查环境变量）。';
+    else if (smReason === 'no-team') msg = '未能将竞彩队名解析到第三方球队 ID（常见于长尾队名），本场球队统计无法对齐。';
+    else if (smReason === 'lookup-failed') msg = '球队解析请求失败，请稍后重试。';
+    else if (detail) msg = '加载失败：' + detail;
+    const note = `<p class="note">${esc(msg)}</p><p class="note"><button type="button" class="btn ghost sm" data-act="refreshSmSurface" data-id="${esc(id)}">重试</button></p>`;
     if (form) form.innerHTML = note;
     if (bars) bars.innerHTML = note;
     if (growth) growth.innerHTML = note;
@@ -7464,6 +7587,10 @@ function isMatchFinished(x) {
   const ls = S.liveScores && S.liveScores[id];
   if (ls && ls.finished) return true;
   return false;
+}
+/** 完场场次请求「赛前快照」综合简报，避免混入赛后复盘情报 */
+function predictPrematchQuery(m) {
+  return isMatchFinished(m) ? '&prematchSnapshot=1' : '';
 }
 function detailTabsFor(x) {
   const tabs = DETAIL_TABS_BASE.slice();
@@ -8217,15 +8344,20 @@ async function loadPredictReport(m, { force } = {}) {
   if (!m || !m.id) return null;
   const id = String(m.id);
   S.predictCache = S.predictCache || {};
+  const prematchQ = predictPrematchQuery(m);
   // 1.9.127: slim LS hydrate is ok+predict without html — must still fetch full brief
-  if (!force && predictReportFull(S.predictCache[id])) {
-    // 1.9.60: if AI赛前解读 still pending, re-fetch (server may have finished bg enrich)
-    const ai = S.predictCache[id].aiPrematch;
-    if (!(ai && ai.pending)) return S.predictCache[id];
+  const cached = S.predictCache[id];
+  if (!force && predictReportFull(cached)) {
+    const needPrematchSnap = !!prematchQ;
+    const havePrematchSnap = !!(cached && cached.prematchSnapshot);
+    if (!needPrematchSnap || havePrematchSnap) {
+      const ai = cached.aiPrematch;
+      if (!(ai && ai.pending)) return cached;
+    }
   }
   try {
-    const q = '/predict-report?matchId=' + encodeURIComponent(id) + (force ? '&refresh=1' : '');
-    const j = await api(q, { timeout: 20000 });
+    const q = '/predict-report?matchId=' + encodeURIComponent(id) + (force ? '&refresh=1' : '') + prematchQ;
+    const j = await api(q, { timeout: prematchQ ? 45000 : 20000 });
     if (j && j.ok) {
       S.predictCache[id] = j;
       return j;
@@ -8540,21 +8672,25 @@ function productizePredictHtml(html) {
 }
 
 function predTabHtml(m) {
-  if (!m || m.full) {
-    return `<div class="dsec reason"><h3>预测分析</h3><p class="note">比赛已完场，预测分析仅适用于未开赛场次。</p></div>`;
+  if (!m || !m.id) {
+    return `<div class="dsec reason"><h3>预测分析</h3><p class="note">暂无可用的场次信息。</p></div>`;
   }
-  const rep = S.predictCache && S.predictCache[String(m.id)];
-  const pr = effectivePredict(m);
+  const fin = isMatchFinished(m);
+  const rep = m && S.predictCache && S.predictCache[String(m.id)];
+  const pr = m ? effectivePredict(m) : null;
   let h = '';
+  if (fin) {
+    h += `<div class="dsec reason pr-snap-hint"><h3>预测分析</h3><p class="note">【赛前快照·完场调试】以下为开赛前信息重建的综合简报；赔率来自赛程在售快照（非滚球）；不含本场赛果后情报。首次打开可能需稍候生成。</p></div>`;
+  }
   // 1.9.127: slim cache (ok, no html) → still loading, not 「未知」
   if (!rep || (rep.ok && !rep.html)) {
-    h += `<div class="dsec reason"><h3>预测</h3><div class="spinner"></div><p class="note">正在整理胜平负、让球对照、大小球、半全场、伤停和攻防热区…</p></div>`;
+    h += `<div class="dsec reason"><h3>${fin ? '赛前快照' : '预测'}</h3><div class="spinner"></div><p class="note">正在整理胜平负、让球对照、大小球、半全场、伤停和攻防热区…</p></div>`;
   } else if (predictReportFull(rep)) {
     h += `<div class="dsec reason pr-report">${productizePredictHtml(rep.html)}</div>`;
     h += `<div class="pr-src-bar"><span>更新于 ${esc(rep.generatedAtLocal || '')}</span>
       <button type="button" class="btn ghost sm" data-act="refreshPredict" data-id="${esc(m.id)}">刷新报告</button></div>`;
   } else {
-    h += `<div class="dsec reason"><h3>赛前情报简报</h3><p class="note">综合报告暂不可用（${esc(rep.error || rep.reason || '加载失败')}），先展示赔率参考层。</p>${reasoningOddsFallback(m).join('')}</div>`;
+    h += `<div class="dsec reason"><h3>赛前情报简报</h3><p class="note">综合报告暂不可用（${esc(rep.error || rep.reason || '加载失败')}），先展示赔率参考层。</p>${m ? reasoningOddsFallback(m).join('') : ''}</div>`;
   }
   h += `<div class="dsec kb-match-entry">
     <h3>个人知识库预测</h3>
@@ -13228,9 +13364,23 @@ document.addEventListener('click', async e => {
       box.querySelectorAll('.sm-form-list').forEach(n => { n.hidden = n.getAttribute('data-for') !== side; });
       return;
     }
+    case 'smPlayerDetail': {
+      const raw = el.dataset.player;
+      if (raw) openSmPlayerDetail(raw);
+      return;
+    }
+    case 'refreshSmSurface': {
+      const id = String(el.dataset.id || '');
+      const x = id ? (findMatch(id) || (S.results || []).find(z => String(z.id) === id)) : null;
+      if (!x) { toast('未找到场次'); return; }
+      S.smSurface = S.smSurface || {};
+      delete S.smSurface[id];
+      ensureSmSurface(x);
+      return;
+    }
     case 'refreshPredict': {
       const id = String(el.dataset.id || '');
-      const m = findMatch(id);
+      const m = findMatch(id) || (S.results || []).find(z => String(z.id) === id);
       if (!m) { toast('未找到比赛'); return; }
       toast('正在刷新综合简报…');
       await loadPredictReport(m, { force: true });
