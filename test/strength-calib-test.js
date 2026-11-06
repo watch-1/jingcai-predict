@@ -85,8 +85,8 @@ const paths = heat.attackPaths(atk.cells);
 assert.ok(paths.length >= 1);
 assert.ok(!paths.some(p => p.band === 'right' && p.share > 0.5));
 
-const emptySvg = heat.renderFullPitchSvg({ available: false, checked: true, note: '近期完场没有落点，画不出攻防路线。' });
-assert.ok(emptySvg.includes('没有落点'));
+const emptySvg = heat.renderFullPitchSvg({ available: false, checked: true, note: '近况样本太少，攻防图先空着。' });
+assert.ok(emptySvg.includes('先空着'));
 assert.ok(!/<path /.test(emptySvg));
 
 const svg = heat.renderFullPitchSvg({
@@ -114,7 +114,7 @@ const html = surface.renderPredictSurface({
     home: { rawGf: 1.8, adjGf: 1.4, nOpp: 3, shrink: 0.21 },
     away: { rawGf: 1.1, adjGf: 1.1, nOpp: 3, shrink: 0.21 },
   },
-  heat: { available: false, checked: true, note: '近期完场没有落点，画不出攻防路线。' },
+  heat: { available: false, checked: true, note: '近况样本太少，攻防图先空着。' },
   oddsEdge: {
     exp: { expH: 1.2, expA: 0.9 },
     over25: 0.46,
@@ -158,7 +158,7 @@ const reportHtml = pr._renderHtml(
   { home: '红队', away: '蓝队' },
   {
     market: { p: { h: 0.4, d: 0.3, a: 0.3 } },
-    heat: { available: false, checked: true, note: '近期完场没有落点，画不出攻防路线。' },
+    heat: { available: false, checked: true, note: '近况样本太少，攻防图先空着。' },
     strengthCalib: early && { ok: true, note: early && '赛季还早，校准往原始进球收了一截。', home: early, away: early },
   },
   {
@@ -201,7 +201,7 @@ const rich = surface.renderPredictSurface({
   squad: { available: true, sidelined: marked, cores: { home: coreRows, away: [] } },
   oddsEdge: { exp: { expH: 0.9, expA: 1.6 }, over25: 0.48 },
   market: { p: { h: 0.2, d: 0.24, a: 0.56 }, had: { h: 4.5, d: 3.4, a: 1.7 } },
-  heat: { available: false, checked: true, note: '近期完场没有落点，画不出攻防路线。' },
+  heat: { available: false, checked: true, note: '近况样本太少，攻防图先空着。' },
 });
 assert.ok(rich.includes('pr-side core'));
 assert.ok(rich.includes('pr-core-card'));
@@ -258,7 +258,7 @@ assert.strictEqual(halfOnly.lead, 1);
 assert.strictEqual(halfOnly.n, 1);
 assert.strictEqual(sq.tallyHalf([{ scores: [] }], 10).n, 0);
 
-assert.ok(/没有落点/.test(reportHtml));
+assert.ok(/先空着/.test(reportHtml));
 assert.ok(/胜平负 · 模型概率/.test(reportHtml));
 assert.ok(/pr-value-table/.test(reportHtml));
 assert.ok(!/要点覆盖|Pipeline|触发：/.test(reportHtml));
