@@ -3127,6 +3127,16 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 .pr-surface .pr-ou-meta .row b { font-variant-numeric: tabular-nums; }
 .pr-surface .pr-empty-note { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: #f4f6f8; color: #3d4a42; font-size: 13px; line-height: 1.5; }
 .pr-surface .pr-heat-read { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--t2, #5c6b7a); }
+.pr-surface .pr-heat-legend {
+  display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 8px; padding: 0; list-style: none;
+  font-size: 11px; line-height: 1.4; color: #5c6b7a;
+}
+.pr-surface .pr-heat-legend li { display: inline-flex; align-items: center; gap: 4px; }
+.pr-surface .pr-heat-legend i { width: 16px; height: 8px; border-radius: 99px; display: inline-block; box-sizing: border-box; }
+.pr-surface .pr-heat-legend i.atk { height: 4px; background: #e23d3d; }
+.pr-surface .pr-heat-legend i.band { background: rgba(47, 111, 224, .38); }
+.pr-surface .pr-heat-legend i.focus { background: transparent; border: 2px solid #e2b434; }
+.pr-surface .pr-heat-foot { margin: 6px 0 0; font-size: 11px; line-height: 1.45; color: #8e8e93; }
 .pr-surface .pr-soft { font-size: 12px; color: #5c4d78; }
 .pr-surface .pr-corridor-widget {
   margin: 8px 0 0;
