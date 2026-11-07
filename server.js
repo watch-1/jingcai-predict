@@ -1405,7 +1405,9 @@ app.get('/api/sm-bracket', async (req, res) => {
       awayZh: q.away,
       kickoffMs: Number.isFinite(kickoffMs) ? kickoffMs : Date.now(),
     });
-    res.json({ show: !!pack.show, html: pack.show ? (pack.html || '') : '', reason: pack.reason || '' });
+    const body = { show: !!pack.show, html: pack.show ? (pack.html || '') : '', reason: pack.reason || '' };
+    require('./lib/logo-proxy').rewriteFields(body, req, ['html']);
+    res.json(body);
   } catch (e) {
     res.json({ show: false, html: '', reason: 'unavailable' });
   }
@@ -1426,7 +1428,7 @@ app.get('/api/sm-surface', async (req, res) => {
       kickoffMs: Number.isFinite(kickoffMs) ? kickoffMs : Date.now(),
     });
     const surface = require('./lib/sm-surface');
-    res.json({
+    const body = {
       ok: true,
       formHtml: surface.renderFormHtml(pack),
       barsHtml: surface.renderBarsHtml(pack),
@@ -1435,7 +1437,9 @@ app.get('/api/sm-surface', async (req, res) => {
       photos: surface.photoList(pack),
       reason: pack.reason || '',
       smReason: pack.reason || '',
-    });
+    };
+    require('./lib/logo-proxy').rewriteFields(body, req, ['formHtml', 'barsHtml', 'growthHtml', 'liveHtml']);
+    res.json(body);
   } catch (e) {
     res.status(502).json({ ok: false, error: '近况数据暂时不可用' });
   }
@@ -1656,6 +1660,7 @@ app.get('/api/predict-report', async (req, res) => {
     const report = await require('./lib/predict-report').buildReport(m, {
       schedulePool, force, aiAsync: !aiWait, prematchSnapshot,
     });
+    require('./lib/logo-proxy').rewriteFields(report, req, ['html', 'componentsSmHtml']);
     res.json(report);
   } catch (e) {
     console.warn('predict-report failed', e.message);

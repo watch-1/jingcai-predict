@@ -2315,15 +2315,19 @@ function openSheetHtml(html) {
 // ----- sm-surface 球员明细（与 UI kit 对齐的环形率 + 网格） -----
 function smPlayerPhotoUrl(image) {
   if (!image) return '';
+  const raw = String(image);
+  if (/(?:^|\/)placeholder\.(?:png|jpe?g|webp)(?:$|[?#])/i.test(raw)) return '';
+  if (raw.startsWith('/api/logo?')) return (API || '') + raw;
   try {
-    const u = new URL(String(image));
+    const u = new URL(raw);
+    if (/(?:^|\/)placeholder\.(?:png|jpe?g|webp)$/i.test(u.pathname)) return '';
     const host = u.hostname.toLowerCase();
     if (u.protocol === 'https:' && (host === 'cdn.sportmonks.com' || host === 'media.sportmonks.com')
       && u.pathname.startsWith('/images/') && /\.(png|jpe?g|webp)$/i.test(u.pathname)) {
-      return '/api/logo?url=' + encodeURIComponent(u.toString());
+      return (API || '') + '/api/logo?url=' + encodeURIComponent(u.toString());
     }
   } catch { /* */ }
-  return String(image || '');
+  return raw;
 }
 /** @param {{pct:number|null, mid:string, bot:string, tone?:string}} o */
 function smCircGauge(o) {
@@ -7494,10 +7498,10 @@ function paintSmSurface(id, pack) {
     if (liveBox) liveBox.innerHTML = note;
     return;
   }
-  if (form && pack.formHtml) form.innerHTML = pack.formHtml;
-  if (bars && pack.barsHtml) bars.innerHTML = pack.barsHtml;
-  if (growth && pack.growthHtml) growth.innerHTML = pack.growthHtml;
-  if (liveBox && pack.liveHtml) liveBox.innerHTML = pack.liveHtml;
+  if (form && pack.formHtml) form.innerHTML = rewritePredictLogoHtml(pack.formHtml);
+  if (bars && pack.barsHtml) bars.innerHTML = rewritePredictLogoHtml(pack.barsHtml);
+  if (growth && pack.growthHtml) growth.innerHTML = rewritePredictLogoHtml(pack.growthHtml);
+  if (liveBox && pack.liveHtml) liveBox.innerHTML = rewritePredictLogoHtml(pack.liveHtml);
   const lu = document.getElementById('lineup-box-' + id);
   const L = S.lineupCache && S.lineupCache[id];
   if (lu && L && pack.photos && pack.photos.length) {
@@ -8636,6 +8640,27 @@ function reviewTabHtml(x) {
   h += ``;
   return h;
 }
+function isSmPlaceholderPhoto(url) {
+  let s = String(url || '');
+  try { s = decodeURIComponent(s); } catch (_) {}
+  return /(?:^|\/)placeholder\.(?:png|jpe?g|webp)(?:$|[?#])/i.test(s);
+}
+/**
+ * APK WebView is file:///android_asset/www. Root-relative /api/logo becomes
+ * file:///api/logo and onerror drops the headshot. Prefix the same API base
+ * the rest of the app uses. SM placeholder.png is not a photo — leave the letter.
+ */
+function rewritePredictLogoHtml(html) {
+  let h = String(html || '');
+  if (!h || !/\/api\/logo\?|placeholder\.(?:png|jpe?g|webp)/i.test(h)) return h;
+  h = h.replace(/<(img|image)\b[^>]*>/gi, (tag) => {
+    const m = tag.match(/\s(?:src|href|xlink:href)\s*=\s*(["'])([^"']+)\1/i);
+    if (m && isSmPlaceholderPhoto(m[2])) return '';
+    return tag;
+  });
+  if (!API) return h;
+  return h.replace(/(\s(?:src|href|xlink:href)\s*=\s*["'])(\/api\/logo\?)/gi, (_, attr, path) => attr + API + path);
+}
 /** 1.9.70: strip internal/meta AI wording from cached report HTML (defense in depth). */
 function productizePredictHtml(html) {
   let h = String(html || '');
@@ -8669,7 +8694,7 @@ function productizePredictHtml(html) {
     .replace(/第三方公开数据，/g, '公开数据')
     .replace(/[，,·\s]*仅供(?:赛事理解)?参考[。.]?/g, '')
     .replace(/<p class="note">以上为数据分析<\/p>/g, '');
-  return h;
+  return rewritePredictLogoHtml(h);
 }
 
 function predTabHtml(m) {
@@ -8906,7 +8931,7 @@ function intelTabHtml(x, m, stats) {
 function bracketBlock(x) {
   const pack = S.smBracket && S.smBracket[String(x.id)];
   if (!pack || !pack.show || !pack.html) return '';
-  return pack.html;
+  return rewritePredictLogoHtml(pack.html);
 }
 async function ensureSmBracket(x) {
   if (!x || !x.id) return;
@@ -9825,7 +9850,7 @@ function paintComponentLogic(id) {
   const box = document.getElementById('sm-logic-' + id);
   if (!box) return;
   const rep = S.predictCache && S.predictCache[String(id)];
-  if (rep && rep.componentsSmHtml) box.innerHTML = rep.componentsSmHtml;
+  if (rep && rep.componentsSmHtml) box.innerHTML = rewritePredictLogoHtml(rep.componentsSmHtml);
   else box.innerHTML = '<section class="sm-kit sm-logic"><h3>推导组件</h3><p class="sm-empty">和预测页用的是同一套。预测简报出来后，卡片会出现在这里。</p></section>';
 }
 function dataTabHtml(x) {
