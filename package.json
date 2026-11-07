@@ -1,6 +1,6 @@
 {
   "name": "tiicai-site",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "竞彩赛事资讯与赔率概率预测（用户端）。资讯会员 mock 订阅。仅供参考。",
   "main": "server.js",
   "private": true,

@@ -111,7 +111,7 @@ const pmr = require('../lib/post-match-review');
   assert.ok(st.shockSignals.includes('reverse_market') || st.shockSignals.includes('conflict'));
 }
 
-// Abstain without market
+// Abstain without market when the sample is thin
 {
   const st = pr._resolveSpeakStance({
     lean: 'd', pickText: '平局', conf: 0.4, marketLean: null,
@@ -119,6 +119,16 @@ const pmr = require('../lib/post-match-review');
   });
   assert.strictEqual(st.speakMode, 'abstain');
   assert.ok(/信息不足/.test(st.speakLabel));
+}
+
+// Handicap-only / no official WDL: enough form still speaks, instead of blocking the page
+{
+  const st = pr._resolveSpeakStance({
+    lean: 'h', pickText: '主胜', conf: 0.55, marketLean: null,
+    conflict: false, risks: ['胜平负暂无，信心不对照官方胜平负'], dataPoints: 2.1,
+  });
+  assert.strictEqual(st.speakMode, 'amplify');
+  assert.strictEqual(st.stanceLvl[1], '倾向');
 }
 
 // Injury shock amplifies

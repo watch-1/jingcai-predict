@@ -394,6 +394,109 @@ assert.ok(/胜平负 · 模型概率/.test(reportHtml));
 assert.ok(/pr-value-table/.test(reportHtml));
 assert.ok(!/要点覆盖|Pipeline|触发：/.test(reportHtml));
 
+// Handicap-only (胜平负 absent, 让球 -2 present): model still renders; market WDL is 暂无.
+{
+  const m = {
+    id: 'arsenal-hull',
+    home: '阿森纳',
+    away: '赫尔城',
+    league: '英超',
+    date: '2026-11-07',
+    time: '23:00',
+    homeRank: '[英超1]',
+    awayRank: '[英超18]',
+    had: null,
+    hhad: { h: 2.00, d: 3.75, a: 2.68, goalLine: '-2' },
+  };
+  const emptyHad = pr._buildOddsBlock({ ...m, had: {} });
+  assert.strictEqual(emptyHad.hadMissing, true);
+  assert.strictEqual(emptyHad.pool, 'hhad');
+  const market = pr._buildOddsBlock(m);
+  assert.strictEqual(market.available, true);
+  assert.strictEqual(market.p, null);
+  assert.ok(market.q && market.q.h > market.q.a);
+  const exp = sc.expectedGoals({
+    home: { home: { adjGf: 2.1, adjGa: 0.7 }, adjGf: 2.1, adjGa: 0.7 },
+    away: { away: { adjGf: 0.9, adjGa: 1.5 }, adjGf: 0.9, adjGa: 1.5 },
+  });
+  assert.ok(exp && exp.expH > 0 && exp.expA > 0);
+  const wdl = sc.wdlProbs(exp.expH, exp.expA);
+  const rqModel = sc.handicapWdl(exp.expH, exp.expA, -2);
+  assert.ok(rqModel && rqModel.line === -2);
+  const oddsEdge = {
+    exp,
+    over25: sc.over25Prob(exp.expH + exp.expA),
+    wdl,
+    rq: {
+      line: rqModel.line,
+      rows: ['h', 'd', 'a'].map(k => ({
+        k,
+        lab: { h: '让胜', d: '让平', a: '让负' }[k],
+        model: rqModel[k],
+        fair: market.q[k],
+        odd: m.hhad[k],
+        deltaPp: (rqModel[k] - market.q[k]) * 100,
+      })),
+    },
+  };
+  const blocks = {
+    background: { hasData: true, facts: {}, text: '' },
+    form: {
+      hasData: true,
+      sparse: false,
+      text: 'form',
+      facts: {
+        home: { summary: { w: 4, d: 1, l: 0 }, goals: { n: 5, avgGf: 2.2, avgGa: 0.6 } },
+        away: { summary: { w: 1, d: 1, l: 3 }, goals: { n: 5, avgGf: 0.8, avgGa: 1.6 } },
+      },
+    },
+    h2h: { hasData: false },
+    injuries: { hasData: false, available: false },
+    schedule: { hasData: false, text: '' },
+    market,
+    process: { hasData: false },
+    movement: {
+      hasData: true,
+      lean: 'h',
+      delta: 0.4,
+      chip: '让胜赔率 1.80→2.00，资金偏让胜',
+      sum: { pool: 'hhad', dir: 'h', n: 3, shift: { h: 0.04, d: -0.01, a: -0.03 } },
+    },
+  };
+  const plain = pr._synthesize(m, blocks);
+  const pushed = pr._synthesize(m, Object.assign({}, blocks, {
+    movement: Object.assign({}, blocks.movement, { sum: Object.assign({}, blocks.movement.sum, { pool: 'had' }) }),
+  }));
+  assert.strictEqual(plain.marketLean, null);
+  assert.strictEqual(plain.speakMode, 'amplify');
+  assert.strictEqual(plain.lean, 'h');
+  assert.ok(plain.score < pushed.score, '让球变盘不计入胜平负软分');
+  assert.ok(!/信号冲突/.test(plain.text));
+  assert.ok(/胜平负暂无/.test(plain.text));
+  const html = pr._renderHtml(m, Object.assign({}, blocks, { oddsEdge }), plain);
+  assert.ok(html.includes('胜平负 · 模型概率'));
+  assert.ok(html.includes('pr-1x2'));
+  assert.ok(html.includes('主胜 · 模型概率'));
+  assert.ok(html.includes('大小球'));
+  assert.ok(html.includes('class="pr-htft"'));
+  assert.ok(html.includes('让球胜平负'));
+  assert.ok(html.includes('让胜'));
+  assert.ok(html.includes('2.00'));
+  assert.ok(html.includes('3.75'));
+  assert.ok(html.includes('2.68'));
+  assert.ok(html.includes('胜平负暂无'));
+  assert.ok(html.includes('不编造赔率'));
+  assert.ok(!html.includes('pr-wdl-missing') || html.includes('胜平负暂无'));
+  const wdlPart = html.slice(html.indexOf('pr-wdw'), html.indexOf('pr-ou-sec'));
+  const wdlOnly = wdlPart.slice(0, wdlPart.indexOf('让球胜平负'));
+  assert.ok(wdlOnly.includes('胜平负暂无'));
+  assert.ok(!wdlOnly.includes('0.0pp'));
+  assert.ok(!wdlOnly.includes('pr-value-table'));
+  assert.ok(wdlPart.includes('pr-value-table'));
+  assert.ok(html.includes('额外表态'));
+  assert.ok(!html.includes('信息不足，不额外表态'));
+}
+
 (async () => {
   const hs = require('../lib/heat-source');
   assert.strictEqual(hs.englishName('t-machida', '町田泽维'), 'Machida Zelvia');
