@@ -254,7 +254,11 @@ const html = require('../lib/predict-surface').renderPredictSurface({
   heat: matchHeat,
   corridor,
 });
-assert.ok(html.includes('证据足') || html.includes('一般'));
+assert.ok(!html.includes('pc-ev'));
+assert.ok(!html.includes('证据足'));
+assert.ok(!html.includes('角标是样本'));
+assert.ok(html.includes('pc-move-rows'));
+assert.ok(!html.includes('pc-move-cols'));
 assert.ok(html.includes('对位提示'));
 assert.ok(html.includes('客队这边松'));
 assert.ok(html.includes('模型推理 vs 市场赔率'));
@@ -296,6 +300,9 @@ assert.ok(sm.includes('data-id="motive"'));
 assert.ok(sm.includes('高位逼抢'));
 assert.ok(sm.includes('先不看'));
 assert.ok(sm.includes('影响：'));
+assert.ok(!sm.includes('pc-ev'));
+assert.ok(sm.includes('pc-move-rows'));
+assert.ok(!sm.includes('证据足'));
 const clockHtml = pc.renderCards(clock.components, { skin: 'dqd', pack: clock });
 assert.ok(clockHtml.includes('pc-seg'));
 assert.ok(clockHtml.includes('先丢球习惯'));
