@@ -436,8 +436,8 @@ const starOut = absencePack(
 );
 const star = starOut.components.find(c => c.id === 'lanecore');
 assert.strictEqual(star.fired, true);
-assert.ok(star.lambdaHome <= -0.04 && star.lambdaHome >= -0.06, 'forced corridor core cuts home lambda within the cap');
-assert.ok(star.scoreDelta <= -0.08);
+assert.ok(star.lambdaHome <= -0.10 && star.lambdaHome >= -0.13, 'one full forced absence is about 3pt of home win');
+assert.ok(star.scoreDelta <= -0.10 && star.scoreDelta >= -0.20);
 assert.strictEqual(star.lambdaAway, 0);
 const starHtml = pc.renderCards(starOut.components, { skin: 'dqd', pack: starOut });
 assert.ok(starHtml.includes('萨卡'));
@@ -450,9 +450,9 @@ const rotated = absencePack(
   [{ player_id: 7, name: '萨卡', side: 'home', core: true, type: 'rotation', reason: '轮换', position_name: 'Left Wing' }],
   { home: [corePlayer()], away: [] },
 ).components.find(c => c.id === 'lanecore');
-assert.ok(rotated.lambdaHome > -0.02, 'rotation must not smash lambda');
+assert.ok(Math.abs(rotated.lambdaHome) <= Math.abs(star.lambdaHome) * 0.25 + 0.005, 'rotation stays within about a quarter of a full absence');
+assert.ok(Math.abs(rotated.lambdaHome) >= Math.abs(star.lambdaHome) * 0.15);
 assert.ok(rotated.confDelta < 0);
-assert.ok(Math.abs(rotated.lambdaHome) < Math.abs(star.lambdaHome) * 0.5);
 
 const missed = absencePack(
   [{ player_id: 8, name: '中卫', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Centre Back', position_id: 25 }],
@@ -479,9 +479,9 @@ const two = absencePack(
   ],
   { home: [corePlayer(), second], away: [] },
 ).components.find(c => c.id === 'lanecore');
-assert.ok(Math.abs(two.lambdaHome) > Math.abs(star.lambdaHome));
-assert.ok(Math.abs(two.lambdaHome) < Math.abs(star.lambdaHome) * 1.7, 'second absence is concave');
-assert.ok(Math.abs(two.lambdaHome) <= 0.06);
+assert.ok(Math.abs(two.lambdaHome) > Math.abs(star.lambdaHome) * 2.1, 'second same-line absence accelerates');
+assert.ok(Math.abs(two.lambdaHome) < Math.abs(star.lambdaHome) * 2.4);
+assert.ok(Math.abs(two.lambdaHome) <= 0.32);
 
 const third = corePlayer({ player_id: 12, name: '特罗萨德', impact: 10, goals: 2, assists: 2 });
 const three = absencePack(
@@ -491,8 +491,12 @@ const three = absencePack(
     { player_id: 12, name: '特罗萨德', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Left Wing' },
   ],
   { home: [corePlayer(), second, third], away: [] },
-).components.find(c => c.id === 'lanecore');
-assert.ok(Math.abs(three.lambdaHome) <= 0.06, 'same-side lambda stays capped');
+);
+const threeCard = three.components.find(c => c.id === 'lanecore');
+assert.ok(Math.abs(threeCard.lambdaHome) <= 0.32, 'same-side lambda stays inside the raised cap');
+assert.ok(Math.abs(threeCard.lambdaHome) >= 0.28, 'three same-line forced absences land near 8pt');
+assert.ok(Math.abs(three.lambda.home) >= 0.28, 'pack clamp lets the absence through');
+assert.ok(Math.abs(threeCard.scoreDelta) <= 0.38);
 
 const quiet = absencePack(
   [{ player_id: 3, name: '替补', side: 'home', core: false, type: 'injury', reason: '伤病' }],
@@ -510,6 +514,25 @@ const priced = absencePack(
 ).components.find(c => c.id === 'lanecore');
 assert.ok(Math.abs(priced.lambdaHome) < Math.abs(star.lambdaHome), 'market already on the absence side is not fully counted again');
 assert.ok(priced.confDelta < 0);
+
+const mixed = absencePack(
+  [
+    { player_id: 7, name: '萨卡', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Left Wing' },
+    { player_id: 21, name: '萨利巴', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Right Back', position_id: 25 },
+    { player_id: 22, name: '拉亚', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Goalkeeper', position_id: 1 },
+  ],
+  {
+    home: [
+      corePlayer(),
+      corePlayer({ player_id: 21, name: '萨利巴', position_name: 'Right Back', position_id: 25, goals: 0, assists: 0, tackles: 16, impact: 12 }),
+      corePlayer({ player_id: 22, name: '拉亚', position_name: 'Goalkeeper', position_id: 1, goals: 0, assists: 0, tackles: 0, impact: 9, apps: 5 }),
+    ],
+    away: [],
+  },
+).components.find(c => c.id === 'lanecore');
+assert.ok(mixed.lambdaHome < 0 && mixed.lambdaAway > 0);
+assert.ok(Math.abs(mixed.lambdaHome) + mixed.lambdaAway < Math.abs(threeCard.lambdaHome), 'mixed roles do not accelerate like one line');
+assert.ok(mixed.lambdaAway < 0.12);
 
 const signed = n => (n > 0 ? '+' : '') + Number(n).toFixed(2);
 console.log('EXAMPLE corridor mismatch / odds divergence');
