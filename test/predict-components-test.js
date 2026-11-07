@@ -495,8 +495,27 @@ const three = absencePack(
 const threeCard = three.components.find(c => c.id === 'lanecore');
 assert.ok(Math.abs(threeCard.lambdaHome) <= 0.32, 'same-side lambda stays inside the raised cap');
 assert.ok(Math.abs(threeCard.lambdaHome) >= 0.28, 'three same-line forced absences land near 8pt');
-assert.ok(Math.abs(three.lambda.home) >= 0.28, 'pack clamp lets the absence through');
+assert.strictEqual(three.lambda.home, threeCard.lambdaHome, 'pack sum keeps the three-core lambda');
 assert.ok(Math.abs(threeCard.scoreDelta) <= 0.38);
+assert.strictEqual(starOut.lambda.home, star.lambdaHome, 'pack sum keeps the single-core lambda');
+
+const summedOne = pc.finish([
+  { id: 'lanecore', fired: true, lambdaHome: -0.11, lambdaAway: 0, scoreDelta: -0.14 },
+]);
+assert.strictEqual(summedOne.lambda.home, -0.11);
+assert.strictEqual(summedOne.scoreDelta, -0.14);
+const summedThree = pc.finish([
+  { id: 'lanecore', fired: true, lambdaHome: -0.30, lambdaAway: 0, scoreDelta: -0.38 },
+]);
+assert.strictEqual(summedThree.lambda.home, -0.30);
+assert.strictEqual(summedThree.scoreDelta, -0.38);
+const summedWithOthers = pc.finish([
+  { id: 'lanecore', fired: true, lambdaHome: -0.30, lambdaAway: 0, scoreDelta: -0.38 },
+  { id: 'schedule', fired: true, lambdaHome: -0.02, lambdaAway: 0, scoreDelta: -0.26 },
+  { id: 'corridor', fired: true, lambdaHome: 0, lambdaAway: 0.05, scoreDelta: -0.22 },
+]);
+assert.strictEqual(summedWithOthers.lambda.home, -0.32);
+assert.strictEqual(summedWithOthers.scoreDelta, -0.85);
 
 const quiet = absencePack(
   [{ player_id: 3, name: '替补', side: 'home', core: false, type: 'injury', reason: '伤病' }],
