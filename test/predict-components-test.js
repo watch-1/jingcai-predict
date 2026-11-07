@@ -400,6 +400,117 @@ const lanePhoto = pc.renderCards([{
 assert.ok(lanePhoto.includes('pc-av'));
 assert.ok(lanePhoto.includes('/api/logo?url='));
 
+function corePlayer(over) {
+  return Object.assign({
+    player_id: 7,
+    name: '萨卡',
+    position_name: 'Left Wing',
+    position_id: 27,
+    apps: 5,
+    goals: 4,
+    assists: 2,
+    tackles: 1,
+    impact: 14,
+    marketValueEur: null,
+    image: '',
+  }, over || {});
+}
+const laneCorridor = {
+  available: true,
+  home_attack_lane: 'left',
+  home_attack_lane_zh: '左路',
+  away_attack_lane: 'right',
+  away_attack_lane_zh: '右路',
+};
+function absencePack(sidelined, cores, extra) {
+  return pc.buildPack({
+    blocks: Object.assign({
+      corridor: laneCorridor,
+      squad: { sidelined, cores: cores || { home: [], away: [] } },
+    }, extra || {}),
+  });
+}
+const starOut = absencePack(
+  [{ player_id: 7, name: '萨卡', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Left Wing' }],
+  { home: [corePlayer()], away: [] },
+);
+const star = starOut.components.find(c => c.id === 'lanecore');
+assert.strictEqual(star.fired, true);
+assert.ok(star.lambdaHome <= -0.04 && star.lambdaHome >= -0.06, 'forced corridor core cuts home lambda within the cap');
+assert.ok(star.scoreDelta <= -0.08);
+assert.strictEqual(star.lambdaAway, 0);
+const starHtml = pc.renderCards(starOut.components, { skin: 'dqd', pack: starOut });
+assert.ok(starHtml.includes('萨卡'));
+assert.ok(starHtml.includes('常走左路'));
+assert.ok(starHtml.includes('替补偏弱'));
+assert.ok(starHtml.includes('进球期望下调'));
+assert.ok(!starHtml.includes('软分'));
+
+const rotated = absencePack(
+  [{ player_id: 7, name: '萨卡', side: 'home', core: true, type: 'rotation', reason: '轮换', position_name: 'Left Wing' }],
+  { home: [corePlayer()], away: [] },
+).components.find(c => c.id === 'lanecore');
+assert.ok(rotated.lambdaHome > -0.02, 'rotation must not smash lambda');
+assert.ok(rotated.confDelta < 0);
+assert.ok(Math.abs(rotated.lambdaHome) < Math.abs(star.lambdaHome) * 0.5);
+
+const missed = absencePack(
+  [{ player_id: 8, name: '中卫', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Centre Back', position_id: 25 }],
+  { home: [corePlayer({ player_id: 8, name: '中卫', position_name: 'Centre Back', position_id: 25, goals: 0, assists: 0, tackles: 16, impact: 11 })], away: [] },
+).components.find(c => c.id === 'lanecore');
+assert.strictEqual(missed.fired, true);
+assert.strictEqual(missed.lambdaHome, 0, 'off-corridor absence does not move lambda');
+assert.ok(missed.scoreDelta < 0 && missed.scoreDelta > -0.06);
+
+const covered = absencePack(
+  [
+    { player_id: 7, name: '萨卡', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Left Wing' },
+  ],
+  { home: [corePlayer(), corePlayer({ player_id: 9, name: '马丁内利', impact: 13, goals: 3, assists: 2 })], away: [] },
+).components.find(c => c.id === 'lanecore');
+assert.ok(Math.abs(covered.lambdaHome) < Math.abs(star.lambdaHome) * 0.7, 'a similar backup dampens the absence');
+assert.ok(covered.lambdaHome < 0);
+
+const second = corePlayer({ player_id: 11, name: '热苏斯', impact: 12, goals: 3, assists: 1 });
+const two = absencePack(
+  [
+    { player_id: 7, name: '萨卡', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Left Wing' },
+    { player_id: 11, name: '热苏斯', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Left Wing' },
+  ],
+  { home: [corePlayer(), second], away: [] },
+).components.find(c => c.id === 'lanecore');
+assert.ok(Math.abs(two.lambdaHome) > Math.abs(star.lambdaHome));
+assert.ok(Math.abs(two.lambdaHome) < Math.abs(star.lambdaHome) * 1.7, 'second absence is concave');
+assert.ok(Math.abs(two.lambdaHome) <= 0.06);
+
+const third = corePlayer({ player_id: 12, name: '特罗萨德', impact: 10, goals: 2, assists: 2 });
+const three = absencePack(
+  [
+    { player_id: 7, name: '萨卡', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Left Wing' },
+    { player_id: 11, name: '热苏斯', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Left Wing' },
+    { player_id: 12, name: '特罗萨德', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Left Wing' },
+  ],
+  { home: [corePlayer(), second, third], away: [] },
+).components.find(c => c.id === 'lanecore');
+assert.ok(Math.abs(three.lambdaHome) <= 0.06, 'same-side lambda stays capped');
+
+const quiet = absencePack(
+  [{ player_id: 3, name: '替补', side: 'home', core: false, type: 'injury', reason: '伤病' }],
+  { home: [], away: [] },
+).components.find(c => c.id === 'lanecore');
+assert.strictEqual(quiet.fired, false);
+
+const priced = absencePack(
+  [{ player_id: 7, name: '萨卡', side: 'home', core: true, type: 'injury', reason: '伤病', position_name: 'Left Wing' }],
+  { home: [corePlayer()], away: [] },
+  {
+    market: { p: { h: 0.3, d: 0.22, a: 0.48 } },
+    oddsEdge: { wdl: { h: 0.45, d: 0.27, a: 0.28 } },
+  },
+).components.find(c => c.id === 'lanecore');
+assert.ok(Math.abs(priced.lambdaHome) < Math.abs(star.lambdaHome), 'market already on the absence side is not fully counted again');
+assert.ok(priced.confDelta < 0);
+
 const signed = n => (n > 0 ? '+' : '') + Number(n).toFixed(2);
 console.log('EXAMPLE corridor mismatch / odds divergence');
 console.log('lean-only before', plain.lean, plain.conf.toFixed(3), 'after', lifted.lean, lifted.conf.toFixed(3), 'score', signed(leanOnly.scoreDelta));
