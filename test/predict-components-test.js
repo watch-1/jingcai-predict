@@ -129,6 +129,22 @@ const twoPoint = pc.buildPack({
 const twoMove = twoPoint.components.find(c => c.id === 'move');
 assert.strictEqual(twoMove.viz.series.length, 2);
 assert.ok(twoMove.viz.series[1] > twoMove.viz.series[0], 'shorter away odds draw an upward line');
+assert.strictEqual(twoMove.viz.chip, '近况与盘口相反');
+const sameWay = pc.buildPack({
+  blocks: {
+    movement: {
+      hasData: true, lean: 'h', delta: 0,
+      sum: {
+        dir: 'h', n: 2,
+        open: { h: 2.2, d: 3.2, a: 3.1 },
+        last: { h: 1.9, d: 3.3, a: 3.4 },
+        spark: [{ h: 0.40, d: 0.30, a: 0.30 }, { h: 0.48, d: 0.28, a: 0.24 }],
+      },
+    },
+    context, form,
+  },
+});
+assert.strictEqual(sameWay.components.find(c => c.id === 'move').viz.chip, '近况与盘口同向');
 assert.ok(pc.renderCards(twoPoint.components, { skin: 'dqd', pack: twoPoint }).includes('pc-spark'));
 assert.strictEqual(noSeries.components.find(c => c.id === 'move').confDelta < 0, true);
 assert.strictEqual(press.fired, false);
@@ -270,7 +286,9 @@ assert.ok(html.includes('模型偏主胜，盘口偏客胜'));
 assert.ok(html.includes('控球但打不进去'));
 assert.ok(html.includes('先不看'));
 assert.ok(html.includes('pc-card is-gold'));
-assert.ok(html.includes('方向相反'));
+assert.ok(html.includes('近况与盘口相反'));
+assert.ok(!html.includes('方向相反'));
+assert.ok(!html.includes('同向加强'));
 assert.ok(html.includes('更看好主胜'));
 assert.ok(html.includes('更看好客胜'));
 assert.ok(html.includes('主胜水位抬高'));
@@ -304,7 +322,24 @@ assert.ok(!sm.includes('pc-ev'));
 assert.ok(sm.includes('pc-move-rows'));
 assert.ok(!sm.includes('证据足'));
 const clockHtml = pc.renderCards(clock.components, { skin: 'dqd', pack: clock });
-assert.ok(clockHtml.includes('pc-seg'));
+assert.ok(clockHtml.includes('pc-gd'));
+const spread = pc.buildPack({
+  blocks: {
+    goalClock: {
+      home: { n_fixtures: 8, segments: { '0-15': 1, '16-30': 1, '31-45': 2, '46-60': 3, '61-75': 2, '76-90': 4 } },
+      away: { n_fixtures: 8, segments: { '0-15': 1, '16-30': 1, '31-45': 2, '46-60': 2, '61-75': 3, '76-90': 4 } },
+    },
+  },
+});
+const spreadClock = spread.components.find(c => c.id === 'clock');
+assert.strictEqual(spreadClock.fired, true);
+assert.strictEqual(spreadClock.scoreDelta, 0);
+assert.strictEqual(spreadClock.lambdaHome, 0);
+assert.ok(pc.renderCards(spread.components, { skin: 'dqd', pack: spread }).includes('pc-gd'));
+assert.ok(clockHtml.includes('00′'));
+assert.ok(clockHtml.includes('90′'));
+assert.ok(clockHtml.includes('home h1'));
+assert.ok(clockHtml.includes('away h2'));
 assert.ok(clockHtml.includes('先丢球习惯'));
 assert.ok(clockHtml.includes('pc-rest'));
 assert.ok(!clockHtml.includes('pc-time'));
