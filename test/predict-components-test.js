@@ -63,7 +63,20 @@ const movement = {
   hasData: true,
   lean: 'a',
   delta: 0,
-  sum: { dir: 'a', strength: 'mild', shift: { h: -0.04, d: 0.01, a: 0.04 } },
+  sum: {
+    dir: 'a',
+    strength: 'mild',
+    n: 4,
+    shift: { h: -0.04, d: 0.01, a: 0.04 },
+    open: { h: 2.4, d: 3.2, a: 2.7 },
+    last: { h: 2.7, d: 3.15, a: 2.4 },
+    spark: [
+      { h: 0.42, d: 0.28, a: 0.30 },
+      { h: 0.38, d: 0.27, a: 0.35 },
+      { h: 0.36, d: 0.26, a: 0.38 },
+      { h: 0.34, d: 0.26, a: 0.40 },
+    ],
+  },
 };
 
 const before = pc.buildPack({
@@ -94,6 +107,30 @@ assert.strictEqual(motive.scoreDelta, 0.12);
 assert.ok(sched.scoreDelta > 0, 'away short rest lifts home');
 assert.strictEqual(move.scoreDelta, 0, 'opposite odds move must not flip the lean');
 assert.ok(move.confDelta < 0);
+assert.ok(move.viz.series.length >= 2, 'sparkline uses the odds history');
+const noSeries = pc.buildPack({
+  blocks: {
+    movement: { hasData: true, lean: 'a', delta: 0, sum: { dir: 'a', shift: { h: -0.04, d: 0, a: 0.04 } } },
+    context, form,
+  },
+});
+const noSeriesHtml = pc.renderCards(noSeries.components, { skin: 'dqd', pack: noSeries });
+assert.ok(noSeriesHtml.includes('没有赔率走势'));
+assert.ok(!noSeriesHtml.includes('pc-spark'));
+const twoPoint = pc.buildPack({
+  blocks: {
+    movement: {
+      hasData: true, lean: 'a', delta: 0,
+      sum: { dir: 'a', open: { h: 2.4, d: 3.2, a: 2.7 }, last: { h: 2.7, d: 3.15, a: 2.4 } },
+    },
+    context, form,
+  },
+});
+const twoMove = twoPoint.components.find(c => c.id === 'move');
+assert.strictEqual(twoMove.viz.series.length, 2);
+assert.ok(twoMove.viz.series[1] > twoMove.viz.series[0], 'shorter away odds draw an upward line');
+assert.ok(pc.renderCards(twoPoint.components, { skin: 'dqd', pack: twoPoint }).includes('pc-spark'));
+assert.strictEqual(noSeries.components.find(c => c.id === 'move').confDelta < 0, true);
 assert.strictEqual(press.fired, false);
 assert.ok(press.chain.join('').includes('跳过'));
 
@@ -220,7 +257,10 @@ const html = require('../lib/predict-surface').renderPredictSurface({
 assert.ok(html.includes('证据足') || html.includes('一般'));
 assert.ok(html.includes('对位提示'));
 assert.ok(html.includes('客队这边松'));
-assert.ok(html.includes('我们算的 vs 市场赔率'));
+assert.ok(html.includes('模型推理 vs 市场赔率'));
+assert.ok(html.includes('pc-vgrp is-hot'));
+assert.ok(/差 \d+pt/.test(html));
+assert.ok(html.includes('pc-spark'));
 assert.ok(html.includes('差在哪'));
 assert.ok(html.includes('模型偏主胜，盘口偏客胜'));
 assert.ok(html.includes('控球但打不进去'));
@@ -228,7 +268,11 @@ assert.ok(html.includes('先不看'));
 assert.ok(html.includes('pc-card is-gold'));
 assert.ok(html.includes('方向相反'));
 assert.ok(html.includes('更看好主胜'));
-assert.ok(html.includes('往客胜挪'));
+assert.ok(html.includes('更看好客胜'));
+assert.ok(html.includes('主胜水位抬高'));
+assert.ok(html.includes('客胜赔率走低'));
+assert.ok(!html.includes('往客胜挪'));
+assert.ok(!html.includes('我们算的'));
 assert.ok(html.includes('影响：'));
 assert.ok(html.includes('样本不够，先不画'));
 assert.ok(!html.includes('pc-arrows'));
