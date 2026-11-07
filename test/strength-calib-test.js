@@ -69,6 +69,121 @@ assert.strictEqual(sc.isEarlySeason({ roundsPlayed: 6, leagueSize: 20, oppSample
 assert.strictEqual(sc.isEarlySeason({ roundsPlayed: 12, leagueSize: 20, oppSample: 6 }), true);
 assert.strictEqual(sc.isEarlySeason({ roundsPlayed: 12, leagueSize: 20, oppSample: 14 }), false);
 
+// Today's strength gap: soft scale after the cross average. Worked example is
+// weak home (0.80/1.80) vs strong away (1.90/0.70), home/away split rates.
+const gapCalib = {
+  home: { adjGf: 0.9, adjGa: 1.7, home: { adjGf: 0.8, adjGa: 1.8 }, oppStr: 0.2 },
+  away: { adjGf: 2.1, adjGa: 0.8, away: { adjGf: 1.9, adjGa: 0.7 }, oppStr: 0.95 },
+};
+const gapExp = sc.expectedGoals(gapCalib);
+assert.ok(gapExp.strengthGap.on);
+assert.strictEqual(gapExp.baseH, 0.75);
+assert.strictEqual(gapExp.baseA, 1.85);
+assert.strictEqual(gapExp.strengthGap.strH, 0.8);
+assert.strictEqual(gapExp.strengthGap.strA, 1.9);
+assert.strictEqual(gapExp.strengthGap.gap, -1.1);
+assert.ok(gapExp.expH < gapExp.baseH, 'weak attack vs stronger side lowers λ_h');
+assert.ok(gapExp.expA > gapExp.baseA, 'strong attack vs weaker side raises λ_a');
+assert.ok(Math.abs(gapExp.expH - 0.7013) < 0.001);
+assert.ok(Math.abs(gapExp.expA - 1.97) < 0.001);
+assert.strictEqual(gapExp.strengthGap.dH, -0.049);
+assert.strictEqual(gapExp.strengthGap.dA, 0.12);
+assert.strictEqual(gapExp.strengthGap.dTotal, 0.071);
+assert.ok(gapExp.strengthGap.dTotal > 0.05 && gapExp.strengthGap.dTotal <= sc.STRENGTH_GAP_TOTAL_CAP);
+assert.ok(Math.abs(gapExp.strengthGap.dH) <= sc.STRENGTH_GAP_SIDE_CAP + 1e-9);
+assert.ok(Math.abs(gapExp.strengthGap.dA) <= sc.STRENGTH_GAP_SIDE_CAP + 1e-9);
+const o25Before = sc.over25Prob(gapExp.baseH + gapExp.baseA);
+const o25After = sc.over25Prob(gapExp.expH + gapExp.expA);
+const o25Pp = (o25After - o25Before) * 100;
+assert.ok(o25Pp > 1 && o25Pp < 3, 'large gap moves O2.5 by about 1–3pt, got ' + o25Pp.toFixed(2));
+console.log(
+  'strength-gap example',
+  'λ', gapExp.baseH.toFixed(3), '/', gapExp.baseA.toFixed(3),
+  '→', gapExp.expH.toFixed(3), '/', gapExp.expA.toFixed(3),
+  'total', (gapExp.baseH + gapExp.baseA).toFixed(3),
+  '→', (gapExp.expH + gapExp.expA).toFixed(3),
+  'dTotal', gapExp.strengthGap.dTotal,
+  'O2.5', (o25Before * 100).toFixed(2) + '% → ' + (o25After * 100).toFixed(2) + '%',
+  '(' + (o25Pp >= 0 ? '+' : '') + o25Pp.toFixed(2) + 'pt)'
+);
+
+const gapIgnored = sc.expectedGoals({
+  home: { adjGf: 0.9, adjGa: 1.7, home: { adjGf: 0.8, adjGa: 1.8 } },
+  away: { adjGf: 2.1, adjGa: 0.8, away: { adjGf: 1.9, adjGa: 0.7 } },
+});
+assert.strictEqual(gapIgnored.expH, gapExp.expH);
+assert.strictEqual(gapIgnored.expA, gapExp.expA);
+
+const strongHome = sc.expectedGoals({
+  home: { home: { adjGf: 1.9, adjGa: 0.7 } },
+  away: { away: { adjGf: 0.8, adjGa: 1.8 } },
+});
+assert.ok(strongHome.expH > strongHome.baseH);
+assert.ok(strongHome.expA < strongHome.baseA);
+assert.strictEqual(strongHome.strengthGap.dTotal, 0.071);
+
+const even = sc.expectedGoals({
+  home: { home: { adjGf: 1.4, adjGa: 1.2 } },
+  away: { away: { adjGf: 1.4, adjGa: 1.2 } },
+});
+assert.strictEqual(even.strengthGap.dTotal, 0);
+assert.strictEqual(even.expH, even.baseH);
+assert.strictEqual(even.expA, even.baseA);
+
+const near = sc.expectedGoals({
+  home: { home: { adjGf: 1.4, adjGa: 1.2 } },
+  away: { away: { adjGf: 1.5, adjGa: 1.25 } },
+});
+assert.ok(Math.abs(near.strengthGap.gap) < sc.STRENGTH_GAP_DEAD);
+assert.strictEqual(near.strengthGap.dH, 0);
+assert.strictEqual(near.strengthGap.dA, 0);
+assert.strictEqual(near.expH, near.baseH);
+
+const noGa = sc.expectedGoals({
+  home: { adjGf: 0.8 },
+  away: { away: { adjGf: 1.9, adjGa: 0.7 } },
+});
+assert.strictEqual(noGa.strengthGap.on, false);
+assert.strictEqual(noGa.expH, noGa.baseH);
+assert.strictEqual(noGa.expA, noGa.baseA);
+
+const prevGapFlag = process.env.STRENGTH_GAP_NUDGE;
+process.env.STRENGTH_GAP_NUDGE = '0';
+const gapOff = sc.expectedGoals(gapCalib);
+assert.strictEqual(gapOff.strengthGap.on, false);
+assert.strictEqual(gapOff.expH, gapOff.baseH);
+assert.strictEqual(gapOff.expA, gapOff.baseA);
+assert.strictEqual(gapOff.expH, 0.75);
+assert.strictEqual(gapOff.expA, 1.85);
+if (prevGapFlag == null) delete process.env.STRENGTH_GAP_NUDGE;
+else process.env.STRENGTH_GAP_NUDGE = prevGapFlag;
+
+const gapHtml = surface.renderPredictSurface({
+  home: '弱队',
+  away: '强队',
+  concl: {
+    lean: 'a', pickText: '客胜', conf: 0.55, lvl: ['l2', '倾向'],
+    speakMode: 'amplify', _speakResolved: true, speakLabel: '',
+  },
+  oddsEdge: {
+    exp: { expH: gapExp.expH, expA: gapExp.expA },
+    over25: o25After,
+  },
+});
+assert.ok(gapHtml.includes(`${gapExp.expH.toFixed(1)} / ${gapExp.expA.toFixed(1)}`), 'surface shows nudged λ');
+assert.ok(!gapHtml.includes(`${gapExp.baseH.toFixed(1)} / ${gapExp.baseA.toFixed(1)}`));
+const reportSrc = fs.readFileSync(path.join(__dirname, '../lib/predict-report.js'), 'utf8');
+assert.ok(reportSrc.includes('sc.expectedGoals(strengthCalib)'));
+const pc = require('../lib/predict-components');
+const stacked = pc.nudgeOddsEdge(
+  { exp: { expH: gapExp.expH, expA: gapExp.expA, baseH: gapExp.baseH }, over25: o25After },
+  { lambda: { home: 0.02, away: -0.01 } },
+  null
+);
+assert.ok(Math.abs(stacked.exp.expH - (gapExp.expH + 0.02)) < 1e-9);
+assert.ok(Math.abs(stacked.exp.expA - (gapExp.expA - 0.01)) < 1e-9);
+assert.strictEqual(stacked.exp.baseH, gapExp.baseH);
+
 const fx = {
   id: 1,
   participants: [

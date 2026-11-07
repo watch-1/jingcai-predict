@@ -17,17 +17,17 @@ const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const main = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
 
-assert.ok(/VERSION=2.0.6/.test(ver));
-assert.ok(/VERSION_CODE=323/.test(ver));
-assert.ok(/jc-v2.0.6/.test(swJs));
-assert.strictEqual(pkg.version, '2.0.6');
-assert.strictEqual(cfg.version, '2.0.6');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.6\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-323\}"/.test(apkSh));
+assert.ok(/VERSION=2.0.7/.test(ver));
+assert.ok(/VERSION_CODE=324/.test(ver));
+assert.ok(/jc-v2.0.7/.test(swJs));
+assert.strictEqual(pkg.version, '2.0.7');
+assert.strictEqual(cfg.version, '2.0.7');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.7\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-324\}"/.test(apkSh));
 assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.272.md')));
 assert.ok(/package="com\.tiicai\.jingcai"/.test(androidManifest), 'package id unchanged');
-assert.ok(/android:versionCode="323"/.test(androidManifest));
-assert.ok(/android:versionName="2\.0\.6"/.test(androidManifest));
+assert.ok(/android:versionCode="324"/.test(androidManifest));
+assert.ok(/android:versionName="2\.0\.7"/.test(androidManifest));
 
 // 1) fav star reserved column — time is not a sibling that space-between can shove inward
 const metaFn = appJs.match(/function matchCardMeta\([\s\S]*?^\}/m);
