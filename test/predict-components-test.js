@@ -323,6 +323,28 @@ assert.ok(sm.includes('pc-move-rows'));
 assert.ok(!sm.includes('证据足'));
 const clockHtml = pc.renderCards(clock.components, { skin: 'dqd', pack: clock });
 assert.ok(clockHtml.includes('pc-gd'));
+assert.ok(clockHtml.includes('主近 8 场'));
+assert.ok(clockHtml.includes('客近 8 场'));
+assert.ok(clockHtml.includes('场均'));
+assert.ok(clockHtml.includes('>0.5<'));
+assert.ok(!clockHtml.includes('>4<'));
+assert.strictEqual(clock.components.find(c => c.id === 'clock').lambdaHome, 0.02);
+const uneven = pc.buildPack({
+  blocks: {
+    goalClock: {
+      home: { n_fixtures: 20, segments: { '0-15': 8, '16-30': 6, '31-45': 4, '46-60': 6, '61-75': 4, '76-90': 2 } },
+      away: { n_fixtures: 6, segments: { '0-15': 2, '16-30': 1, '31-45': 1, '46-60': 2, '61-75': 2, '76-90': 3 } },
+    },
+  },
+});
+const unevenClock = uneven.components.find(c => c.id === 'clock');
+assert.strictEqual(unevenClock.scoreDelta, 0);
+assert.strictEqual(unevenClock.lambdaHome, 0);
+const unevenHtml = pc.renderCards(uneven.components, { skin: 'dqd', pack: uneven });
+assert.ok(unevenHtml.includes('主近 20 场'));
+assert.ok(unevenHtml.includes('客近 6 场'));
+assert.ok(unevenHtml.includes('>0.4<'));
+assert.ok(!unevenHtml.includes('>8<'));
 const spread = pc.buildPack({
   blocks: {
     goalClock: {
@@ -345,6 +367,7 @@ assert.ok(clockHtml.includes('pc-rest'));
 assert.ok(!clockHtml.includes('pc-time'));
 const thinHtml = pc.renderCards(thin.components, { skin: 'dqd', pack: thin });
 assert.ok(thinHtml.includes('分钟不够，改看上半场'));
+assert.ok(!thinHtml.includes('pc-gd'));
 const gkHtml = pc.renderCards(gk.components, { skin: 'sm', pack: gk });
 assert.ok(gkHtml.includes('pc-card is-weak'));
 assert.ok(gkHtml.includes('pc-saves'));
