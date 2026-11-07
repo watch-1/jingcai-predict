@@ -136,8 +136,11 @@ const html = surface.renderPredictSurface({
 assert.ok(!html.includes('pr-brief-hd'));
 assert.ok(!html.includes('赛前预测'));
 assert.ok(html.includes('半全场'));
-assert.ok(html.includes('先不排九宫'));
-assert.ok(!html.includes('pr-htft"'));
+assert.ok(html.includes('class="pr-htft"'));
+assert.ok(html.includes('半场来自本场期望进球模型'));
+assert.ok(html.includes('近况半场领先仅作参考脚注'));
+assert.ok(html.includes('这场没有可用的近况半场领先次数'));
+assert.ok(!html.includes('先不排九宫'));
 assert.ok(html.includes('伤停 / 核心'));
 assert.ok(html.includes('伤停和近况核心暂时没有'));
 assert.ok(html.includes('胜平负 · 模型概率'));
@@ -238,11 +241,24 @@ assert.ok(!smRich.includes('pr-brief-hd'));
 assert.strictEqual(surface.htftGrid(null, smRich && {}), null);
 const grid = surface.htftGrid(
   { h: 0.5, d: 0.25, a: 0.25 },
-  { home: { lead: 4, draw: 1, trail: 1, n: 6 }, away: { lead: 1, draw: 2, trail: 3, n: 6 } }
+  { home: { lead: 4, draw: 1, trail: 1, n: 6 }, away: { lead: 1, draw: 2, trail: 3, n: 6 } },
+  { expH: 1.4, expA: 1.1 }
 );
 const gridSum = Object.values(grid.cells).reduce((a, b) => a + b, 0);
 assert.ok(Math.abs(gridSum - 1) < 1e-6);
+assert.ok(smRich.includes('半场来自本场期望进球模型'));
+assert.ok(smRich.includes('主队近 6 场半场领先 4 次'));
 assert.strictEqual(surface.htftGrid({ h: 0.4, d: 0.3, a: 0.3 }, { home: { n: 1, lead: 1, draw: 0, trail: 0 }, away: { n: 6, lead: 1, draw: 2, trail: 3 } }), null);
+const homeLean = surface.htftGrid(
+  { h: 0.55, d: 0.25, a: 0.2 },
+  { home: { n: 6, lead: 0, draw: 1, trail: 5 }, away: { n: 6, lead: 4, draw: 1, trail: 1 } },
+  { expH: 1.7, expA: 0.8 }
+);
+assert.ok(homeLean && homeLean.ht.H > 0.2, 'HT home marginal follows λ, not zero recent leads');
+const homeRow = homeLean.cells.HH + homeLean.cells.HD + homeLean.cells.HA;
+assert.ok(homeRow > 0.15, 'home HT row stays open when FT λ leans home');
+assert.ok(homeLean.cells.HH >= 0.01 && homeLean.cells.HD >= 0.01 && homeLean.cells.HA >= 0.01);
+assert.ok(Math.round(homeLean.cells.HH * 100) > 0, '主/主 does not display as 0%');
 const halfOnly = sq.tallyHalf([{
   participants: [
     { id: 10, meta: { location: 'home' } },

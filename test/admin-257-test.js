@@ -9,7 +9,7 @@ let fails = 0;
 const ok = (c, m) => { console.log(c ? 'OK  ' : 'FAIL', m); if (!c) fails++; };
 
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-ok(/VERSION=2.0.4/.test(ver) && /VERSION_CODE=321/.test(ver), 'VERSION.txt 2.0.4 / 321');
+ok(/VERSION=2.0.5/.test(ver) && /VERSION_CODE=322/.test(ver), 'VERSION.txt 2.0.5 / 322');
 
 const appJs = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
 const bodyFn = appJs.match(/function scheduleBodyHtml[\s\S]*?^}/m)?.[0] || '';
