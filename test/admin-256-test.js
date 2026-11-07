@@ -9,7 +9,7 @@ let fails = 0;
 const ok = (c, m) => { console.log(c ? 'OK  ' : 'FAIL', m); if (!c) fails++; };
 
 const ver = fs.readFileSync(path.join(__dirname, '../VERSION.txt'), 'utf8');
-ok(/VERSION=2.0.5/.test(ver) && /VERSION_CODE=322/.test(ver), 'VERSION.txt 2.0.5 / 322');
+ok(/VERSION=2.0.6/.test(ver) && /VERSION_CODE=323/.test(ver), 'VERSION.txt 2.0.6 / 323');
 
 const ms = fs.readFileSync(path.join(__dirname, '../lib/match-stats.js'), 'utf8');
 ok(/loadRecentFormHistoryRows/.test(ms), 'match-stats merges results-seen archive');
