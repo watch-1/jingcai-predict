@@ -115,8 +115,10 @@ const noSeries = pc.buildPack({
   },
 });
 const noSeriesHtml = pc.renderCards(noSeries.components, { skin: 'dqd', pack: noSeries });
-assert.ok(noSeriesHtml.includes('没有赔率走势'));
+assert.ok(!noSeriesHtml.includes('没有赔率走势'));
+assert.ok(!noSeriesHtml.includes('变盘对照'));
 assert.ok(!noSeriesHtml.includes('pc-spark'));
+assert.ok(!noSeriesHtml.includes('data-id="move"'));
 const twoPoint = pc.buildPack({
   blocks: {
     movement: {
@@ -145,8 +147,30 @@ const sameWay = pc.buildPack({
   },
 });
 assert.strictEqual(sameWay.components.find(c => c.id === 'move').viz.chip, '近况与盘口同向');
-assert.ok(pc.renderCards(twoPoint.components, { skin: 'dqd', pack: twoPoint }).includes('pc-spark'));
+const twoHtml = pc.renderCards(twoPoint.components, { skin: 'dqd', pack: twoPoint });
+assert.ok(!twoHtml.includes('pc-spark'));
+assert.ok(!twoHtml.includes('近况与盘口相反'));
+assert.ok(!twoHtml.includes('变盘对照'));
 assert.strictEqual(noSeries.components.find(c => c.id === 'move').confDelta < 0, true);
+const noSide = pc.buildPack({
+  blocks: {
+    movement: {
+      hasData: true, lean: 'a', delta: 0,
+      sum: {
+        dir: 'a', n: 3,
+        spark: [{ h: 0.40, d: 0.30, a: 0.30 }, { h: 0.34, d: 0.28, a: 0.38 }, { h: 0.32, d: 0.27, a: 0.41 }],
+      },
+    },
+  },
+});
+const noSideMove = noSide.components.find(c => c.id === 'move');
+assert.ok(noSideMove.confDelta < 0, 'unset form still trims confidence');
+assert.strictEqual(noSideMove.viz.chip, '近况没站边');
+const noSideHtml = pc.renderCards(noSide.components, { skin: 'dqd', pack: noSide });
+assert.ok(!noSideHtml.includes('近况没站边'));
+assert.ok(!noSideHtml.includes('没有站到一边'));
+assert.ok(!noSideHtml.includes('近况没有站到一边'));
+assert.ok(!noSideHtml.includes('变盘对照'));
 assert.strictEqual(press.fired, false);
 assert.ok(press.chain.join('').includes('跳过'));
 
@@ -273,26 +297,30 @@ const html = require('../lib/predict-surface').renderPredictSurface({
 assert.ok(!html.includes('pc-ev'));
 assert.ok(!html.includes('证据足'));
 assert.ok(!html.includes('角标是样本'));
-assert.ok(html.includes('pc-move-rows'));
-assert.ok(!html.includes('pc-move-cols'));
+assert.ok(!html.includes('pc-move'));
+assert.ok(!html.includes('data-id="move"'));
+assert.ok(!html.includes('变盘对照'));
+assert.ok(!html.includes('近况没站边'));
+assert.ok(!html.includes('近况与盘口同向'));
+assert.ok(!html.includes('近况与盘口相反'));
+assert.ok(!html.includes('没有站到一边'));
 assert.ok(html.includes('对位提示'));
 assert.ok(html.includes('客队这边松'));
 assert.ok(html.includes('模型推理 vs 市场赔率'));
 assert.ok(html.includes('pc-vgrp is-hot'));
 assert.ok(/差 \d+pt/.test(html));
-assert.ok(html.includes('pc-spark'));
+assert.ok(!html.includes('pc-spark'));
 assert.ok(html.includes('差在哪'));
 assert.ok(html.includes('模型偏主胜，盘口偏客胜'));
 assert.ok(html.includes('控球但打不进去'));
 assert.ok(html.includes('先不看'));
 assert.ok(html.includes('pc-card is-gold'));
-assert.ok(html.includes('近况与盘口相反'));
 assert.ok(!html.includes('方向相反'));
 assert.ok(!html.includes('同向加强'));
-assert.ok(html.includes('更看好主胜'));
-assert.ok(html.includes('更看好客胜'));
-assert.ok(html.includes('主胜水位抬高'));
-assert.ok(html.includes('客胜赔率走低'));
+assert.ok(!html.includes('更看好主胜'));
+assert.ok(!html.includes('更看好客胜'));
+assert.ok(!html.includes('主胜水位抬高'));
+assert.ok(!html.includes('客胜赔率走低'));
 assert.ok(!html.includes('往客胜挪'));
 assert.ok(!html.includes('我们算的'));
 assert.ok(html.includes('影响：'));
@@ -319,7 +347,9 @@ assert.ok(sm.includes('高位逼抢'));
 assert.ok(sm.includes('先不看'));
 assert.ok(sm.includes('影响：'));
 assert.ok(!sm.includes('pc-ev'));
-assert.ok(sm.includes('pc-move-rows'));
+assert.ok(!sm.includes('pc-move'));
+assert.ok(!sm.includes('变盘对照'));
+assert.ok(!sm.includes('近况没站边'));
 assert.ok(!sm.includes('证据足'));
 const clockHtml = pc.renderCards(clock.components, { skin: 'dqd', pack: clock });
 assert.ok(clockHtml.includes('pc-gd'));
