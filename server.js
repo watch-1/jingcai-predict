@@ -603,35 +603,60 @@ function playableOdds(o) {
   return !!(o && Number(o.h) > 1 && Number(o.d) > 1 && Number(o.a) > 1);
 }
 
-function scheduleRowEligibleForMatchesBackfill(row, nowMs) {
-  if (!row || row.id == null || row.id === '') return false;
+function scheduleRowStatusOk(row) {
+  if (!row || row.sample || row.id == null || row.id === '') return false;
   const st = String(row.status ?? '');
   if (MATCHES_SCHEDULE_BACKFILL_BLOCKED.test(st)) return false;
   if (row.full || row._backfill === 'results') return false;
   if (!MATCHES_SCHEDULE_BACKFILL_STATUSES.has(st)) return false;
+  return true;
+}
+
+function scheduleRowEligibleForMatchesBackfill(row, nowMs) {
+  if (!scheduleRowStatusOk(row)) return false;
   if (!playableOdds(row.had) && !playableOdds(row.hhad)) return false;
   const ko = kickoffMs(row.date, row.time);
   if (!Number.isFinite(ko) || ko <= nowMs) return false;
   return true;
 }
 
-/** Merge calculator gaps: schedule Selling/Define rows with odds whose kickoff is still ahead. */
-async function completeMatches(calcList) {
+/**
+ * Calculator returned no rows at all. Keep the official issue list (not ancient seen-cache):
+ * Selling rows that already kicked off overnight, and Define rows that are listed before odds exist.
+ * Seen-cache still has to pass the strict upcoming+odds check so weeks of revived fixtures stay out.
+ */
+function scheduleRowEligibleForEmptyCalculatorSalvage(row, nowMs) {
+  if (!scheduleRowStatusOk(row)) return false;
+  if (row._backfill === 'seen') return scheduleRowEligibleForMatchesBackfill(row, nowMs);
+  return true;
+}
+
+/** Merge calculator gaps: schedule Selling/Define rows with odds whose kickoff is still ahead.
+ *  opts.salvageEmptyCalculator: both calculator endpoints were empty — use the live issue list
+ *  even when odds are missing or kickoff has passed. Never promote sample schedule rows to live.
+ */
+async function completeMatches(calcList, opts) {
+  const loose = !!(opts && opts.salvageEmptyCalculator);
   const byId = new Map((calcList || []).map(m => [String(m.id), m]));
   const before = byId.size;
   let schedRows = [];
   try {
     const schedPayload = await getData('schedule');
-    schedRows = (schedPayload && schedPayload.data) || [];
+    if (loose && (!schedPayload || schedPayload.source !== 'live')) {
+      schedRows = [];
+    } else {
+      schedRows = (schedPayload && schedPayload.data) || [];
+    }
   } catch (e) {
     console.warn('[matches] schedule unavailable for backfill', e.message);
   }
   const now = Date.now();
+  const eligible = loose ? scheduleRowEligibleForEmptyCalculatorSalvage : scheduleRowEligibleForMatchesBackfill;
   let added = 0;
   for (const row of schedRows) {
     const id = String(row.id || '');
     if (!id || byId.has(id)) continue;
-    if (!scheduleRowEligibleForMatchesBackfill(row, now)) continue;
+    if (!eligible(row, now)) continue;
     const st = String(row.status || '');
     byId.set(id, {
       id,
@@ -662,8 +687,8 @@ async function completeMatches(calcList) {
     if (bd) return bd;
     return String(a.num || '').localeCompare(String(b.num || ''), 'zh');
   });
-  if (added) console.log('[matches] backfill from schedule', JSON.stringify({ calc: before, added, final: data.length }));
-  return { data, metaExtra: { matchesBackfill: { calc: before, added } } };
+  if (added) console.log('[matches] backfill from schedule', JSON.stringify({ calc: before, added, final: data.length, loose }));
+  return { data, metaExtra: { matchesBackfill: { calc: before, added, ...(loose ? { emptyCalculator: true } : {}) } } };
 }
 
 async function completeSchedule(list) {
@@ -819,10 +844,12 @@ async function getData(kind) {
     } catch (e) { errors.push(`${ep.split('?')[0]}: ${e.message}`); }
   }
   lastError[kind] = errors;
-  // 1.9.240: all calculator endpoints empty/unreachable — still serve live rows from getMatchListV1 when available
+  // 1.9.240 / 2.1.1: all calculator endpoints empty/unreachable — still serve the live issue list.
+  // Strict upcoming+odds backfill is not enough: after midnight the list is Selling-but-kicked-off
+  // plus Define rows that have no HAD yet. That must stay source:live, not sample.
   if (kind === 'matches') {
     try {
-      const done = await completeMatches([]);
+      const done = await completeMatches([], { salvageEmptyCalculator: true });
       const salvaged = done.data || [];
       if (salvaged.length) {
         const byBiz = summarizeByBusinessDate(salvaged);
@@ -961,7 +988,7 @@ async function fetchNewsImage(target) {
   return null;
 }
 
-module.exports = { normalizeMatches, normalizeResults, normalizeSchedule, issueDateFromNum, teamLogo, safeLogoTarget, safeNewsImageTarget, detectMatchNumGaps, resultRowToSchedule, completeSchedule, completeMatches, scheduleRowEligibleForMatchesBackfill, reloadCrestMaps, crestUsable };
+module.exports = { normalizeMatches, normalizeResults, normalizeSchedule, issueDateFromNum, teamLogo, safeLogoTarget, safeNewsImageTarget, detectMatchNumGaps, resultRowToSchedule, completeSchedule, completeMatches, scheduleRowEligibleForMatchesBackfill, scheduleRowEligibleForEmptyCalculatorSalvage, reloadCrestMaps, crestUsable };
 if (require.main !== module) return;
 const app = express();
 app.disable('x-powered-by');

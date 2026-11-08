@@ -287,6 +287,12 @@ function issueWeek(m) {
   if (m.weekday) return m.weekday;
   return wd(issueDate(m));
 }
+/** 赛程某一天：期次日或开球日历日命中都算。周日凌晨场期次在昨天，开球日常是「今天」。 */
+function matchOnScheduleDay(m, day) {
+  if (!m || !day) return false;
+  if (issueDate(m) === day) return true;
+  return String(m.date || '') === String(day);
+}
 /** 1.9.213: compact score column (red status + spaced score + HT line). */
 function formatScoreSpaced(full, homeScore, awayScore) {
   if (homeScore != null && awayScore != null && !Number.isNaN(Number(homeScore)) && !Number.isNaN(Number(awayScore))) {
@@ -4956,14 +4962,18 @@ function scheduleDayModel() {
   const ms = (S.schedule && S.schedule.length) ? S.schedule : S.matches;
   const rs = S.results;
   if (!ms) return null;
-  const srcDates = [...new Set([...(rs || []).map(issueDate), ...ms.map(issueDate)])].sort();
+  const srcDates = [...new Set([...(rs || []).map(issueDate), ...ms.map(issueDate), ...ms.map(m => m && m.date).filter(Boolean)])].sort();
   const today = bjDate(0);
   if (!S.schDate) {
-    S.schDate = srcDates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || srcDates.find(d => d >= today) || srcDates[srcDates.length - 1];
+    const onDay = d => ms.some(m => matchOnScheduleDay(m, d));
+    S.schDate = (onDay(today) ? today : null)
+      || srcDates.find(d => d >= today && onDay(d))
+      || srcDates.find(d => d >= today)
+      || srcDates[srcDates.length - 1];
   }
   const dates = fillDateStripDays(srcDates);
-  const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
-  const dayAll = [...ms.filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)).map(m => ({ ...m, _t: 'm' })), ...dayRes.map(r => ({ ...r, _t: 'r' }))];
+  const dayRes = (rs || []).filter(r => matchOnScheduleDay(r, S.schDate));
+  const dayAll = [...ms.filter(m => matchOnScheduleDay(m, S.schDate) && !dayRes.some(r => r.id === m.id)).map(m => ({ ...m, _t: 'm' })), ...dayRes.map(r => ({ ...r, _t: 'r' }))];
   const classifiedDay = dayAll.map(classifyScoreRow);
   const mode = '当日';
   let modeRows = classifiedDay.filter(x => matchTeamSearchHit(x, schSearchQ()));
@@ -13077,8 +13087,8 @@ document.addEventListener('click', async e => {
       S.liveScoresAt = 0;
       const ms = (S.schedule && S.schedule.length) ? S.schedule : S.matches;
       const rs = S.results;
-      const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
-      const dayRows = [...(ms || []).filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)), ...dayRes];
+      const dayRes = (rs || []).filter(r => matchOnScheduleDay(r, S.schDate));
+      const dayRows = [...(ms || []).filter(m => matchOnScheduleDay(m, S.schDate) && !dayRes.some(r => r.id === m.id)), ...dayRes];
       toast('正在刷新比分…');
       Promise.all([reloadData(true), loadLiveScores(dayRows.map(x => String(x.id)), { force: true, bust: true })]).then(() => {
         render();
