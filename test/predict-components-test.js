@@ -429,6 +429,20 @@ const lanePhoto = pc.renderCards([{
 }], { skin: 'dqd' });
 assert.ok(lanePhoto.includes('pc-av'));
 assert.ok(lanePhoto.includes('/api/logo?url='));
+const tomZh = require('../lib/league-tables').playerZh('Tom Lawrence');
+assert.ok(/[\u4e00-\u9fff]/.test(tomZh) && tomZh !== 'Tom Lawrence', tomZh);
+const laneEn = pc.renderCards([{
+  id: 'lanecore',
+  name: '通道核心伤停',
+  evidence: '弱',
+  fired: true,
+  markets: ['胜平负', '让球', '大小球'],
+  say: 'Tom Lawrence缺阵，但位置对不上常走的那条路，只轻微调整。盘口已经偏向这边，不再重复压进球',
+  viz: { kind: 'cores', people: [{ who: 'Tom Lawrence', nameEn: 'Tom Lawrence', lane: '中路', image: '', matched: false }] },
+}], { skin: 'dqd' });
+assert.ok(laneEn.includes(tomZh), laneEn);
+assert.ok(laneEn.includes('影响'), laneEn);
+assert.ok(!laneEn.includes('Tom Lawrence'), laneEn);
 
 function corePlayer(over) {
   return Object.assign({

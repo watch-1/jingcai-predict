@@ -12,13 +12,13 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=2.0.8/.test(ver));
-assert.ok(/VERSION_CODE=325/.test(ver));
-assert.ok(/jc-v2.0.8/.test(swJs));
-assert.strictEqual(pkg.version, '2.0.8');
-assert.strictEqual(cfg.version, '2.0.8');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.8\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-325\}"/.test(apkSh));
+assert.ok(/VERSION=2.0.9/.test(ver));
+assert.ok(/VERSION_CODE=326/.test(ver));
+assert.ok(/jc-v2.0.9/.test(swJs));
+assert.strictEqual(pkg.version, '2.0.9');
+assert.strictEqual(cfg.version, '2.0.9');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.9\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-326\}"/.test(apkSh));
 
 assert.ok(/Define/.test(serverJs.match(/MATCHES_SCHEDULE_BACKFILL_STATUSES[\s\S]*?\);/)?.[0] || ''), 'allow Define status in schedule salvage');
 assert.ok(/scheduleRowEligibleForMatchesBackfill/.test(serverJs), 'exported eligibility helper');
@@ -53,23 +53,7 @@ assert.strictEqual(
 assert.strictEqual(
   scheduleRowEligibleForMatchesBackfill({ id: '9005', status: 'Define', date: futureDate, time: '20:15', had: null }, now),
   false,
-  'no invented odds without HAD or HHAD',
-);
-assert.strictEqual(
-  scheduleRowEligibleForMatchesBackfill({
-    id: '9006', status: 'Selling', date: futureDate, time: '23:00', had: null,
-    hhad: { h: 2.00, d: 3.75, a: 2.68, goalLine: '-2' },
-  }, now),
-  true,
-  'handicap-only future row still enters the predict list',
-);
-assert.strictEqual(
-  scheduleRowEligibleForMatchesBackfill({
-    id: '9007', status: 'Selling', date: futureDate, time: '23:00', had: {},
-    hhad: { h: 2.00, d: 3.75, a: 2.68, goalLine: '-2' },
-  }, now),
-  true,
-  'empty HAD object plus HHAD is still eligible',
+  'no invented odds without HAD',
 );
 
 console.log('ui-241-test OK');

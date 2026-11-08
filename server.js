@@ -195,6 +195,7 @@ function safeLogoTarget(raw) {
   if (u.username || u.password) return null;
   const host = u.hostname.toLowerCase();
   if (!LOGO_HOSTS.has(host)) return null;
+  if (require('./lib/logo-proxy').isPlaceholderPhoto(u.toString())) return null;
   const isEspnCombiner = /espncdn\.com$|^secure\.espncdn\.com$|^media\.espn\.com$/.test(host) && u.pathname.startsWith('/combiner/');
   if (!isEspnCombiner && !/\.(png|jpe?g|gif|webp)$/i.test(u.pathname)) return null;
   // TheSportsDB: team badges + player cutouts/thumbs (no fanart).
@@ -1252,6 +1253,7 @@ async function fetchLogo(target) {
     if (buf.length < 16 || buf.length > LOGO_MAX) return null;
     const type = sniffImage(buf);
     if (!type) return null;
+    if (require('./lib/logo-proxy').isNoPhotoBuffer(buf, target)) return null;
     return { buf, type };
   } catch { return null; }
   finally { clearTimeout(t); }
@@ -1262,7 +1264,9 @@ app.get('/api/logo', async (req, res) => {
   const hash = crypto.createHash('sha256').update(target).digest('hex');
   const file = path.join(LOGO_DIR, hash);
   const hit = await readCachedLogo(file);
-  if (hit) {
+  if (hit && require('./lib/logo-proxy').isNoPhotoBuffer(hit.buf, target)) {
+    fs.promises.unlink(file).catch(() => {});
+  } else if (hit) {
     res.set({ 'Content-Type': hit.type, 'Cache-Control': 'public, max-age=86400', 'X-Logo-Cache': 'hit' });
     return res.send(hit.buf);
   }
