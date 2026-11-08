@@ -21,19 +21,19 @@ const styles31 = fs.readFileSync(path.join(root, 'android/res/values-v31/styles.
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const main = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
 
-assert.ok(/VERSION=2.1.0/.test(ver));
-assert.ok(/VERSION_CODE=327/.test(ver));
-assert.ok(/jc-v2.1.0/.test(swJs));
-assert.strictEqual(pkg.version, '2.1.0');
-assert.strictEqual(cfg.version, '2.1.0');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.0\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-327\}"/.test(apkSh));
+assert.ok(/VERSION=2.1.1/.test(ver));
+assert.ok(/VERSION_CODE=328/.test(ver));
+assert.ok(/jc-v2.1.1/.test(swJs));
+assert.strictEqual(pkg.version, '2.1.1');
+assert.strictEqual(cfg.version, '2.1.1');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.1\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-328\}"/.test(apkSh));
 assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.272.md')));
 
 // package id unchanged
 assert.ok(/package="com\.tiicai\.jingcai"/.test(androidManifest), 'package id unchanged');
-assert.ok(/android:versionCode="327"/.test(androidManifest));
-assert.ok(/android:versionName="2\.1\.0"/.test(androidManifest));
+assert.ok(/android:versionCode="328"/.test(androidManifest));
+assert.ok(/android:versionName="2\.1\.1"/.test(androidManifest));
 
 // 1) display name 云球迷
 assert.ok(/<string name="app_name">云球迷<\/string>/.test(strings), 'Android label 云球迷');

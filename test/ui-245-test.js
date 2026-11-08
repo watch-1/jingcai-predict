@@ -17,13 +17,13 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
 // --- version pins ---
-assert.ok(/VERSION=2.1.0/.test(ver));
-assert.ok(/VERSION_CODE=327/.test(ver));
-assert.ok(/jc-v2.1.0/.test(swJs));
-assert.strictEqual(pkg.version, '2.1.0');
-assert.strictEqual(cfg.version, '2.1.0');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.0\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-327\}"/.test(apkSh));
+assert.ok(/VERSION=2.1.1/.test(ver));
+assert.ok(/VERSION_CODE=328/.test(ver));
+assert.ok(/jc-v2.1.1/.test(swJs));
+assert.strictEqual(pkg.version, '2.1.1');
+assert.strictEqual(cfg.version, '2.1.1');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.1\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-328\}"/.test(apkSh));
 
 // --- client: pull-to-refresh forces live scores for the visible schedule day ---
 assert.ok(/function pullRefreshScheduleLiveScores\(/.test(appJs), 'pull-refresh live helper defined');
