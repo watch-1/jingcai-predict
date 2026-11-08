@@ -146,18 +146,18 @@ assert.ok(/isSmPlaceholderPhoto\(raw\)/.test(appJs.slice(appJs.indexOf('function
 assert.ok(/placeholder\\\.\(\?:png\|jpe\?g\|webp\)/.test(appJs.slice(appJs.indexOf('function isSmPlaceholderPhoto'), appJs.indexOf('function rewritePredictLogoHtml'))));
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=2\.0\.9/.test(ver));
-assert.ok(/VERSION_CODE=326/.test(ver));
+assert.ok(/VERSION=2\.1\.0/.test(ver));
+assert.ok(/VERSION_CODE=327/.test(ver));
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '2.0.9');
-assert.ok(/jc-v2\.0\.9/.test(fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8')));
-assert.ok(/"version":"2\.0\.9"/.test(fs.readFileSync(path.join(root, 'public/config.js'), 'utf8')));
+assert.strictEqual(pkg.version, '2.1.0');
+assert.ok(/jc-v2\.1\.0/.test(fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8')));
+assert.ok(/"version":"2\.1\.0"/.test(fs.readFileSync(path.join(root, 'public/config.js'), 'utf8')));
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.0\.9\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-326\}"/.test(apkSh));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.0\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-327\}"/.test(apkSh));
 const mani = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
-assert.ok(/android:versionCode="326"/.test(mani));
-assert.ok(/android:versionName="2\.0\.9"/.test(mani));
+assert.ok(/android:versionCode="327"/.test(mani));
+assert.ok(/android:versionName="2\.1\.0"/.test(mani));
 const serverJs = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 assert.ok(/rewriteFields\(report, req, \['html', 'componentsSmHtml'\]\)/.test(serverJs));
 assert.ok(/isNoPhotoBuffer\(buf, target\)/.test(serverJs));
