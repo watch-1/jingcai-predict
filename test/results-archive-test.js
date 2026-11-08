@@ -53,7 +53,8 @@ assert.strictEqual(ab.added, 1);
 assert.strictEqual(ab.data[0].full, '1:3');
 assert.strictEqual(ab.data[0].goalLine, '-1');
 
-arch.recordResultsFromList([{ id: 'new9', businessDate: '2026-10-25', full: '3:3', home: 'H', away: 'A' }]);
+const todayBj = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+arch.recordResultsFromList([{ id: 'new9', businessDate: todayBj, full: '3:3', home: 'H', away: 'A' }]);
 const disk = JSON.parse(fs.readFileSync(seenPath, 'utf8'));
 assert.ok(disk.byId.new9 && disk.byId.new9.full === '3:3', 'record persists');
 
