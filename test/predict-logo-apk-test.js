@@ -139,18 +139,18 @@ assert.ok(/return \(API \|\| ''\) \+ '\/api\/logo\?url='/.test(appJs));
 assert.ok(/placeholder\\\.\(\?:png\|jpe\?g\|webp\)/.test(appJs.slice(appJs.indexOf('function smPlayerPhotoUrl'), appJs.indexOf('function smCircGauge'))));
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=2\.0\.7/.test(ver));
-assert.ok(/VERSION_CODE=324/.test(ver));
+assert.ok(/VERSION=2\.0\.8/.test(ver));
+assert.ok(/VERSION_CODE=325/.test(ver));
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '2.0.7');
-assert.ok(/jc-v2\.0\.7/.test(fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8')));
-assert.ok(/"version":"2\.0\.7"/.test(fs.readFileSync(path.join(root, 'public/config.js'), 'utf8')));
+assert.strictEqual(pkg.version, '2.0.8');
+assert.ok(/jc-v2\.0\.8/.test(fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8')));
+assert.ok(/"version":"2\.0\.8"/.test(fs.readFileSync(path.join(root, 'public/config.js'), 'utf8')));
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.0\.7\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-324\}"/.test(apkSh));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.0\.8\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-325\}"/.test(apkSh));
 const mani = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
-assert.ok(/android:versionCode="324"/.test(mani));
-assert.ok(/android:versionName="2\.0\.7"/.test(mani));
+assert.ok(/android:versionCode="325"/.test(mani));
+assert.ok(/android:versionName="2\.0\.8"/.test(mani));
 assert.ok(/rewriteFields\(report, req, \['html', 'componentsSmHtml'\]\)/.test(fs.readFileSync(path.join(root, 'server.js'), 'utf8')));
 
 console.log('predict-logo-apk-test OK');

@@ -594,9 +594,13 @@ async function fillScheduleTimesFromLive(list) {
  * 2) merge unfinished/finished rows from results window (no score filter)
  * 3) persist union; log numbering gaps
  */
-/** Issue-list statuses that may backfill calculator gaps when HAD exists and kickoff is ahead. */
+/** Issue-list statuses that may backfill calculator gaps when HAD or HHAD exists and kickoff is ahead. */
 const MATCHES_SCHEDULE_BACKFILL_STATUSES = new Set(['Selling', 'Define', '19']);
 const MATCHES_SCHEDULE_BACKFILL_BLOCKED = /^(Live|Finished|Cached|完场|已结束|Payout)/i;
+
+function playableOdds(o) {
+  return !!(o && Number(o.h) > 1 && Number(o.d) > 1 && Number(o.a) > 1);
+}
 
 function scheduleRowEligibleForMatchesBackfill(row, nowMs) {
   if (!row || row.id == null || row.id === '') return false;
@@ -604,7 +608,7 @@ function scheduleRowEligibleForMatchesBackfill(row, nowMs) {
   if (MATCHES_SCHEDULE_BACKFILL_BLOCKED.test(st)) return false;
   if (row.full || row._backfill === 'results') return false;
   if (!MATCHES_SCHEDULE_BACKFILL_STATUSES.has(st)) return false;
-  if (!row.had || row.had.h == null) return false;
+  if (!playableOdds(row.had) && !playableOdds(row.hhad)) return false;
   const ko = kickoffMs(row.date, row.time);
   if (!Number.isFinite(ko) || ko <= nowMs) return false;
   return true;
