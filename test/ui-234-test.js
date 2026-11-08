@@ -9,11 +9,11 @@ const swJs = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=2.0.9/.test(ver));
-assert.ok(/VERSION_CODE=326/.test(ver));
-assert.ok(/jc-v2.0.9/.test(swJs), 'SW VER 1.9.272');
+assert.ok(/VERSION=2.1.0/.test(ver));
+assert.ok(/VERSION_CODE=327/.test(ver));
+assert.ok(/jc-v2.1.0/.test(swJs), 'SW VER 1.9.272');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '2.0.9');
+assert.strictEqual(pkg.version, '2.1.0');
 
 const clickBlock = appJs.match(/document\.addEventListener\('click', async e => \{[\s\S]*?switch \(d\.act\)/)?.[0] || '';
 assert.ok(/if \(d\.mid && d\.key\) return toggleSel/.test(clickBlock), 'plan odds cells need data-mid; mult pad keys must not hit toggleSel');
@@ -21,7 +21,7 @@ assert.ok(/d\.act !== 'calcType' && d\.act !== 'calcTypePick'/.test(clickBlock),
 
 assert.ok(/case 'calcTypePick':/.test(appJs) && /case 'calcMultKey':/.test(appJs), 'calc sheet actions in switch');
 
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.9\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-326\}"/.test(apkSh));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.0\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-327\}"/.test(apkSh));
 
 console.log('ui-234-test OK');
