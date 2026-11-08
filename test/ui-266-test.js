@@ -14,13 +14,13 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=2.1.1/.test(ver));
-assert.ok(/VERSION_CODE=328/.test(ver));
-assert.ok(/jc-v2.1.1/.test(swJs));
-assert.strictEqual(pkg.version, '2.1.1');
-assert.strictEqual(cfg.version, '2.1.1');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.1\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-328\}"/.test(apkSh));
+assert.ok(/VERSION=2.1.2/.test(ver));
+assert.ok(/VERSION_CODE=329/.test(ver));
+assert.ok(/jc-v2.1.2/.test(swJs));
+assert.strictEqual(pkg.version, '2.1.2');
+assert.strictEqual(cfg.version, '2.1.2');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.2\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-329\}"/.test(apkSh));
 
 // Desktop / tablet token stays 120px (do not regress 260 air-gap on wide screens)
 assert.ok(/--match-mid-col:\s*120px/.test(css), 'desktop mid token remains 120px');
