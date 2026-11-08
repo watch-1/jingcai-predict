@@ -14,13 +14,13 @@ const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const manifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 const makeIcons = fs.readFileSync(path.join(root, 'tools/make-icons.js'), 'utf8');
 
-assert.ok(/VERSION=2.0.8/.test(ver));
-assert.ok(/VERSION_CODE=325/.test(ver));
-assert.ok(/jc-v2.0.8/.test(swJs));
-assert.strictEqual(pkg.version, '2.0.8');
-assert.strictEqual(cfg.version, '2.0.8');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.8\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-325\}"/.test(apkSh));
+assert.ok(/VERSION=2.0.9/.test(ver));
+assert.ok(/VERSION_CODE=326/.test(ver));
+assert.ok(/jc-v2.0.9/.test(swJs));
+assert.strictEqual(pkg.version, '2.0.9');
+assert.strictEqual(cfg.version, '2.0.9');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.9\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-326\}"/.test(apkSh));
 assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.268.md')));
 
 assert.ok(/android:icon="@mipmap\/ic_launcher"/.test(manifest), 'launcher still @mipmap/ic_launcher');

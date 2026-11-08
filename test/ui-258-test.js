@@ -14,13 +14,13 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 
-assert.ok(/VERSION=2.0.8/.test(ver));
-assert.ok(/VERSION_CODE=325/.test(ver));
-assert.ok(/jc-v2.0.8/.test(swJs));
-assert.strictEqual(pkg.version, '2.0.8');
-assert.strictEqual(cfg.version, '2.0.8');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.8\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-325\}"/.test(apkSh));
+assert.ok(/VERSION=2.0.9/.test(ver));
+assert.ok(/VERSION_CODE=326/.test(ver));
+assert.ok(/jc-v2.0.9/.test(swJs));
+assert.strictEqual(pkg.version, '2.0.9');
+assert.strictEqual(cfg.version, '2.0.9');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.9\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-326\}"/.test(apkSh));
 
 assert.ok(/function scheduleLiveScoreNeedsReconcile\(/.test(appJs), 'reconcile helper');
 assert.ok(/scheduleHasPendingLive\(classifiedDay\)[\s\S]{0,120}scheduleLiveScoreNeedsReconcile/.test(appJs)

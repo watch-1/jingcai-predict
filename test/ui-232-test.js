@@ -11,11 +11,11 @@ const swJs = fs.readFileSync(path.join(root, 'public/sw.js'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
 const ver = fs.readFileSync(path.join(root, 'VERSION.txt'), 'utf8');
-assert.ok(/VERSION=2.0.8/.test(ver));
-assert.ok(/VERSION_CODE=325/.test(ver));
-assert.ok(/jc-v2.0.8/.test(swJs), 'SW VER 1.9.272');
+assert.ok(/VERSION=2.0.9/.test(ver));
+assert.ok(/VERSION_CODE=326/.test(ver));
+assert.ok(/jc-v2.0.9/.test(swJs), 'SW VER 1.9.272');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-assert.strictEqual(pkg.version, '2.0.8');
+assert.strictEqual(pkg.version, '2.0.9');
 
 assert.ok(/function achievableKeySubsetsForMatch/.test(appJs), 'simultaneous win: per-match key subsets');
 assert.ok(/openCalcComboSheet/.test(appJs) && /\.calc-combo-btn/.test(css), 'combo picker bottom sheet');
@@ -62,7 +62,7 @@ assert.ok(range.max > 2500 && range.max < 3100, `max near official ~3056, got ${
 assert.ok(range.min > 440 && range.min < 460, `min near official ~452.5, got ${range.min}`);
 assert.ok(range.max > 1155, 'max exceeds single best 3串1 line (~1153)');
 
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.8\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-325\}"/.test(apkSh));
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.0.9\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-326\}"/.test(apkSh));
 
 console.log('ui-232-test OK', { range });

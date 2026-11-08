@@ -2315,19 +2315,26 @@ function openSheetHtml(html) {
 // ----- sm-surface 球员明细（与 UI kit 对齐的环形率 + 网格） -----
 function smPlayerPhotoUrl(image) {
   if (!image) return '';
-  const raw = String(image);
-  if (/(?:^|\/)placeholder\.(?:png|jpe?g|webp)(?:$|[?#])/i.test(raw)) return '';
+  let raw = String(image).trim();
+  if (!raw || isSmPlaceholderPhoto(raw)) return '';
   if (raw.startsWith('/api/logo?')) return (API || '') + raw;
+  if (/^https?:\/\/[^/]+\/api\/logo\?url=/i.test(raw)) return isSmPlaceholderPhoto(raw) ? '' : raw;
+  if (raw.startsWith('//')) raw = 'https:' + raw;
+  if (/^http:\/\//i.test(raw)) raw = 'https://' + raw.slice(7);
   try {
     const u = new URL(raw);
-    if (/(?:^|\/)placeholder\.(?:png|jpe?g|webp)$/i.test(u.pathname)) return '';
     const host = u.hostname.toLowerCase();
-    if (u.protocol === 'https:' && (host === 'cdn.sportmonks.com' || host === 'media.sportmonks.com')
-      && u.pathname.startsWith('/images/') && /\.(png|jpe?g|webp)$/i.test(u.pathname)) {
-      return (API || '') + '/api/logo?url=' + encodeURIComponent(u.toString());
-    }
-  } catch { /* */ }
-  return raw;
+    const p = u.pathname;
+    const sm = (host === 'cdn.sportmonks.com' || host === 'media.sportmonks.com')
+      && p.startsWith('/images/') && /\.(png|jpe?g|webp)$/i.test(p);
+    const tm = host === 'img.a.transfermarkt.technology' && /^\/portrait\/(header|big|medium)\/\d+\.jpg$/i.test(p);
+    const tsdb = host === 'r2.thesportsdb.com' && /^\/images\/media\/player\/(cutout|thumb|render)\//.test(p);
+    const af = host === 'media.api-sports.io' && /^\/football\/players\/\d+\.(png|jpe?g|webp)$/i.test(p);
+    const espn = (/^(?:a\d*\.|secure\.)?espncdn\.com$/.test(host) || host === 'media.espn.com')
+      && p.startsWith('/i/headshots/') && /\.(png|jpe?g|webp)$/i.test(p);
+    if (u.protocol !== 'https:' || !(sm || tm || tsdb || af || espn) || isSmPlaceholderPhoto(u.toString())) return '';
+    return (API || '') + '/api/logo?url=' + encodeURIComponent(u.toString());
+  } catch { return ''; }
 }
 /** @param {{pct:number|null, mid:string, bot:string, tone?:string}} o */
 function smCircGauge(o) {
@@ -8642,8 +8649,14 @@ function reviewTabHtml(x) {
 }
 function isSmPlaceholderPhoto(url) {
   let s = String(url || '');
-  try { s = decodeURIComponent(s); } catch (_) {}
-  return /(?:^|\/)placeholder\.(?:png|jpe?g|webp)(?:$|[?#])/i.test(s);
+  for (let i = 0; i < 2; i++) {
+    try {
+      const n = decodeURIComponent(s);
+      if (n === s) break;
+      s = n;
+    } catch (_) { break; }
+  }
+  return /placeholder\.(?:png|jpe?g|webp)|team_placeholder|player_placeholder|(?:^|[/?=&_.-])no[-_ ]?photo(?:[-_ ]?yet)?(?:[./?#_=]|$)|\/football\/players\/0\.(?:png|jpe?g|webp)/i.test(s);
 }
 /**
  * APK WebView is file:///android_asset/www. Root-relative /api/logo becomes
@@ -8652,14 +8665,14 @@ function isSmPlaceholderPhoto(url) {
  */
 function rewritePredictLogoHtml(html) {
   let h = String(html || '');
-  if (!h || !/\/api\/logo\?|placeholder\.(?:png|jpe?g|webp)/i.test(h)) return h;
+  if (!h || !/\/api\/logo\?|placeholder\.|no[-_ ]?photo/i.test(h)) return h;
   h = h.replace(/<(img|image)\b[^>]*>/gi, (tag) => {
     const m = tag.match(/\s(?:src|href|xlink:href)\s*=\s*(["'])([^"']+)\1/i);
     if (m && isSmPlaceholderPhoto(m[2])) return '';
     return tag;
   });
   if (!API) return h;
-  return h.replace(/(\s(?:src|href|xlink:href)\s*=\s*["'])(\/api\/logo\?)/gi, (_, attr, path) => attr + API + path);
+  return h.replace(/(\s(?:src|href|xlink:href|data-alt)\s*=\s*["'])(\/api\/logo\?)/gi, (_, attr, path) => attr + API + path);
 }
 /** 1.9.70: strip internal/meta AI wording from cached report HTML (defense in depth). */
 function productizePredictHtml(html) {
