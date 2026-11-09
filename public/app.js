@@ -287,14 +287,12 @@ function issueWeek(m) {
   if (m.weekday) return m.weekday;
   return wd(issueDate(m));
 }
-/** 赛程条带 / 比分列表的唯一归属日：开球本地日历日（m.date，Asia/Shanghai）。
- *  凌晨场归开球日（勒芒：期次昨天、开球今天 → 今天），不再把期次日并进同一天，
- *  避免前天的周六023 与昨天的周日023 按编号穿插。没有开球日时才回退到期次日。
- *  期次日（businessDate）仍留给开奖、预测分组和编号缺口。 */
+/** 赛程条带 / 比分 / 计算器的唯一归属日：竞彩业务日（businessDate，即期次日）。
+ *  同一期编号整批留在这一天，含开球跨到次日凌晨的场次（周日020 开球周一 00:15 仍归周日业务日）。
+ *  只认这一个谓词：不按开球日历日过滤，也不把业务日和开球日做并集
+ *  （并集会让周六023 和周日023 按编号穿插）。没有 businessDate 时由 issueDate 用周几NNN 回推期次日。 */
 function scheduleCanonicalDay(m) {
   if (!m) return '';
-  const d = String(m.date || '').slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
   return issueDate(m) || '';
 }
 /** 一场只属于一个条带日。 */
@@ -350,7 +348,7 @@ function scheduleGapInfoForRows(rows) {
   if (!gaps || !S.schDate) return null;
   const g = gaps[S.schDate];
   if (!g || !g.missing || !g.missing.length) return null;
-  // 条带日现在是开球日。只有当天确实有这场期次的比赛时才提示，避免把下一天凌晨场的编号缺口算到今天。
+  // 条带日就是业务日。编号缺口按 businessDate 记，只在当天列表里确实有该期次场次时提示。
   if (!(rows || []).some(row => issueDate(row) === S.schDate)) return null;
   return g;
 }

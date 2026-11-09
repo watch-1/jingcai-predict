@@ -1,5 +1,5 @@
 'use strict';
-// 2.1.3: empty calculator must not fall through to sample while the live issue list
+// 2.1.1: empty calculator must not fall through to sample while the live issue list
 // still has Selling (even after midnight kickoff) or Define rows without odds yet.
 const fs = require('fs');
 const path = require('path');
@@ -16,15 +16,15 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 
-assert.ok(/VERSION=2.1.3/.test(ver));
-assert.ok(/VERSION_CODE=330/.test(ver));
-assert.ok(/jc-v2.1.3/.test(swJs));
-assert.strictEqual(pkg.version, '2.1.3');
-assert.strictEqual(cfg.version, '2.1.3');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.3\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-330\}"/.test(apkSh));
-assert.ok(/android:versionCode="330"/.test(androidManifest));
-assert.ok(/android:versionName="2\.1\.3"/.test(androidManifest));
+assert.ok(/VERSION=2.1.4/.test(ver));
+assert.ok(/VERSION_CODE=331/.test(ver));
+assert.ok(/jc-v2.1.4/.test(swJs));
+assert.strictEqual(pkg.version, '2.1.4');
+assert.strictEqual(cfg.version, '2.1.4');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.4\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-331\}"/.test(apkSh));
+assert.ok(/android:versionCode="331"/.test(androidManifest));
+assert.ok(/android:versionName="2\.1\.4"/.test(androidManifest));
 
 assert.ok(/scheduleRowEligibleForEmptyCalculatorSalvage/.test(serverJs), 'loose salvage helper');
 assert.ok(/salvageEmptyCalculator: true/.test(serverJs), 'empty calculator uses loose salvage');
@@ -94,12 +94,13 @@ const dayApi = new Function(
     + extractFunction(appJs, 'matchOnScheduleDay') + '\nreturn matchOnScheduleDay;',
 )(ISSUE_WEEK);
 
-assert.strictEqual(dayApi(leman, '2026-11-09'), true, '今天 includes kickoff calendar date');
-assert.strictEqual(dayApi(leman, '2026-11-08'), false, '期次日不再把同一场并进昨天');
+assert.strictEqual(dayApi(leman, '2026-11-08'), true, '凌晨场归业务日');
+assert.strictEqual(dayApi(leman, '2026-11-09'), false, '开球日历日不再单独收这场');
 assert.strictEqual(dayApi(leman, '2026-11-10'), false);
 assert.ok(/onDay\(today\) \? today/.test(appJs), 'date strip prefers today when that day has matches');
-assert.ok(/scheduleCanonicalDay/.test(appJs), 'schedule day is one canonical kickoff date');
+assert.ok(/scheduleCanonicalDay/.test(appJs), 'schedule day is one canonical business date');
 assert.ok(/matchOnScheduleDay\(row, S\.schDate\)/.test(appJs), 'schedule list uses the canonical day');
+assert.ok(!/\.date/.test(extractFunction(appJs, 'scheduleCanonicalDay')), '归属日不读开球日历日');
 
 const prodPath = '/tmp/sched.json';
 if (fs.existsSync(prodPath)) {
@@ -110,8 +111,11 @@ if (fs.existsSync(prodPath)) {
   assert.ok(loose.length >= 20, 'prod snapshot salvages the live issue list');
   assert.ok(loose.some(r => r.home === '勒芒' && r.away === '摩纳哥'));
   assert.ok(!loose.some(r => r._backfill === 'seen'), 'seen-cache history is not salvaged');
-  const todayN = rows.filter(r => dayApi(r, '2026-11-09')).length;
-  assert.ok(todayN >= 10, '今天 is not empty for kickoff date 2026-11-09');
+  const sunBiz = rows.filter(r => r.businessDate === '2026-11-08');
+  assert.ok(sunBiz.length >= 10, '周日业务日整批还在');
+  assert.ok(sunBiz.every(r => dayApi(r, '2026-11-08')), '周日001–030 都留在业务日');
+  assert.ok(!sunBiz.some(r => dayApi(r, '2026-11-09')), '开球在 11-09 的周日场不再进周一');
+  assert.ok(sunBiz.some(r => r.home === '勒芒' && r.away === '摩纳哥' && dayApi(r, '2026-11-08')));
 }
 
 console.log('ui-274-test OK');
