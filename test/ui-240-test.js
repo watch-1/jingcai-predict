@@ -25,7 +25,7 @@ assert.ok(
   /kind === 'matches'[\s\S]*API返回空赛程[\s\S]*data = \[\]/m.test(serverJs),
   'treat empty calculator as soft failure',
 );
-assert.ok(/completeMatches\(\[\]\)/.test(serverJs), 'schedule salvage when all calculator endpoints fail');
+assert.ok(/completeMatches\(\[\], \{ salvageEmptyCalculator: true \}\)/.test(serverJs), 'loose schedule salvage when all calculator endpoints fail');
 assert.ok(/calculatorEmpty/.test(serverJs), 'meta flag when salvaged from schedule');
 assert.ok(/scheduleRowEligibleForMatchesBackfill/.test(serverJs), 'Define status eligible for schedule salvage');
 

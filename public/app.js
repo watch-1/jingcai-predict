@@ -287,6 +287,73 @@ function issueWeek(m) {
   if (m.weekday) return m.weekday;
   return wd(issueDate(m));
 }
+/** 赛程条带 / 比分列表的唯一归属日：开球本地日历日（m.date，Asia/Shanghai）。
+ *  凌晨场归开球日（勒芒：期次昨天、开球今天 → 今天），不再把期次日并进同一天，
+ *  避免前天的周六023 与昨天的周日023 按编号穿插。没有开球日时才回退到期次日。
+ *  期次日（businessDate）仍留给开奖、预测分组和编号缺口。 */
+function scheduleCanonicalDay(m) {
+  if (!m) return '';
+  const d = String(m.date || '').slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  return issueDate(m) || '';
+}
+/** 一场只属于一个条带日。 */
+function matchOnScheduleDay(m, day) {
+  if (!m || !day) return false;
+  return scheduleCanonicalDay(m) === String(day);
+}
+function scheduleRowKey(row) {
+  if (!row) return '';
+  if (row.id != null && row.id !== '') return 'id:' + String(row.id);
+  const anon = [row.num || '', row.home || '', row.away || ''].join('|');
+  return anon === '||' ? '' : ('anon:' + anon);
+}
+/** 赛程列表与赛果按 id 合成一行：身份字段以赛程为准，比分由赛果补上。同一场不会进两天。 */
+function mergeScheduleSources(ms, rs) {
+  const byKey = new Map();
+  const absorb = (row, fromResult) => {
+    if (!row) return;
+    const key = scheduleRowKey(row);
+    if (!key) return;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, { ...row, _t: fromResult ? 'r' : 'm' });
+      return;
+    }
+    const full = row.full || prev.full || '';
+    const half = row.half || prev.half || '';
+    byKey.set(key, {
+      ...prev,
+      league: prev.league || row.league,
+      num: prev.num || row.num,
+      home: prev.home || row.home,
+      away: prev.away || row.away,
+      homeLogo: prev.homeLogo || row.homeLogo,
+      awayLogo: prev.awayLogo || row.awayLogo,
+      had: prev.had || row.had,
+      hhad: prev.hhad || row.hhad,
+      date: prev.date || row.date,
+      time: prev.time || row.time,
+      businessDate: prev.businessDate || row.businessDate,
+      status: full ? (row.status || prev.status) : (prev.status || row.status),
+      full,
+      half,
+      _t: (full || prev._t === 'r' || fromResult) ? 'r' : 'm',
+    });
+  };
+  for (const m of ms || []) absorb(m, false);
+  for (const r of rs || []) absorb(r, true);
+  return [...byKey.values()];
+}
+function scheduleGapInfoForRows(rows) {
+  const gaps = S.ssrc && S.ssrc.meta && S.ssrc.meta.gaps;
+  if (!gaps || !S.schDate) return null;
+  const g = gaps[S.schDate];
+  if (!g || !g.missing || !g.missing.length) return null;
+  // 条带日现在是开球日。只有当天确实有这场期次的比赛时才提示，避免把下一天凌晨场的编号缺口算到今天。
+  if (!(rows || []).some(row => issueDate(row) === S.schDate)) return null;
+  return g;
+}
 /** 1.9.213: compact score column (red status + spaced score + HT line). */
 function formatScoreSpaced(full, homeScore, awayScore) {
   if (homeScore != null && awayScore != null && !Number.isNaN(Number(homeScore)) && !Number.isNaN(Number(awayScore))) {
@@ -4956,19 +5023,23 @@ function scheduleDayModel() {
   const ms = (S.schedule && S.schedule.length) ? S.schedule : S.matches;
   const rs = S.results;
   if (!ms) return null;
-  const srcDates = [...new Set([...(rs || []).map(issueDate), ...ms.map(issueDate)])].sort();
+  const union = mergeScheduleSources(ms, rs);
+  const srcDates = [...new Set(union.map(scheduleCanonicalDay).filter(Boolean))].sort();
   const today = bjDate(0);
   if (!S.schDate) {
-    S.schDate = srcDates.find(d => d >= today && ms.some(m => issueDate(m) === d)) || srcDates.find(d => d >= today) || srcDates[srcDates.length - 1];
+    const onDay = d => union.some(m => matchOnScheduleDay(m, d));
+    S.schDate = (onDay(today) ? today : null)
+      || srcDates.find(d => d >= today && onDay(d))
+      || srcDates.find(d => d >= today)
+      || srcDates[srcDates.length - 1];
   }
   const dates = fillDateStripDays(srcDates);
-  const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
-  const dayAll = [...ms.filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)).map(m => ({ ...m, _t: 'm' })), ...dayRes.map(r => ({ ...r, _t: 'r' }))];
+  const dayAll = union.filter(row => matchOnScheduleDay(row, S.schDate));
   const classifiedDay = dayAll.map(classifyScoreRow);
   const mode = '当日';
   let modeRows = classifiedDay.filter(x => matchTeamSearchHit(x, schSearchQ()));
   if (S.schLeague !== '全部' && !modeRows.some(x => x.league === S.schLeague)) S.schLeague = '全部';
-  const gapInfo = S.ssrc && S.ssrc.meta && S.ssrc.meta.gaps && S.ssrc.meta.gaps[S.schDate];
+  const gapInfo = scheduleGapInfoForRows(dayAll);
   const counts = {
     all: classifiedDay.length,
     live: classifiedDay.filter(x => x._kind === 'live').length,
@@ -13077,8 +13148,7 @@ document.addEventListener('click', async e => {
       S.liveScoresAt = 0;
       const ms = (S.schedule && S.schedule.length) ? S.schedule : S.matches;
       const rs = S.results;
-      const dayRes = (rs || []).filter(r => issueDate(r) === S.schDate);
-      const dayRows = [...(ms || []).filter(m => issueDate(m) === S.schDate && !dayRes.some(r => r.id === m.id)), ...dayRes];
+      const dayRows = mergeScheduleSources(ms, rs).filter(row => matchOnScheduleDay(row, S.schDate));
       toast('正在刷新比分…');
       Promise.all([reloadData(true), loadLiveScores(dayRows.map(x => String(x.id)), { force: true, bust: true })]).then(() => {
         render();
