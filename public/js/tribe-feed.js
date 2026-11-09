@@ -1,6 +1,4 @@
-/**
- * Tribe club feed UI (1.9.180). Depends on globals from app.js: api, esc, loggedIn, toast, go, back, badge, S, route, render, avatarHtml, timeAgo, isUserFollow, tribeById, API, confirmDlg.
- */
+/** 球队部落动态。用到 app.js 的 api、esc、toast、登录态等全局。 */
 (function (global) {
   'use strict';
 

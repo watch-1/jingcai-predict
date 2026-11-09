@@ -1,4 +1,4 @@
-/* Personal KB brain canvas (waiguge-style UX, standalone vanilla JS). */
+/* 个人知识库画布 */
 (function (global) {
   'use strict';
 

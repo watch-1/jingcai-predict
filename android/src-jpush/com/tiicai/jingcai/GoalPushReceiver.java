@@ -8,9 +8,8 @@ import cn.jpush.android.service.JPushMessageReceiver;
 import org.json.JSONObject;
 
 /**
- * JPush 5.4+ event receiver. When the process is dead the OS/JPush tray is
- * shown from the notification payload. When the process is alive we mark the
- * score key so the JS 30s poll does not double-fire.
+ * 极光回调。进程已死时由系统通知栏展示。
+ * 进程还在时记下比分，避免页面 30 秒轮询再响一次。
  */
 public class GoalPushReceiver extends JPushMessageReceiver {
     @Override

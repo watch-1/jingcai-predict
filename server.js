@@ -1,10 +1,10 @@
-// 竞彩预测 backend: proxies sporttery.cn public APIs with caching (falls back to clearly-labeled sample data),
-// plus user accounts (phone+password) with server-synced 我的方案/关注. No betting, payment or ticket submission.
+// 代理竞彩公开接口并缓存；官方不可达时用标明的示例数据。
+// 账号同步「我的方案 / 关注」。不下单、不支付、不出票。
 const express = require('express');
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
-const sample = require('./sample-data');
+const sample = require('./public/sample-data.js');
 
 const PORT = process.env.PORT || 8088;
 const CACHE_MS = 3 * 60 * 1000;

@@ -3,11 +3,7 @@ package com.tiicai.jingcai;
 import android.app.Application;
 import android.content.Context;
 
-/**
- * Process entry. JPush is started only after notification permission
- * (and a non-empty AppKey). OEM kill-App delivery needs the JPush SDK
- * process / vendor channel — not a Foreground Service.
- */
+/** 进程入口。通知权限和 AppKey 都有了才初始化极光。杀进程送达靠极光通道，不另开前台服务。 */
 public class JingcaiApp extends Application {
     @Override
     protected void attachBaseContext(Context base) {

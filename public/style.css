@@ -3036,7 +3036,7 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 }
 .sch-toolbar .btn.sm { padding: 4px 10px; font-size: 12px; }
 
-/* ===== v1.8.3 comprehensive predict briefing ===== */
+/* 赛前简报 */
 .pr-report { padding: 0 !important; background: transparent !important; box-shadow: none !important; border: 0 !important; }
 .pr-brief {
   margin: 0 0 8px; padding: 0; background: var(--card); border-radius: var(--r);
@@ -4554,7 +4554,7 @@ html[data-theme="pitch"] .tabbar button { color: #6B7A92; }
 html[data-theme="pitch"] .tabbar button.on { color: #2BB673; }
 html[data-theme="pitch"] .tabbar button.on::before { background: #2BB673; }
 
-/* 1.9.95: pitch — same artful header (force over theme) */
+/* 1.9.95: pitch 顶栏压过主题色 */
 html[data-theme="pitch"] .hdr,
 html[data-theme="pitch"] .hdr-ext,
 html[data-theme="pitch"] .dstrip {
@@ -4876,11 +4876,10 @@ html[data-theme="pitch"] .mc-pred { border-top-color: #2A3548; }
 html[data-theme="pitch"] .form-list li { border-top-color: #2A3548; }
 html[data-theme="pitch"] .lg-head { color: var(--t2); }
 
-/* 1.9.95: luxury home — same artful blue/black + red/white */
+/* 1.9.95: 首页顶栏蓝黑底 */
 .hdr.home-hdr.theme-luxury {
   background-color: #0b1220;
   background-image:
-    /* soft red chevron / ribbon band (artful, not slash hatching) */
     linear-gradient(90deg,
       transparent 0%,
       transparent 58%,
@@ -4890,7 +4889,6 @@ html[data-theme="pitch"] .lg-head { color: var(--t2); }
       transparent 78%,
       transparent 100%
     ),
-    /* faint white geometric block accents (horizontal, subtle) */
     linear-gradient(180deg,
       rgba(255,255,255,.07) 0 2px,
       transparent 2px 100%
@@ -6299,11 +6297,10 @@ html[data-theme="pitch"] .ev-legend { background: rgba(0,0,0,.25) !important; bo
 }
 .hero > *:not(.hero-edge-nav) { position: relative; z-index: 1; }
 
-/* 1.9.95: blue/black field + artful red/white chevron & soft geometric accents (no diagonal slash) */
+/* 1.9.95: 顶栏蓝黑底，不用斜线底纹 */
 .hdr, .hdr-ext, .dstrip {
   background-color: #0b1220;
   background-image:
-    /* soft red chevron / ribbon band (artful, not slash hatching) */
     linear-gradient(90deg,
       transparent 0%,
       transparent 58%,
@@ -6313,7 +6310,6 @@ html[data-theme="pitch"] .ev-legend { background: rgba(0,0,0,.25) !important; bo
       transparent 78%,
       transparent 100%
     ),
-    /* faint white geometric block accents (horizontal, subtle) */
     linear-gradient(180deg,
       rgba(255,255,255,.07) 0 2px,
       transparent 2px 100%
@@ -6326,7 +6322,7 @@ html[data-theme="pitch"] .ev-legend { background: rgba(0,0,0,.25) !important; bo
 }
 .hdr { overflow: hidden; }
 .hdr-ext { position: relative; overflow: hidden; }
-/* decorative red/white ribbon tip on right (pseudo, not slash lines) */
+/* 顶栏右侧红白带，不是斜线 */
 .hdr::after {
   content: ""; position: absolute; right: -8px; top: 0; bottom: 0; width: 72px;
   pointer-events: none; z-index: 0;

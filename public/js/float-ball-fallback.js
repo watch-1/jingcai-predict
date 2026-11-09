@@ -1,4 +1,4 @@
-/*! CSS fallback ball when Three.js module fails to load (1.9.123: transform3d + rAF) */
+/* Three.js 加载失败时的纯 CSS 足球 */
 (function () {
   var ACTIVE = { home: 1, schedule: 1, predict: 1 };
   var root = null, hit = null, active = false;
