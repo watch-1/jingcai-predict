@@ -16,15 +16,15 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 
-assert.ok(/VERSION=2.1.1/.test(ver));
-assert.ok(/VERSION_CODE=328/.test(ver));
-assert.ok(/jc-v2.1.1/.test(swJs));
-assert.strictEqual(pkg.version, '2.1.1');
-assert.strictEqual(cfg.version, '2.1.1');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.1\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-328\}"/.test(apkSh));
-assert.ok(/android:versionCode="328"/.test(androidManifest));
-assert.ok(/android:versionName="2\.1\.1"/.test(androidManifest));
+assert.ok(/VERSION=2.1.2/.test(ver));
+assert.ok(/VERSION_CODE=329/.test(ver));
+assert.ok(/jc-v2.1.2/.test(swJs));
+assert.strictEqual(pkg.version, '2.1.2');
+assert.strictEqual(cfg.version, '2.1.2');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.2\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-329\}"/.test(apkSh));
+assert.ok(/android:versionCode="329"/.test(androidManifest));
+assert.ok(/android:versionName="2\.1\.2"/.test(androidManifest));
 
 assert.ok(/scheduleRowEligibleForEmptyCalculatorSalvage/.test(serverJs), 'loose salvage helper');
 assert.ok(/salvageEmptyCalculator: true/.test(serverJs), 'empty calculator uses loose salvage');
@@ -89,15 +89,17 @@ function extractFunction(src, name) {
 const ISSUE_WEEK = { '日': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6 };
 const dayApi = new Function(
   'ISSUE_WEEK',
-  extractFunction(appJs, 'issueDate') + '\n' + extractFunction(appJs, 'matchOnScheduleDay') + '\nreturn matchOnScheduleDay;',
+  extractFunction(appJs, 'issueDate') + '\n'
+    + extractFunction(appJs, 'scheduleCanonicalDay') + '\n'
+    + extractFunction(appJs, 'matchOnScheduleDay') + '\nreturn matchOnScheduleDay;',
 )(ISSUE_WEEK);
 
 assert.strictEqual(dayApi(leman, '2026-11-09'), true, '今天 includes kickoff calendar date');
-assert.strictEqual(dayApi(leman, '2026-11-08'), true, '昨天 still includes the issue day');
+assert.strictEqual(dayApi(leman, '2026-11-08'), false, '期次日不再把同一场并进昨天');
 assert.strictEqual(dayApi(leman, '2026-11-10'), false);
 assert.ok(/onDay\(today\) \? today/.test(appJs), 'date strip prefers today when that day has matches');
-assert.ok(/matchOnScheduleDay\(m, S\.schDate\)/.test(appJs), 'schedule list uses calendar or issue day');
-assert.ok(/matchOnScheduleDay\(r, S\.schDate\)/.test(appJs), 'results on the same day follow the same rule');
+assert.ok(/scheduleCanonicalDay/.test(appJs), 'schedule day is one canonical kickoff date');
+assert.ok(/matchOnScheduleDay\(row, S\.schDate\)/.test(appJs), 'schedule list uses the canonical day');
 
 const prodPath = '/tmp/sched.json';
 if (fs.existsSync(prodPath)) {
