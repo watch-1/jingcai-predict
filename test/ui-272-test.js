@@ -18,17 +18,17 @@ const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest
 const main = fs.readFileSync(path.join(root, 'android/src/com/tiicai/jingcai/MainActivity.java'), 'utf8');
 const strings = fs.readFileSync(path.join(root, 'android/res/values/strings.xml'), 'utf8');
 
-assert.ok(/VERSION=2.1.3/.test(ver));
-assert.ok(/VERSION_CODE=330/.test(ver));
-assert.ok(/jc-v2.1.3/.test(swJs));
-assert.strictEqual(pkg.version, '2.1.3');
-assert.strictEqual(cfg.version, '2.1.3');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.3\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-330\}"/.test(apkSh));
+assert.ok(/VERSION=2.1.4/.test(ver));
+assert.ok(/VERSION_CODE=331/.test(ver));
+assert.ok(/jc-v2.1.4/.test(swJs));
+assert.strictEqual(pkg.version, '2.1.4');
+assert.strictEqual(cfg.version, '2.1.4');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.4\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-331\}"/.test(apkSh));
 assert.ok(fs.existsSync(path.join(root, 'docs/release-1.9.272.md')));
 assert.ok(/package="com\.tiicai\.jingcai"/.test(androidManifest), 'package id unchanged');
-assert.ok(/android:versionCode="330"/.test(androidManifest));
-assert.ok(/android:versionName="2\.1\.3"/.test(androidManifest));
+assert.ok(/android:versionCode="331"/.test(androidManifest));
+assert.ok(/android:versionName="2\.1\.4"/.test(androidManifest));
 assert.ok(/<string name="app_name">云球迷<\/string>/.test(strings), 'name 云球迷');
 
 // 1) date strip — fluid pills, shared schedule + results

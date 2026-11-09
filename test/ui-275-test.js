@@ -1,6 +1,7 @@
 'use strict';
-// 2.1.3: 赛程比分一天只认开球日。2.1.1 把期次日和开球日做并集，前天的周六023
-// 和昨天的周日023 会按编号穿插在同一条列表里。
+// 2.1.4: 赛程比分 / 计算器只按业务日（businessDate）归一天。
+// 2.1.2 改成开球日之后，周日001–019 留在昨天、周日020–030 凌晨场被拆到今天。
+// 2.1.1 把期次日和开球日做并集，周六023 会和周日023 穿插；这里仍是单谓词，不做并集。
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -15,18 +16,21 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 
-assert.ok(/VERSION=2.1.3/.test(ver));
-assert.ok(/VERSION_CODE=330/.test(ver));
-assert.ok(/jc-v2.1.3/.test(swJs));
-assert.strictEqual(pkg.version, '2.1.3');
-assert.strictEqual(cfg.version, '2.1.3');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.3\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-330\}"/.test(apkSh));
-assert.ok(/android:versionCode="330"/.test(androidManifest));
-assert.ok(/android:versionName="2\.1\.3"/.test(androidManifest));
+assert.ok(/VERSION=2.1.4/.test(ver));
+assert.ok(/VERSION_CODE=331/.test(ver));
+assert.ok(/jc-v2.1.4/.test(swJs));
+assert.strictEqual(pkg.version, '2.1.4');
+assert.strictEqual(cfg.version, '2.1.4');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.4\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-331\}"/.test(apkSh));
+assert.ok(/android:versionCode="331"/.test(androidManifest));
+assert.ok(/android:versionName="2\.1\.4"/.test(androidManifest));
 
 assert.ok(/function scheduleCanonicalDay/.test(appJs), 'one canonical schedule day');
-assert.ok(!/if \(issueDate\(m\) === day\) return true/.test(appJs), 'day filter is no longer issueDate OR kickoff');
+assert.ok(!/if \(issueDate\(m\) === day\) return true/.test(appJs), 'day filter is not issueDate OR kickoff');
+assert.ok(!/\.date/.test(extractFunction(appJs, 'scheduleCanonicalDay')), '归属日不读开球日历日');
+assert.ok(/return issueDate\(m\)/.test(extractFunction(appJs, 'scheduleCanonicalDay')), '归属日就是业务日');
+assert.ok(/scheduleCanonicalDay\(m\) === String\(day\)/.test(extractFunction(appJs, 'matchOnScheduleDay')), '一场只比对一个业务日');
 assert.ok(/union\.map\(scheduleCanonicalDay\)/.test(appJs), 'date strip buckets by canonical day');
 assert.ok(/mergeScheduleSources\(ms, rs\)/.test(appJs), 'schedule and results collapse to one row');
 assert.ok(/rs\.filter\(r => issueDate\(r\) === S\.rsDate\)/.test(appJs), '开奖 still follows 期次日');
@@ -96,10 +100,13 @@ const results = [
 ];
 
 const leman = schedule.find(r => r.id === 'leman');
-assert.strictEqual(api.scheduleCanonicalDay(leman), '2026-11-09');
-assert.strictEqual(api.matchOnScheduleDay(leman, '2026-11-09'), true, '今天包含开球在今天的凌晨场');
-assert.strictEqual(api.matchOnScheduleDay(leman, '2026-11-08'), false, '同一场不再因为期次日回到昨天');
-assert.strictEqual(api.scheduleCanonicalDay(schedule.find(r => r.id === 'nodate')), '2026-11-09', '没有开球日时回退到期次日');
+assert.strictEqual(api.scheduleCanonicalDay(leman), '2026-11-08');
+assert.strictEqual(api.matchOnScheduleDay(leman, '2026-11-08'), true, '凌晨场留在周日业务日');
+assert.strictEqual(api.matchOnScheduleDay(leman, '2026-11-09'), false, '开球在周一 00:15 也不拆到下一天');
+assert.strictEqual(api.scheduleCanonicalDay(schedule.find(r => r.id === 'nodate')), '2026-11-09', '没有开球日时仍用业务日');
+const derivedEarly = { id: 'd20', num: '周日020', date: '2026-11-09', time: '00:15', home: '勒芒', away: '摩纳哥' };
+assert.strictEqual(api.scheduleCanonicalDay(derivedEarly), '2026-11-08', '缺 businessDate 时按周几回推期次日，不按开球日');
+assert.strictEqual(api.matchOnScheduleDay(derivedEarly, '2026-11-09'), false);
 
 const union = api.mergeScheduleSources(schedule, results);
 const ids = union.map(r => r.id);
@@ -112,14 +119,13 @@ assert.strictEqual(union.filter(r => r.id === 'sun1').length, 1);
 function numsOn(day) {
   return union.filter(r => api.matchOnScheduleDay(r, day)).map(r => r.num);
 }
-assert.deepStrictEqual(numsOn('2026-11-07').sort(), ['周六001'], '前天只有当天开球的场次');
-assert.ok(!numsOn('2026-11-07').includes('周六023'), '周六凌晨场不留在前天');
+assert.deepStrictEqual(numsOn('2026-11-07').sort(), ['周六001', '周六023', '周六024', '周六025'], '周六001–025 整批在周六业务日');
 const yday = numsOn('2026-11-08');
-assert.deepStrictEqual(yday.slice().sort(), ['周六023', '周六024', '周六025', '周日001']);
-assert.ok(!yday.includes('周日023') && !yday.includes('周日020'), '昨天不再混入周日凌晨场');
+assert.deepStrictEqual(yday.slice().sort(), ['周日001', '周日020', '周日023', '周日024'], '周日晚场和周一凌晨场留在同一业务日');
+assert.ok(!yday.some(n => n.startsWith('周六')), '周日业务日不混入周六编号');
 const today = numsOn('2026-11-09');
-assert.ok(today.includes('周日020') && today.includes('周日023') && today.includes('周日024') && today.includes('周一001'));
-assert.ok(!today.includes('周六023'));
+assert.deepStrictEqual(today, ['周一001'], '周一业务日只有周一编号');
+assert.ok(!today.includes('周日020') && !today.includes('周日023') && !today.includes('周日024'));
 
 const seen = new Map();
 for (const day of ['2026-11-07', '2026-11-08', '2026-11-09']) {
@@ -137,22 +143,31 @@ function listFor(day, { league = '全部', q = '' } = {}) {
     .filter(r => api.matchTeamSearchHit(r, q));
   return api.scheduleListRows(rows).map(r => r.num);
 }
-assert.deepStrictEqual(listFor('2026-11-08'), ['周日001', '周六023', '周六024', '周六025'], '未完场在上，同一天内按编号，不再周六/周日同号穿插');
-assert.deepStrictEqual(listFor('2026-11-09'), ['周一001', '周日020', '周日023', '周日024']);
-assert.deepStrictEqual(listFor('2026-11-08', { league: '英超' }), ['周日001', '周六023']);
-assert.deepStrictEqual(listFor('2026-11-08', { league: '英超', q: '曼城' }), ['周六023']);
-assert.deepStrictEqual(listFor('2026-11-09', { q: '曼城' }), [], '搜索不会把别的开球日捞回来');
-assert.deepStrictEqual(listFor('2026-11-09', { league: '法甲' }), ['周日020'], '今天的联赛筛选仍能看到勒芒');
+assert.deepStrictEqual(listFor('2026-11-08'), ['周日001', '周日020', '周日023', '周日024'], '未完场在上，同一业务日内按编号');
+assert.deepStrictEqual(listFor('2026-11-07'), ['周六001', '周六023', '周六024', '周六025']);
+assert.deepStrictEqual(listFor('2026-11-09'), ['周一001']);
+assert.deepStrictEqual(listFor('2026-11-08', { league: '英超' }), ['周日001']);
+assert.deepStrictEqual(listFor('2026-11-07', { league: '英超', q: '曼城' }), ['周六023']);
+assert.deepStrictEqual(listFor('2026-11-08', { q: '曼城' }), [], '搜索不会把别的业务日捞回来');
+assert.deepStrictEqual(listFor('2026-11-08', { league: '法甲' }), ['周日020'], '周日业务日仍能筛到凌晨的勒芒');
+
+assert.strictEqual(seen.get('n23'), '2026-11-07');
+assert.strictEqual(seen.get('i23'), '2026-11-08');
+assert.notStrictEqual(seen.get('n23'), seen.get('i23'), '周六023 与周日023 不在同一天');
+assert.strictEqual(seen.get('sun1'), seen.get('leman'), '周日001 与周日020 同属一个业务日');
 
 S.schDate = '2026-11-08';
 const ydayRows = union.filter(r => api.matchOnScheduleDay(r, '2026-11-08'));
-assert.strictEqual(api.scheduleGapInfoForRows(ydayRows), null, '开球日不是该期次日时，不把别的期次缺口当成当天');
+assert.strictEqual(api.scheduleGapInfoForRows(ydayRows), null, '该业务日没有编号缺口记录');
 S.schDate = '2026-11-07';
 const day7 = union.filter(r => api.matchOnScheduleDay(r, '2026-11-07'));
 assert.deepStrictEqual(api.scheduleGapInfoForRows(day7).missing, ['002']);
 S.schDate = '2026-11-09';
-const earlyOnly = union.filter(r => api.matchOnScheduleDay(r, '2026-11-09') && r.id !== 'nodate');
-assert.strictEqual(api.scheduleGapInfoForRows(earlyOnly), null, '纯凌晨场不显示下一期次的编号缺口');
+assert.deepStrictEqual(
+  union.filter(r => api.matchOnScheduleDay(r, '2026-11-09')).map(r => r.id),
+  ['nodate'],
+  '周一凌晨的周日场次不出现在周一业务日',
+);
 assert.deepStrictEqual(api.scheduleGapInfoForRows(union.filter(r => api.matchOnScheduleDay(r, '2026-11-09'))).missing, ['099']);
 
 console.log('ui-275-test OK');
