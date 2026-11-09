@@ -38,16 +38,13 @@ import java.util.Map;
 import org.json.JSONObject;
 
 /**
- * 云球迷: WebView shell. Frontend is bundled in assets/www and served from
- * https://appassets.androidplatform.net/www/ (reserved host, never hits the network),
- * so the page has a normal origin with working localStorage; API calls go to the fixed
- * build-time API_BASE server (see www/config.js, network_security_config.xml).
- * Info & prediction only: no betting / payment / ticket submission.
+ * 云球迷 WebView。页面走 appassets 保留域（不打外网），本地存储可用。
+ * 接口地址在构建时写入 www/config.js。只做资讯与预测，不下单、不支付、不出票。
  */
 public class MainActivity extends Activity {
     static final String HOST = "appassets.androidplatform.net";
     static final String START = "https://" + HOST + "/www/index.html";
-    /** Light splash / first-paint fill so the old navy centered-icon look never flashes. */
+    /** 启动底色，避免闪出旧版居中队徽。 */
     static final int CHROME = Color.parseColor("#F7F7F8");
     private static final int FILE_CHOOSER_REQUEST = 9101;
     private static final int REQ_POST_NOTIF = 9102;
@@ -58,7 +55,7 @@ public class MainActivity extends Activity {
     private String pendingOpenHash;
     private boolean pageReady;
     private View splashBrand;
-    /** Session-level: only show the system POST_NOTIFICATIONS sheet once. */
+    /** 本次进程只弹一次系统通知权限。 */
     private boolean notifyPermAsked;
     private final Handler bgHandler = new Handler(Looper.getMainLooper());
     private final Runnable bgFavGoalTick = new Runnable() {
@@ -77,7 +74,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         applyEdgeToEdge();
         web = new WebView(this);
-        // Light fill so splash→HTML first paint stays one color (no navy / centered icon).
+        // 启动到页面同一浅色，不闪海军蓝居中图标。
         web.setBackgroundColor(CHROME);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -162,10 +159,8 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 1.9.121: immersive edge-to-edge. Transparent status bar so header gradients
-     * (home / 赛程 / 预测 / 数据 / 我的 / 详情) paint continuously under system icons —
-     * same "one surface" feel as 澳客 reference. CSS pads with --sat (injected below).
-     * Dark status icons on the light splash; JS later sets per-route icon color.
+     * 状态栏透明，顶栏渐变铺到系统图标下。页面用 --sat 留出状态栏。
+     * 启动时用深色图标；进页面后再按路由改。
      */
     private void applyEdgeToEdge() {
         Window w = getWindow();
@@ -532,7 +527,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        // let the web app handle back (close dialog/sheet, sub page -> previous, tab -> 首页); exit when it returns 0
+        // 返回键交给页面；页面返回 0 再退出
         web.evaluateJavascript("(function(){try{return window.__appBack?window.__appBack():0}catch(e){return 0}})()",
             v -> { if (!"1".equals(v)) finish(); });
     }

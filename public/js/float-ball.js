@@ -1,9 +1,4 @@
-/**
- * Floating soccer ball overlay for 首页 / 赛程 / 预测.
- * Ball-local canvas + virtual full-screen physics.
- * 1.9.123: restore pre-122 visual size; keep drag isolation; cut GPU cost.
- * No rubber V lines. Ghost goal only while sling charging / flight.
- */
+/** 首页 / 赛程 / 预测上的悬浮足球。不要橡皮筋 V 线；幽灵球门只在蓄力或飞行时出现。 */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 

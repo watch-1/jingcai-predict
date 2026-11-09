@@ -9,7 +9,7 @@ import android.content.Intent;
 import android.os.Build;
 import org.json.JSONObject;
 
-/** Shared tray builder used by JS notifyGoal and (as fallback) JPush extras. */
+/** 进球通知栏。页面 notifyGoal 和极光 extras 共用。 */
 final class GoalNotify {
     static final String CHANNEL = "goal_alerts";
 

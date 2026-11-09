@@ -5,7 +5,7 @@ import android.content.SharedPreferences;
 import java.util.UUID;
 import org.json.JSONObject;
 
-/** Device id / JPush regId / last-notified score keys. No JPush imports. */
+/** 设备号、极光 regId、上次已提醒比分。这里不引用极光 SDK。 */
 final class PushState {
     static final String PREFS = "jc_push";
     static final String KEY_DEVICE = "device_id";

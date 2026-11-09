@@ -4,10 +4,7 @@ import android.content.Context;
 import android.text.TextUtils;
 import java.lang.reflect.Method;
 
-/**
- * Reflection wrapper so the main sources compile without JPush on the
- * javac classpath (src-jpush + AARs are optional at APK build time).
- */
+/** 反射调用极光，主工程编译时不必把 JPush 放进 classpath。 */
 final class PushBootstrap {
     private static volatile boolean started;
 

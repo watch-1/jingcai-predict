@@ -13,19 +13,17 @@ function marketValueHtml(mv, { inline } = {}) {
   return `<div class="mv-row${empty ? ' dim' : ''}"><span class="mv-lab">身价</span><span class="mv-val">${esc(text)}</span><span class="mv-note">${empty ? '' : esc('参考市值' + (mv.asOf ? ' · ' + mv.asOf : ''))}</span></div>`;
 }
 
-// 竞彩预测 v1.9.87 用户端 (web/PWA + Android WebView). Match info & odds-based predictions.
-// 资讯会员 mock 订阅已接入。「保存方案」仅为个人记录。
+// 用户端：赛事资讯与赔率参考。资讯会员为模拟支付。「保存方案」只是个人记录。
 'use strict';
 const $ = s => document.querySelector(s);
-/** 1.9.80/1.9.81: neutralize vendor brands in UI strings (covers stale API caches).
- *  Never mutate crest/photo/logo URLs — CDN hostnames (espncdn/thesportsdb/sporttery) must stay intact. */
+/** 界面文案里的数据商品牌换成中性说法。队徽、头像、/api/logo 地址不要改。 */
 function scrubVendorLabelsClient(s) {
   if (s == null) return s;
   let t = String(s);
-  // Whole-string or proxy URL — leave untouched (badge/logoProxy feed esc())
+  // 整段已是链接或 /api/logo 时不动
   if (/^https?:\/\//i.test(t) || /\/api\/logo\?/i.test(t) || /https?%3A%2F%2F/i.test(t)) return t;
   if (!/(?:API-Football|ESPN|DeepSeek|Opta|TheSportsDB|sporttery\.cn)/i.test(t)) return t;
-  // Protect embedded URLs inside longer HTML/copy before brand replace
+  // 长文案里的链接先摘出来，避免品牌替换改到地址
   const parked = [];
   const park = (m) => { parked.push(m); return '\0URL' + (parked.length - 1) + '\0'; };
   t = t.replace(/https?:\/\/[^\s"'<>\\]+/gi, park).replace(/\/api\/logo\?[^"'<\s\\]*/gi, park);
@@ -941,7 +939,6 @@ async function toggleUserFollow(userId, opts = {}) {
 try { window.isUserFollow = isUserFollow; window.toggleUserFollow = toggleUserFollow; } catch (_) {}
 function sessionExpired() { if (!S.token) return; clearSession(); toast('登录已过期，请重新登录'); go('#/login'); }
 
-// ---------- match data ----------
 async function loadData(kind, force) {
   let j;
   try {
@@ -1871,7 +1868,6 @@ function warnBar() {
   return '';
 }
 
-// ---------- account lists (plans / favorites) ----------
 function kbLoadFailToastAllowed(routeName) {
   return routeName === 'kb';
 }
@@ -1956,7 +1952,7 @@ async function deletePlan(id) {
   S.plans = S.plans.filter(p => p.id !== id); persistLists(); toast('已删除'); render();
 }
 
-// ---------- selection → 方案 calculator (personal record only) ----------
+// 方案计算器只记个人记录，不出票
 const findMatch = id => (S.matches || []).find(m => m.id === String(id)) || (S.schedule || []).find(m => m.id === String(id)) || null;
 function findMatchByNum(num) {
   const s = String(num || '');
@@ -2379,7 +2375,7 @@ function openSheetHtml(html) {
   syncSheetScrollLock();
 }
 
-// ----- sm-surface 球员明细（与 UI kit 对齐的环形率 + 网格） -----
+// 球员明细：环形率 + 网格
 function smPlayerPhotoUrl(image) {
   if (!image) return '';
   let raw = String(image).trim();
@@ -3582,7 +3578,7 @@ async function fillHomeTribeHot() {
     if (!feedEl.isConnected) return;
     if (feedEl.querySelector('.tf-card')) return;
     feedEl.innerHTML = empty('加载失败，请稍后重试',
-      '<button type="button" class="btn ghost sm" data-act="homeMidTab" data-tab="hot">重试</button>', '暂无内容');
+      '<button type="button" class="btn ghost sm" data-act="homeMidTab" data-tab="hot">重试</button>', '加载失败');
   }
 }
 function paintHomeAttitudeFeed(feedEl, ms, posts) {
@@ -4660,9 +4656,8 @@ function parseScorePairKey(key) {
   return { h, a };
 }
 /**
- * lastNotified: '2-1' or null. alreadyWatching: poller already tracked this live match.
- * nextLive: { homeScore, awayScore }
- * action: seed | notify | skip | watch
+ * lastNotified 形如 2-1，或 null。alreadyWatching：轮询已经在看这场。
+ * nextLive 含 homeScore、awayScore。action：seed | notify | skip | watch。
  */
 function favGoalAlertDecision(lastNotified, nextLive, alreadyWatching) {
   const nextKey = nextLive ? scorePairKey(nextLive.homeScore, nextLive.awayScore) : null;
@@ -6111,15 +6106,15 @@ function pagePredict() {
         + `<div class="grid">${items.map(({ m, pr }, i) => predCardHtml(m, pr, i, { quiet: true })).join('')}</div></div>`;
     }).join('');
   }
-  if (nPending) h += `<p class="note" style="margin:10px 14px 4px">正在加载 ${nPending} 场情报简报…请稍候自动刷新。</p>`;
+  if (nPending) h += `<p class="note" style="margin:10px 14px 4px">正在加载 ${nPending} 场情报简报…请稍后自动刷新。</p>`;
   h += `</div>`;
   return h + foot();
 }
 
 
-// ----- data center (积分榜 / 射手榜 / 助攻榜) -----
+// 数据：积分榜 / 射手榜 / 助攻榜
 
-/** League qualification / promotion / relegation bands by rank (sensible 2025–27 defaults). */
+/** 积分榜欧战 / 降级色带，按名次的默认区间。 */
 const STANDINGS_ZONES = {
   epl: [
     { to: 4, key: 'cl', label: '欧冠区', cls: 'zone-cl' },
@@ -7648,8 +7643,8 @@ async function fillPlayer(id) {
   }
 }
 
-// ----- match detail tabs: 情报 / 数据 / 阵容 / 预测 -----
-// 1.9.107: chat merged under events tab
+// 详情页签：态度 / 情报 / 赔率 / 数据 / 实时 / 阵容 / 预测
+// 聊球并进事件页
 const DETAIL_TABS_BASE = [['attitude', '态度'], ['intel', '情报'], ['odds', '赔率'], ['data', '数据'], ['live', '实时'], ['squad', '阵容'], ['pred', '预测']];
 function isMatchFinished(x) {
   if (!x) return false;
@@ -9794,7 +9789,7 @@ function chatTabHtml(x, m) {
 }
 
 
-// ----- 1.9.22 本场球员（完场 AF /fixtures/players，永久缓存） -----
+// 完场本场球员，磁盘长期缓存
 async function loadFixturePlayers(x, { force } = {}) {
   const id = String(x && x.id || '');
   if (!id) return null;
@@ -9992,7 +9987,7 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
   return h;
 }
 
-// ----- 1.9.12 开赛赔率快照（只读展示） -----
+// 开赛赔率快照，只读
 function oddsSnapCache() { return (S.oddsSnap = S.oddsSnap || {}); }
 function matchKickoffMs(x) {
   try { return Date.parse(`${x.date}T${String(x.time || '00:00').slice(0, 5)}:00+08:00`); } catch { return NaN; }
@@ -11873,7 +11868,7 @@ function colAuthorCard(a) {
     <div class="col-atags">${tags}</div>
   </button>`;
 }
-/** Empty 2×2 chrome so layout still matches 澳客严选 author wall when no writers yet */
+/** 还没有作者时仍占 2×2，对齐严选作者墙。 */
 function colAuthorPlaceholders(n = 4) {
   const phTags = [
     colTopicChip('首发'), colTopicChip('伤停'), colTopicChip('战报'), colTopicChip('赛况'),
@@ -14105,7 +14100,7 @@ document.addEventListener('submit', async e => {
   } catch (x) { fail(x.message); }
 });
 
-// ---------- pull to refresh (tab pages) ----------
+// 底栏页下拉刷新
 (() => {
   const ptr = $('#ptr'); let y0 = null, dy = 0, busy = false;
   const txt = t => (ptr.querySelector('span').textContent = t);
