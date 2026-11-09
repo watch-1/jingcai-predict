@@ -260,7 +260,8 @@ assert.ok(html.includes('伤停 / 核心'));
 assert.ok(html.includes('本场公开名单暂无'));
 assert.ok(html.includes('红边 = 近况核心'));
 assert.ok(!html.includes('暂时没有'));
-assert.ok(html.includes('胜平负 · 模型概率'));
+assert.ok(html.includes('<h3>进球模型</h3>'));
+assert.ok(!html.includes('胜平负 · 模型概率'));
 assert.ok(html.includes('pr-1x2'));
 assert.ok(html.includes('pr-value-table'));
 assert.ok(html.includes('大小球'));
@@ -392,7 +393,7 @@ assert.strictEqual(halfOnly.n, 1);
 assert.strictEqual(sq.tallyHalf([{ scores: [] }], 10).n, 0);
 
 assert.ok(/先空着/.test(reportHtml));
-assert.ok(/胜平负 · 模型概率/.test(reportHtml));
+assert.ok(/进球模型/.test(reportHtml));
 assert.ok(/pr-value-table/.test(reportHtml));
 assert.ok(!/要点覆盖|Pipeline|触发：/.test(reportHtml));
 
@@ -476,9 +477,9 @@ assert.ok(!/要点覆盖|Pipeline|触发：/.test(reportHtml));
   assert.ok(!/信号冲突/.test(plain.text));
   assert.ok(/胜平负暂无/.test(plain.text));
   const html = pr._renderHtml(m, Object.assign({}, blocks, { oddsEdge }), plain);
-  assert.ok(html.includes('胜平负 · 模型概率'));
+  assert.ok(html.includes('进球模型'));
   assert.ok(html.includes('pr-1x2'));
-  assert.ok(html.includes('主胜 · 模型概率'));
+  assert.ok(html.includes('>主胜</div>'));
   assert.ok(html.includes('大小球'));
   assert.ok(html.includes('class="pr-htft"'));
   assert.ok(html.includes('让球胜平负'));
@@ -498,6 +499,102 @@ assert.ok(!/要点覆盖|Pipeline|触发：/.test(reportHtml));
   assert.ok(html.includes('额外表态'));
   assert.ok(!html.includes('信息不足，不额外表态'));
 }
+
+assert.strictEqual(sc.sampleWeight(0, 'current'), 1);
+assert.strictEqual(sc.sampleWeight(0, 'prev'), sc.sampleWeight(0, 'current') * 0.42);
+assert.ok(sc.sampleWeight(12, 'current') > sc.sampleWeight(0, 'prev'), 'a current-season game outweighs last season');
+assert.ok(sc.sampleWeight(0, 'current') > sc.sampleWeight(12, 'current'), 'the latest 10 outweigh older games');
+
+const thinVenue = sc.expectedGoals({
+  home: { adjGf: 1.2, adjGa: 1.1, home: { adjGf: 2.4, adjGa: 0.4, n: 3 } },
+  away: { adjGf: 1.6, adjGa: 1.0, away: { adjGf: 0.4, adjGa: 2.2, n: 3 } },
+});
+assert.strictEqual(thinVenue.baseH, 1.1);
+assert.strictEqual(thinVenue.baseA, 1.35);
+
+const recentHeavy = sc.calibrateSide([
+  ...Array.from({ length: 10 }, () => ({ gf: 2, ga: 0, weight: 1 })),
+  ...Array.from({ length: 10 }, () => ({ gf: 0, ga: 0, weight: 0.5 })),
+]);
+assert.ok(Math.abs(recentHeavy.rawGf - (20 / 15)) < 0.02, 'recent games pull the mean above a flat average');
+
+function repeatSide(n, gf, ga, venue) {
+  return Array.from({ length: n }, () => ({
+    gf, ga, venue, bucket: 'league', weight: 1, oppStr: 0.5, league: '挪超',
+  }));
+}
+const tromso = sc.calibrateSide([
+  ...repeatSide(4, 1.4, 1.1, 'home'),
+  ...repeatSide(4, 1.2, 1.3, 'away'),
+], { early: false });
+const bodo = sc.calibrateSide([
+  ...repeatSide(6, 1.9, 1.0, 'home'),
+  ...repeatSide(4, 1.6, 1.2, 'away'),
+  { gf: 0, ga: 5, venue: 'away', bucket: 'europe', weight: 1, league: '欧冠' },
+  { gf: 4, ga: 3, venue: 'away', bucket: 'europe', weight: 1, league: '欧冠' },
+], { early: false });
+assert.strictEqual(tromso.home, null, 'four home games do not become the home slice');
+assert.strictEqual(bodo.away, null, 'four away games do not become the away slice');
+assert.ok(bodo.rawGa < 1.25, 'UCL 0-5 stays out of the league conceded average, got ' + bodo.rawGa);
+assert.ok(bodo.adjGa < 1.6, 'opponent-tier nudge must not restore the raw 0-5, got ' + bodo.adjGa);
+const tromsoExp = sc.expectedGoals({ home: tromso, away: bodo });
+assert.ok(tromsoExp.expH < tromsoExp.expA, 'league rates should not leave λ_home above λ_away, got '
+  + tromsoExp.expH.toFixed(3) + ' / ' + tromsoExp.expA.toFixed(3));
+
+const nameCal = sc.calibrateMatchForm({
+  homeId: '618',
+  awayId: '617',
+  focusLeague: '挪超',
+  roundsPlayed: 24,
+  now: new Date('2026-11-01T12:00:00Z'),
+  rows: [],
+  tableRows: [
+    { rank: 1, team: 'Bodø/Glimt', teamZh: '博德闪耀', played: 24 },
+    { rank: 6, team: 'Tromsø', teamZh: '特罗姆瑟', played: 24 },
+  ],
+  homeForm: {
+    matches: [
+      { date: '2026-10-20', league: 'Eliteserien', home: 'Bodo Glimt', away: 'Tromso', homeTeamId: '618', awayTeamId: '', ft: '2:1' },
+      { date: '2026-10-02', league: '欧冠', home: 'Bodo Glimt', away: 'Away Side', homeTeamId: '618', awayTeamId: '', ft: '0:5' },
+    ],
+  },
+  awayForm: {
+    matches: [
+      { date: '2026-10-18', league: '挪超', home: 'Molde', away: '特罗姆瑟', homeTeamId: '330', awayTeamId: '617', ft: '1:1' },
+    ],
+  },
+});
+assert.ok(nameCal.home.nOpp >= 1, 'same-league opponent matched by alias, not only by id');
+assert.ok(!/对不上/.test(nameCal.note), nameCal.note);
+assert.ok(/欧战按对手强弱/.test(nameCal.note), nameCal.note);
+assert.ok(nameCal.home.rawGa == null || nameCal.home.rawGa < 3, 'the 0-5 is not the league average');
+
+const tn = require('../lib/team-names');
+assert.ok(tn.namesMatch('FK Bodø/Glimt', 'Bodo Glimt'));
+assert.ok(tn.namesMatch('特罗姆瑟', 'Tromsø IL'));
+assert.ok(tn.namesMatch('博德闪耀', 'Bodø/Glimt'));
+assert.strictEqual(tn.knownEn('618'), 'Bodø/Glimt');
+const bodoQueries = tn.extraQueries('博德闪耀', '');
+assert.ok(bodoQueries.some(q => /bod/i.test(q) && /glimt/i.test(q)));
+const squadSrc = require('../lib/squad-source');
+const bodoSearch = squadSrc.searchQueries('Bodo Glimt', '博德闪耀');
+assert.ok(bodoSearch.some(q => /Glimt/.test(q)), bodoSearch.join(' | '));
+assert.deepStrictEqual(squadSrc.searchQueries('Manchester United', ''), ['Manchester United']);
+
+const leanAway = surface.renderPredictSurface({
+  home: '特罗姆瑟',
+  away: '博德闪耀',
+  concl: {
+    lean: 'a', pickText: '客胜', conf: 0.58, lvl: ['l2', '倾向'],
+    speakMode: 'amplify', _speakResolved: true,
+  },
+  oddsEdge: { exp: { expH: 1.8, expA: 0.9 }, over25: 0.55 },
+  market: { p: { h: 0.59, d: 0.23, a: 0.18 }, had: { h: 1.7, d: 3.8, a: 5.4 } },
+});
+assert.ok(leanAway.includes('倾向：客胜'));
+assert.ok(!leanAway.includes('倾向：主胜'));
+assert.ok(leanAway.includes('<h3>进球模型</h3>'));
+assert.ok(leanAway.includes('不是倾向'));
 
 (async () => {
   const hs = require('../lib/heat-source');

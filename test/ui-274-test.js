@@ -1,5 +1,5 @@
 'use strict';
-// 2.1.1: empty calculator must not fall through to sample while the live issue list
+// 2.1.3: empty calculator must not fall through to sample while the live issue list
 // still has Selling (even after midnight kickoff) or Define rows without odds yet.
 const fs = require('fs');
 const path = require('path');
@@ -16,15 +16,15 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 
-assert.ok(/VERSION=2.1.2/.test(ver));
-assert.ok(/VERSION_CODE=329/.test(ver));
-assert.ok(/jc-v2.1.2/.test(swJs));
-assert.strictEqual(pkg.version, '2.1.2');
-assert.strictEqual(cfg.version, '2.1.2');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.2\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-329\}"/.test(apkSh));
-assert.ok(/android:versionCode="329"/.test(androidManifest));
-assert.ok(/android:versionName="2\.1\.2"/.test(androidManifest));
+assert.ok(/VERSION=2.1.3/.test(ver));
+assert.ok(/VERSION_CODE=330/.test(ver));
+assert.ok(/jc-v2.1.3/.test(swJs));
+assert.strictEqual(pkg.version, '2.1.3');
+assert.strictEqual(cfg.version, '2.1.3');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.3\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-330\}"/.test(apkSh));
+assert.ok(/android:versionCode="330"/.test(androidManifest));
+assert.ok(/android:versionName="2\.1\.3"/.test(androidManifest));
 
 assert.ok(/scheduleRowEligibleForEmptyCalculatorSalvage/.test(serverJs), 'loose salvage helper');
 assert.ok(/salvageEmptyCalculator: true/.test(serverJs), 'empty calculator uses loose salvage');

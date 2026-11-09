@@ -1,5 +1,5 @@
 'use strict';
-// 2.1.2: 赛程比分一天只认开球日。2.1.2 把期次日和开球日做并集，前天的周六023
+// 2.1.3: 赛程比分一天只认开球日。2.1.1 把期次日和开球日做并集，前天的周六023
 // 和昨天的周日023 会按编号穿插在同一条列表里。
 const fs = require('fs');
 const path = require('path');
@@ -15,15 +15,15 @@ const cfgJs = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const cfg = Function('return ' + cfgJs.replace(/^window\.APP_CONFIG=/, ''))();
 const androidManifest = fs.readFileSync(path.join(root, 'android/AndroidManifest.xml'), 'utf8');
 
-assert.ok(/VERSION=2.1.2/.test(ver));
-assert.ok(/VERSION_CODE=329/.test(ver));
-assert.ok(/jc-v2.1.2/.test(swJs));
-assert.strictEqual(pkg.version, '2.1.2');
-assert.strictEqual(cfg.version, '2.1.2');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.2\}"/.test(apkSh));
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-329\}"/.test(apkSh));
-assert.ok(/android:versionCode="329"/.test(androidManifest));
-assert.ok(/android:versionName="2\.1\.2"/.test(androidManifest));
+assert.ok(/VERSION=2.1.3/.test(ver));
+assert.ok(/VERSION_CODE=330/.test(ver));
+assert.ok(/jc-v2.1.3/.test(swJs));
+assert.strictEqual(pkg.version, '2.1.3');
+assert.strictEqual(cfg.version, '2.1.3');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2.1.3\}"/.test(apkSh));
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-330\}"/.test(apkSh));
+assert.ok(/android:versionCode="330"/.test(androidManifest));
+assert.ok(/android:versionName="2\.1\.3"/.test(androidManifest));
 
 assert.ok(/function scheduleCanonicalDay/.test(appJs), 'one canonical schedule day');
 assert.ok(!/if \(issueDate\(m\) === day\) return true/.test(appJs), 'day filter is no longer issueDate OR kickoff');
@@ -78,7 +78,7 @@ const api = new Function('ISSUE_WEEK', 'S', [
 ].join('\n'))(ISSUE_WEEK, S);
 
 // Prod-shaped rows from 2026-11-09. 周六023 kicks off Nov 8 (businessDate Nov 7);
-// 周日023 kicks off Nov 9 (businessDate Nov 8). The 2.1.2 OR put both on Nov 8.
+// 周日023 kicks off Nov 9 (businessDate Nov 8). The 2.1.1 OR put both on Nov 8.
 const schedule = [
   { id: 'n23', num: '周六023', league: '英超', home: '诺丁汉', away: '曼城', date: '2026-11-08', time: '01:30', businessDate: '2026-11-07', _kind: 'ft' },
   { id: 's24', num: '周六024', league: '德甲', home: '斯图加特', away: '不来梅', date: '2026-11-08', time: '01:30', businessDate: '2026-11-07', _kind: 'ft' },

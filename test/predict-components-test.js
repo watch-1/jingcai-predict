@@ -332,7 +332,7 @@ assert.ok(!html.includes('启发式'));
 assert.ok(!html.includes('归因'));
 assert.ok(!html.includes('<ol'));
 assert.ok(!html.includes('GPS'));
-const order = ['额外表态', '模型与盘口', '近况攻防习惯', '对位提示', 'data-id="motive"', '胜平负 · 模型概率', '大小球（O2.5）'];
+const order = ['额外表态', '模型与盘口', '近况攻防习惯', '对位提示', 'data-id="motive"', '进球模型', '大小球（O2.5）'];
 let prev = -1;
 for (const bit of order) {
   const at = html.indexOf(bit);
