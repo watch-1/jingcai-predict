@@ -200,3 +200,35 @@ assert.ok(surface.renderBarsHtml({ bars: { rows: [] }, barNote: '近期完场没
   console.error(err);
   process.exit(1);
 });
+
+// Honest no-team fallback: must not pretend we found no lineups.
+{
+  const surface = require('../lib/sm-surface');
+  assert.ok(surface.NO_TEAM_FORM.includes('核验'));
+  assert.ok(!surface.NO_TEAM_FORM.includes('上场明细'));
+  const form = surface.renderFormHtml({
+    players: { home: [], away: [] },
+    playerNote: surface.NO_TEAM_FORM,
+  });
+  assert.ok(form.includes(surface.NO_TEAM_FORM));
+  assert.ok(!form.includes('近期完场没有上场明细'));
+  const pos = surface.renderPosCompareHtml({
+    players: { home: [], away: [] },
+    posNote: surface.NO_TEAM_POS,
+  });
+  assert.ok(pos.includes(surface.NO_TEAM_POS));
+  assert.ok(!pos.includes('近况名单里位置信息不够'));
+  const bars = surface.renderBarsHtml({ bars: { rows: [] }, barNote: surface.NO_TEAM_BAR });
+  assert.ok(bars.includes(surface.NO_TEAM_BAR));
+  console.log('honest no-team empty states OK');
+}
+
+{
+  const hs = require('../lib/heat-source');
+  assert.strictEqual(typeof hs.verifiedNtId, 'function');
+  // Empty map: unknown country returns null, never a guessed club id.
+  assert.strictEqual(hs.verifiedNtId('苏格兰'), null);
+  assert.strictEqual(hs.verifiedNtId('英格兰'), null);
+  assert.strictEqual(hs.verifiedNtId('North Macedonia'), null);
+  console.log('verifiedNtId honest-null OK');
+}

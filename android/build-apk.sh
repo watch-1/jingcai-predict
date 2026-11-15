@@ -17,7 +17,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"; A="$ROOT/android"
 export JAVA_HOME="${JAVA_HOME:-/opt/android-tools/jdk17}"; export PATH="$JAVA_HOME/bin:$PATH"
 SDK="${ANDROID_HOME:-/opt/android-tools/sdk}"; BT="$SDK/build-tools/34.0.0"; JAR="$SDK/platforms/android-34/android.jar"
 KEYSTORE="${KEYSTORE:-$A/release.keystore}"; KS_PASS="${KS_PASS:-jingcai-predict}"; KEY_ALIAS="${KEY_ALIAS:-jingcai}"
-VERSION_NAME="${VERSION_NAME:-2.1.4}"; VERSION_CODE="${VERSION_CODE:-331}"
+VERSION_NAME="${VERSION_NAME:-2.1.5}"; VERSION_CODE="${VERSION_CODE:-347}"
 JPUSH_APPKEY="${JPUSH_APPKEY:-}"
 JPUSH_CHANNEL="${JPUSH_CHANNEL:-developer-default}"
 API_BASE="${API_BASE:-http://120.77.152.74:8088}"; API_BASE="${API_BASE%/}"
@@ -27,6 +27,8 @@ rm -rf "$B"; mkdir -p "$B/assets/www" "$B/gen" "$B/classes" "$B/res" "$ROOT/dist
 
 # 1) bundle frontend (sw.js not needed inside the app) + build-time config
 cp -r "$ROOT/public/." "$B/assets/www/"; rm -f "$B/assets/www/sw.js" "$B/assets/www/"*.apk
+# Dev-only mock pages must not ship in the APK.
+rm -rf "$B/assets/www/_preview-mv"
 for _req in \
   "$B/assets/www/banners/slide-hot-match.jpg" \
   "$B/assets/www/banners/slide-news.jpg" \
@@ -34,6 +36,40 @@ for _req in \
   "$B/assets/www/demos/assets/soccer_ball.glb"; do
   if [ ! -f "$_req" ]; then echo "Missing required APK asset: $_req" >&2; exit 1; fi
 done
+# aapt2 writes inconsistent zip headers for non-ASCII asset paths, which some
+# phone installers reject as INSTALL_FAILED_INVALID_APK (错误码 -2).
+python3 - "$B/assets" <<'PY'
+import re, sys, unicodedata
+from pathlib import Path
+root = Path(sys.argv[1])
+special = {'英超': 'epl', '西甲': 'laliga', '意甲': 'seriea', '德甲': 'bundesliga', '法甲': 'ligue1'}
+def slug(name):
+    if name in special:
+        return special[name]
+    if all(ord(c) < 128 for c in name):
+        return name
+    s = unicodedata.normalize('NFKC', name)
+    s = re.sub(r'[^A-Za-z0-9._-]+', '_', s)
+    s = re.sub(r'_+', '_', s).strip('._') or 'item'
+    if not all(ord(c) < 128 for c in s):
+        s = 'item'
+    return s
+renamed = 0
+for path in sorted(root.rglob('*'), key=lambda x: len(x.parts), reverse=True):
+    new_name = slug(path.name)
+    if new_name == path.name:
+        continue
+    dest = path.with_name(new_name)
+    n = 2
+    while dest.exists():
+        stem, suffix = Path(new_name).stem, Path(new_name).suffix
+        dest = path.with_name(f'{stem}_{n}{suffix}')
+        n += 1
+    path.rename(dest)
+    renamed += 1
+    print('sanitized asset', path.relative_to(root), '->', dest.relative_to(root))
+print('sanitized_asset_paths', renamed)
+PY
 CHANNEL="${CHANNEL:-prod}"
 PARTNER_KEY="${PARTNER_BUILD_KEY:-}"
 BUILD_ID="${BUILD_ID:-$(date +%Y%m%d-%H%M)}"
@@ -110,7 +146,27 @@ javac --release 11 -classpath "$JAVAC_CP" -d "$B/classes" $(find "${JAVA_SRC[@]}
 if [ "$JPUSH_ON" = "1" ] && [ -d "$B/jcore-aar/jni" ]; then
   mkdir -p "$B/lib"
   cp -a "$B/jcore-aar/jni/." "$B/lib/"
-  (cd "$B" && zip -qr unsigned.apk lib)
+  # The box zip shim is not Info-ZIP and does not recurse; pack JNI with Python.
+  python3 - "$B" <<'PY'
+import sys, zipfile
+from pathlib import Path
+root = Path(sys.argv[1])
+apk = root / 'unsigned.apk'
+lib = root / 'lib'
+n = 0
+with zipfile.ZipFile(apk, 'a') as zf:
+    for p in sorted(lib.rglob('*.so')):
+        rel = p.relative_to(root).as_posix()
+        info = zipfile.ZipInfo(rel)
+        info.compress_type = zipfile.ZIP_STORED
+        info.external_attr = 0o100644 << 16
+        zf.writestr(info, p.read_bytes())
+        n += 1
+        print('packed', rel, p.stat().st_size)
+print('packed_jni', n)
+if n == 0:
+    raise SystemExit('no JNI .so files packed')
+PY
 fi
 
 # 5) align + sign (self-signed release key; keep the keystore to publish updates over installed versions)
@@ -119,6 +175,23 @@ if [ ! -f "$KEYSTORE" ]; then
     -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Jingcai Predict, OU=App, O=tiicai-site, C=CN"
 fi
 "$BT/zipalign" -f -p 4 "$B/unsigned.apk" "$B/aligned.apk"
-"$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" --ks-key-alias "$KEY_ALIAS" --v4-signing-enabled false --out "$OUT" "$B/aligned.apk"
-"$BT/apksigner" verify --verbose "$OUT" | head -6
+"$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" --ks-key-alias "$KEY_ALIAS" \
+  --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false \
+  --out "$OUT" "$B/aligned.apk"
+"$BT/apksigner" verify --verbose "$OUT" | head -8
+# Reject packages with the zip local/central filename mismatch that caused 错误码 -2.
+if unzip -tqq "$OUT" 2>/tmp/apk-unzip-test.txt; then
+  :
+else
+  if grep -Ei 'mismatch|error|failed' /tmp/apk-unzip-test.txt >/dev/null; then
+    echo "APK zip integrity check failed" >&2
+    cat /tmp/apk-unzip-test.txt
+    exit 1
+  fi
+fi
+if grep -Ei 'mismatch' /tmp/apk-unzip-test.txt >/dev/null 2>&1; then
+  echo "APK zip filename mismatch" >&2
+  cat /tmp/apk-unzip-test.txt
+  exit 1
+fi
 ls -l "$OUT"
