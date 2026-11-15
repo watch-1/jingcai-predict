@@ -9037,7 +9037,7 @@ function predTabHtml(m) {
   const fin = isMatchFinished(m);
   const rep = m && S.predictCache && S.predictCache[String(m.id)];
   const pr = m ? effectivePredict(m) : null;
-  let h = '';
+  let h = prematchRefHtml(m);
   if (fin) {
     h += `<div class="dsec reason pr-snap-hint"><h3>预测分析</h3><p class="note">【赛前快照·完场调试】以下为开赛前信息重建的综合简报；赔率来自赛程在售快照（非滚球）；不含本场赛果后情报。首次打开可能需稍候生成。</p></div>`;
   }
@@ -11459,6 +11459,256 @@ function liveTabHtml(x, live) {
     + `<div id="sm-live-${key}" class="sm-slot"><p class="note">正在整理本场球员数据…</p></div>`
     + eventsTabHtml(x, live);
 }
+
+/** 356: match-detail weather/neutral hero + 预测页「赛前参考」. Weather is not live this build. */
+const MATCH_WEATHER_TYPES = ['neutral', 'sunny', 'light-rain', 'storm'];
+function matchWeatherType(x) {
+  const raw = (x && (x.weatherType || x.weather)) || (S.matchWeather && S.matchWeather[String(x && x.id || '')]) || 'neutral';
+  const t = String(raw || 'neutral').toLowerCase();
+  if (t === 'rain' || t === 'lightrain') return 'light-rain';
+  if (t === 'thunder' || t === 'thunderstorm') return 'storm';
+  return MATCH_WEATHER_TYPES.includes(t) ? t : 'neutral';
+}
+function setMatchWeatherType(id, type) {
+  S.matchWeather = S.matchWeather || {};
+  const t = matchWeatherType({ weatherType: type });
+  if (id) S.matchWeather[String(id)] = t;
+  const hero = id && document.getElementById('match-hero-' + id);
+  if (hero && hero.classList.contains('hero--weather')) hero.setAttribute('data-weather', t);
+  return t;
+}
+try { window.setMatchWeatherType = setMatchWeatherType; } catch (_) {}
+function hashTeamGlow(seed) {
+  let h = 0;
+  for (const c of String(seed || '')) h = (h * 33 + c.charCodeAt(0)) >>> 0;
+  return 'hsla(' + (h % 360) + ', 30%, 28%, .62)';
+}
+function muteRgbForGlow(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const d = max - min;
+  let hh = 0;
+  const l = (max + min) / 2;
+  let sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (d !== 0) {
+    if (max === r) hh = ((g - b) / d) % 6;
+    else if (max === g) hh = (b - r) / d + 2;
+    else hh = (r - g) / d + 4;
+    hh *= 60;
+    if (hh < 0) hh += 360;
+  }
+  sat = Math.max(0.22, Math.min(0.40, sat * 0.85 || 0.28));
+  return 'hsla(' + Math.round(hh) + ', ' + Math.round(sat * 100) + '%, 28%, .62)';
+}
+function sampleImgGlow(img) {
+  try {
+    if (!img || !img.naturalWidth) return null;
+    const w = 24, h = 24;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 40) continue;
+      const rr = data[i], gg = data[i + 1], bb = data[i + 2];
+      const lum = (rr + gg + bb) / 3;
+      if (lum > 245 || lum < 14) continue;
+      const mx = Math.max(rr, gg, bb), mn = Math.min(rr, gg, bb);
+      const sat = mx === 0 ? 0 : (mx - mn) / mx;
+      const wt = 0.35 + sat * 1.4;
+      r += rr * wt; g += gg * wt; b += bb * wt; n += wt;
+    }
+    if (n < 4) return null;
+    return muteRgbForGlow(r / n, g / n, b / n);
+  } catch (_) { return null; }
+}
+function teamGlowSeed(x, side) {
+  const id = side === 'away' ? (x && x.awayTeamId) : (x && x.homeTeamId);
+  const name = side === 'away' ? (x && x.away) : (x && x.home);
+  return String(id || name || side);
+}
+function teamGlowCached(x, side) {
+  S.teamGlowColors = S.teamGlowColors || {};
+  const key = teamGlowSeed(x, side);
+  return S.teamGlowColors[key] || hashTeamGlow(key);
+}
+function leagueHeroMark(m) {
+  const logo = m && (m.leagueLogo || m.leagueIcon || m.leagueCrest || '');
+  const name = (m && m.league) || '';
+  if (logo && name) {
+    const src = String(logo).startsWith('data:') || String(logo).startsWith('blob:') || String(logo).startsWith('/')
+      ? logo
+      : (API + '/api/logo?url=' + encodeURIComponent(logo));
+    return `<span class="hero-lg"><img class="hero-lg-ico" alt="" width="18" height="18" src="${esc(src)}" onerror="this.remove()"><span class="hero-lg-name">${esc(name)}</span></span>`;
+  }
+  return lgTag(m);
+}
+function syncHeroWeatherMotion() {
+  const off = !!(document.hidden || (typeof route === 'function' && route().name !== 'match'));
+  try { document.documentElement.classList.toggle('wx-paused', off); } catch (_) {}
+}
+function bindMatchHeroWeather(root) {
+  const scope = root || document;
+  const heroes = scope.querySelectorAll ? scope.querySelectorAll('.hero.hero--weather') : [];
+  heroes.forEach((hero) => {
+    const id = String((hero.id || '').replace(/^match-hero-/, ''));
+    const x = (id && typeof findMatch === 'function' && findMatch(id))
+      || (S.results || []).find((z) => String(z.id) === id)
+      || (typeof loadFxShell === 'function' && loadFxShell(id))
+      || { id };
+    hero.style.setProperty('--hero-home', teamGlowCached(x, 'home'));
+    hero.style.setProperty('--hero-away', teamGlowCached(x, 'away'));
+    const imgs = hero.querySelectorAll('.tm .badge.crest img');
+    imgs.forEach((img, i) => {
+      const side = i === 0 ? 'home' : 'away';
+      const apply = () => {
+        const col = sampleImgGlow(img);
+        if (!col) return;
+        S.teamGlowColors = S.teamGlowColors || {};
+        S.teamGlowColors[teamGlowSeed(x, side)] = col;
+        hero.style.setProperty(side === 'away' ? '--hero-away' : '--hero-home', col);
+      };
+      if (img.complete && img.naturalWidth) apply();
+      else img.addEventListener('load', apply, { once: true });
+    });
+  });
+  syncHeroWeatherMotion();
+}
+function impliedMap(odds) {
+  if (!odds || typeof odds !== 'object') return null;
+  const inv = {};
+  let s = 0;
+  for (const [k, raw] of Object.entries(odds)) {
+    const n = Number(raw);
+    if (!(n > 1)) continue;
+    const v = 1 / n;
+    inv[k] = v;
+    s += v;
+  }
+  if (s <= 0) return null;
+  const out = {};
+  for (const k of Object.keys(inv)) out[k] = inv[k] / s;
+  return out;
+}
+function prefPct(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return (n * 100).toFixed(n >= 0.1 || n === 0 ? 0 : 1) + '%';
+}
+function prefBar(v, cls) {
+  const n = Number(v);
+  const w = Number.isFinite(n) ? Math.max(0, Math.min(100, n * 100)) : 0;
+  return `<div class="pref-bar${cls ? ' ' + cls : ''}"><i style="width:${w.toFixed(1)}%"></i></div>`;
+}
+function prefRow(lab, v, cls) {
+  return `<div class="pref-row"><span class="lab">${esc(lab)}</span>${prefBar(v, cls)}<b class="num">${esc(prefPct(v))}</b></div>`;
+}
+function prefCell(lab, v, cls) {
+  return `<div class="pref-cell"><span>${esc(lab)}</span>${prefBar(v, cls)}<b class="num">${esc(prefPct(v))}</b></div>`;
+}
+function prefBlock(title, src, body) {
+  if (!body) return '';
+  return `<div class="pref-block"><div class="pref-hd">${esc(title)}<small>${esc(src)}</small></div>${body}</div>`;
+}
+function prematchRefHtml(m) {
+  if (!m) return '';
+  const snap = oddsSnapCache()[String(m.id) + '|' + (m.date || '')];
+  const pools = snap && snap.ok !== false ? snap.pools : null;
+  const rep = S.predictCache && S.predictCache[String(m.id)];
+  const edge = (rep && rep.ok && rep.sections && rep.sections.oddsEdge) || null;
+  const modelWdl = (edge && edge.wdl) || null;
+  const marketHad = (m.had && implied(m.had))
+    || (pools && pools.had && implied(pools.had))
+    || null;
+  const hhadOdds = (m.hhad && (m.hhad.h || m.hhad.d || m.hhad.a)) ? m.hhad : (pools && pools.hhad) || null;
+  const marketHhad = hhadOdds ? implied(hhadOdds) : null;
+  const glRaw = (hhadOdds && hhadOdds.goalLine != null && hhadOdds.goalLine !== '')
+    ? hhadOdds.goalLine
+    : (m.hhad && m.hhad.goalLine);
+  const gl = glRaw != null && glRaw !== '' ? Number(glRaw) : NaN;
+  let hhadTitle = '让球';
+  if (Number.isFinite(gl)) {
+    const n = Math.abs(gl);
+    const shown = Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
+    hhadTitle = gl < 0 ? `让球（主队让 ${shown} 球）` : gl > 0 ? `让球（主队受让 ${shown} 球）` : '让球（平手）';
+  }
+  const modelRq = (edge && edge.rq && Array.isArray(edge.rq.rows) && edge.rq.rows.length) ? edge.rq : null;
+  const ttgOdds = pools && pools.ttg ? pools.ttg : null;
+  const ttgImp = impliedMap(ttgOdds);
+  const hafuOdds = pools && pools.hafu ? pools.hafu : null;
+  const hafuImp = impliedMap(hafuOdds);
+  const over25 = edge && edge.over25 != null && Number.isFinite(Number(edge.over25)) ? Number(edge.over25) : null;
+
+  let body = '';
+  // 胜平负
+  if (marketHad || modelWdl) {
+    let rows = '';
+    if (marketHad && modelWdl) {
+      rows += prefRow('主胜 · 盘口', marketHad.h) + prefRow('主胜 · 模型', modelWdl.h, 'model');
+      rows += prefRow('平局 · 盘口', marketHad.d) + prefRow('平局 · 模型', modelWdl.d, 'model');
+      rows += prefRow('客胜 · 盘口', marketHad.a) + prefRow('客胜 · 模型', modelWdl.a, 'model');
+      body += prefBlock('胜平负', '盘口去水隐含 · 站内模型', rows);
+    } else if (marketHad) {
+      body += prefBlock('胜平负', '盘口去水隐含', prefRow('主胜', marketHad.h) + prefRow('平局', marketHad.d) + prefRow('客胜', marketHad.a));
+    } else {
+      body += prefBlock('胜平负', '站内模型', prefRow('主胜', modelWdl.h, 'model') + prefRow('平局', modelWdl.d, 'model') + prefRow('客胜', modelWdl.a, 'model'));
+    }
+  }
+  // 让球
+  if (marketHhad || modelRq) {
+    const labs = { h: '让胜', d: '让平', a: '让负' };
+    let rows = '';
+    if (marketHhad && modelRq) {
+      const byK = {};
+      for (const r of modelRq.rows) if (r && r.k) byK[r.k] = r.model;
+      for (const k of ['h', 'd', 'a']) {
+        rows += prefRow(labs[k] + ' · 盘口', marketHhad[k]);
+        rows += prefRow(labs[k] + ' · 模型', byK[k], 'model');
+      }
+      body += prefBlock(hhadTitle, '盘口去水隐含 · 站内模型', rows);
+    } else if (marketHhad) {
+      body += prefBlock(hhadTitle, '盘口去水隐含', prefRow('让胜', marketHhad.h) + prefRow('让平', marketHhad.d) + prefRow('让负', marketHhad.a));
+    } else {
+      const rows2 = modelRq.rows.map((r) => prefRow(r.lab || labs[r.k] || r.k, r.model, 'model')).join('');
+      body += prefBlock(hhadTitle, '站内模型', rows2);
+    }
+  }
+  // 进球数 / 大小球
+  if (ttgImp) {
+    const labs = [];
+    for (let i = 0; i <= 7; i++) labs.push([i === 7 ? '7+' : String(i), ttgImp['s' + i] || 0]);
+    body += prefBlock('进球数', '盘口去水隐含', `<div class="pref-grid8">${labs.map(([lab, v]) => prefCell(lab, v)).join('')}</div>`);
+  }
+  if (over25 != null || ttgImp) {
+    let marketOver = null;
+    if (ttgImp) {
+      let under = 0, over = 0;
+      for (let i = 0; i <= 2; i++) under += ttgImp['s' + i] || 0;
+      for (let i = 3; i <= 7; i++) over += ttgImp['s' + i] || 0;
+      const tot = under + over;
+      if (tot > 0) marketOver = over / tot;
+    }
+    if (marketOver != null && over25 != null) {
+      body += prefBlock('大小球（2.5）', '盘口由进球数汇总 · 站内模型',
+        prefRow('大球 · 盘口', marketOver) + prefRow('大球 · 模型', over25, 'model')
+        + prefRow('小球 · 盘口', 1 - marketOver) + prefRow('小球 · 模型', 1 - over25, 'model'));
+    } else if (over25 != null) {
+      body += prefBlock('大小球（2.5）', '站内模型', prefRow('大球', over25, 'model') + prefRow('小球', 1 - over25, 'model'));
+    }
+  }
+  // 半全场 — 仅展示已有盘口，不编造模型九宫格
+  if (hafuImp) {
+    const labs = [['hh', '胜胜'], ['hd', '胜平'], ['ha', '胜负'], ['dh', '平胜'], ['dd', '平平'], ['da', '平负'], ['ah', '负胜'], ['ad', '负平'], ['aa', '负负']];
+    body += prefBlock('半全场', '盘口去水隐含', `<div class="pref-grid3">${labs.map(([k, lab]) => prefCell(lab, hafuImp[k] || 0)).join('')}</div>`);
+  }
+  if (!body) {
+    body = '<p class="pref-empty">本场暂无可用的胜平负、让球、进球数或半全场参考。未开售的盘口不会展示。</p>';
+  }
+  return `<div class="dsec pref-ref"><h3>赛前参考</h3><p class="note">盘口为竞彩去水隐含概率；模型为站内进球估算。没有数据的玩法不展示。本页不含官方第三方预测源。</p>${body}</div>`;
+}
+
 function matchHero(x, m, r, { favBtn = '' } = {}) {
   const started = !!(m && Date.now() > kickoff(m)) || !!(x && Date.now() > kickoff(x));
   const id = String(x.id || '');
@@ -11494,7 +11744,11 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
     ? `<div class="score num">${esc(hg)} : ${esc(ag)}</div><small>${half ? '半场 ' + esc(half) + ' · ' : ''}${esc(statusLab || (finished ? '完场' : '进行中'))}</small>`
     : `<div class="vs">VS</div><small>${started ? (finished ? '完场' : '已开赛 · 待开奖') : esc(x.time) + ' 开赛'}</small>`;
   const nav = matchEdgeNavBar(favBtn);
-  let h = `<div class="hero hero--edge" id="match-hero-${esc(id)}">${nav}<div class="meta">${lgTag(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
+  const wx = matchWeatherType(x);
+  const homeGlow = teamGlowCached(x, 'home');
+  const awayGlow = teamGlowCached(x, 'away');
+  const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
+  let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="--hero-home:${esc(homeGlow)};--hero-away:${esc(awayGlow)}">${wxLayer}${nav}<div class="meta">${leagueHeroMark(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
     <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo)}<em class="tm-mv" id="tm-mv-h-${esc(id)}" hidden></em><span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small></div>
     <div class="mid">${mid}</div>
     <div class="tm">${badge(x.away, 'lg', x.awayLogo)}<em class="tm-mv" id="tm-mv-a-${esc(id)}" hidden></em><span>${esc(x.away)}</span><small>客队 ${esc(x.awayRank || '')}</small></div></div></div>`;
@@ -11800,6 +12054,7 @@ function refreshDetailTabs(x) {
     wrap.innerHTML = matchHero(x, m, r, { favBtn: matchFavBtn(x) });
     const next = wrap.firstElementChild;
     if (next) hero.replaceWith(next);
+    try { bindMatchHeroWeather(document.getElementById('match-hero-' + x.id) && document.getElementById('match-hero-' + x.id).parentNode || document); } catch (_) {}
     paintMatchSquadValue(x.id);
   }
 }
@@ -11895,7 +12150,10 @@ async function enrichMatchDetail(x) {
   }
   if (tab === 'pred') {
     const m = findMatch(x.id) || x;
-    await loadPredictReport(m);
+    await Promise.all([
+      loadPredictReport(m),
+      loadOddsSnapshot(x.id, x.date, x).catch(() => null),
+    ]);
     if (route().name === 'match' && String(route().arg) === String(x.id) && detailTabOf(x.id) === 'pred') {
       const pane = document.getElementById('detail-pane-' + x.id);
       if (pane) pane.innerHTML = predTabHtml(m);
@@ -14560,6 +14818,7 @@ function render(opts) {
       } catch (_) {}
     }, 0);
   }
+  try { bindMatchHeroWeather(v); } catch (_) {}
   tickClock();
 }
 
@@ -15903,6 +16162,7 @@ window.__partnerGateReady.then((ok) => {
 });
 setInterval(tickClock, 1000);
 addEventListener('visibilitychange', () => {
+  try { syncHeroWeatherMotion(); } catch (_) {}
   if (document.hidden) {
     ensureFavGoalPoll();
     return;
