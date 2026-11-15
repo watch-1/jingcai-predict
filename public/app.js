@@ -9327,7 +9327,7 @@ function liveStatsUserMsg(live) {
 }
 function eventsTabHtml(x, live) {
   const wrapId = 'events-tree-' + esc(x.id);
-  const chatBelow = () => `<div class="match-chat-anchor" id="match-chat-anchor-${esc(x.id)}"></div>${aiChatPanelHtml(x)}${chatPanelHtml(x)}`;
+  const chatBelow = () => `<div class="match-chat-anchor" id="match-chat-anchor-${esc(x.id)}"></div>${chatPanelHtml(x)}`;
   if (!live) {
     return `<div class="events-chat-stack"><div class="ev-tree-wrap" id="${wrapId}"><div class="spinner"></div><p class="note" style="text-align:center">加载比赛事件…</p></div>${chatBelow()}</div>`;
   }
@@ -9677,13 +9677,25 @@ function patchEventsTabIfVisible(x) {
   const live = (S.liveStatsCache && S.liveStatsCache[id]) || null;
   const pane = document.getElementById('detail-pane-' + id);
   if (!pane) return;
+  const tabRoot = document.getElementById('live-tab-' + id);
+  if (tabRoot) {
+    const strip = document.getElementById('live-pitch-' + id);
+    if (strip) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = liveStatsStripHtml(x, live);
+      if (tmp.firstElementChild) strip.replaceWith(tmp.firstElementChild);
+    }
+    paintLiveSub(id);
+    try { ensureChatPoll(x); } catch (_) {}
+    return;
+  }
   const wrap = document.getElementById('events-tree-' + id);
   const tmp = document.createElement('div');
   tmp.innerHTML = eventsTabHtml(x, live);
   const nextTree = tmp.querySelector('.ev-tree-wrap');
   if (wrap && nextTree) wrap.replaceWith(nextTree);
   else pane.innerHTML = tmp.innerHTML;
-  try { ensureChatPoll(x); renderAiChatList(id); } catch (_) {}
+  try { ensureChatPoll(x); } catch (_) {}
 }
 function scheduleLiveStatsRecover(x, key) {
   if (!x || !key) return;
@@ -9743,6 +9755,11 @@ async function loadLiveStats(x, { force } = {}) {
           const m = (S.matches || []).find(z => String(z.id) === key) || x;
           const r = (S.results || []).find(z => String(z.id) === key);
           hero.outerHTML = matchHero(m || x, m, r, { favBtn: matchFavBtn(m || x) });
+          const sticky = document.getElementById('match-sticky-' + key);
+          if (sticky) sticky.outerHTML = matchStickyHero(m || x, m, r);
+          try { bindMatchHeroWeather(document.getElementById('match-hero-' + key) && document.getElementById('match-hero-' + key).parentNode || document); } catch (_) {}
+          try { bindMatchHeroSticky(); } catch (_) {}
+          try { applyMatchWeather(m || x, weatherPackOf(m || x)); } catch (_) {}
         }
         if (route().name === 'schedule') render();
         else if (route().name === 'home') { patchHomeFocusStrip(); if (!softPatchLiveScoreCards()) render(); }
@@ -9759,11 +9776,16 @@ async function loadLiveStats(x, { force } = {}) {
 function renderLivePitch(x) {
   const key = String(x.id || '');
   const live = (S.liveStatsCache && S.liveStatsCache[key]) || null;
-  const tab = detailTabOf(x.id);
-  const compact = false; // 1.9.107: chat under events; no compact pitch
-  const box = document.getElementById((compact ? 'live-pitch-chat-' : 'live-pitch-') + x.id);
+  const box = document.getElementById('live-pitch-' + x.id);
   if (!box) return;
-  box.outerHTML = livePitchHtml(x, live || { ok: false, reason: 'error', error: '暂无数据' }, { compact });
+  if (document.getElementById('live-tab-' + key)) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = liveStatsStripHtml(x, live);
+    if (tmp.firstElementChild) box.replaceWith(tmp.firstElementChild);
+    paintLiveSub(key);
+    return;
+  }
+  box.outerHTML = livePitchHtml(x, live || { ok: false, reason: 'error', error: '暂无数据' }, { compact: false });
 }
 function ensureLivePoll(x) {
   stopLivePoll();
@@ -10033,7 +10055,6 @@ function chatTabHtml(x, m) {
   const key = String(x.id || '');
   const live = (S.liveStatsCache && S.liveStatsCache[key]) || null;
   let h = livePitchHtml(x, live, { compact: true });
-  h += aiChatPanelHtml(x);
   h += chatPanelHtml(x);
   return h;
 }
@@ -11450,20 +11471,216 @@ function dataTabHtml(x) {
     + `<div id="sm-bars-${key}" class="sm-slot"><p class="note">正在整理球队统计…</p></div>`
     + `<div id="sm-growth-${key}" class="sm-slot"></div>`;
 }
-function liveTabHtml(x, live) {
-  const key = esc(String(x.id || ''));
-  return livePitchHtml(x, live)
-    + `<div id="sm-live-${key}" class="sm-slot"><p class="note">正在整理本场球员数据…</p></div>`
-    + eventsTabHtml(x, live);
+function liveUiState(id) {
+  S.liveUi = S.liveUi || {};
+  const cur = S.liveUi[String(id)] || {};
+  return { sub: cur.sub === 'events' ? 'events' : 'text', goalsOnly: !!cur.goalsOnly };
+}
+function liveStatNum(v) {
+  if (v == null || v === '') return '—';
+  const n = Number(v);
+  if (Number.isFinite(n)) return String(n);
+  return String(v);
+}
+function liveOffTarget(shots, onTarget) {
+  if (shots == null || onTarget == null) return null;
+  const n = Number(shots) - Number(onTarget);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+function liveStatsStripHtml(x, live) {
+  const id = esc(String(x.id || ''));
+  if (!live) {
+    return `<div class="live-stats-strip" id="live-pitch-${id}"><p class="live-stats-empty">正在整理本场数据…</p></div>`;
+  }
+  if (!live.ok) {
+    return `<div class="live-stats-strip" id="live-pitch-${id}"><p class="live-stats-empty">${esc(liveStatsUserMsg(live))}</p></div>`;
+  }
+  const st = live.stats || {};
+  const has = (p) => p && (p.home != null || p.away != null);
+  let rings = '';
+  if (has(st.attacks)) rings += donutPair(st.attacks.home, st.attacks.away, '进攻', '#3D7EFF', '#E8A23A');
+  if (has(st.dangerousAttacks)) rings += donutPair(st.dangerousAttacks.home, st.dangerousAttacks.away, '危险进攻', '#3D7EFF', '#E8A23A');
+  if (has(st.possession)) rings += donutPair(st.possession.home, st.possession.away, '控球率', '#3D7EFF', '#6B7280');
+  const yh = has(st.yellowCards) ? liveStatNum(st.yellowCards.home) : '—';
+  const ya = has(st.yellowCards) ? liveStatNum(st.yellowCards.away) : '—';
+  const rh = has(st.redCards) ? liveStatNum(st.redCards.home) : '—';
+  const ra = has(st.redCards) ? liveStatNum(st.redCards.away) : '—';
+  const sh = has(st.shotsOnTarget) ? liveStatNum(st.shotsOnTarget.home) : '—';
+  const sa = has(st.shotsOnTarget) ? liveStatNum(st.shotsOnTarget.away) : '—';
+  const oh = has(st.shots) && has(st.shotsOnTarget) ? liveOffTarget(st.shots.home, st.shotsOnTarget.home) : null;
+  const oa = has(st.shots) && has(st.shotsOnTarget) ? liveOffTarget(st.shots.away, st.shotsOnTarget.away) : null;
+  const mid = `<div class="live-stats-mid">
+    <div class="live-cards is-home"><div class="live-cd"><i class="y"></i><span>${esc(yh)}</span></div><div class="live-cd"><i class="r"></i><span>${esc(rh)}</span></div></div>
+    <div class="live-shots">
+      <div class="ls-row"><span>${esc(sh)}</span><b>射正</b><span>${esc(sa)}</span></div>
+      <div class="ls-row"><span>${oh == null ? '—' : esc(String(oh))}</span><b>射偏</b><span>${oa == null ? '—' : esc(String(oa))}</span></div>
+    </div>
+    <div class="live-cards is-away"><div class="live-cd"><span>${esc(ya)}</span><i class="y"></i></div><div class="live-cd"><span>${esc(ra)}</span><i class="r"></i></div></div>
+  </div>`;
+  const empty = !rings ? '<p class="live-stats-empty">进攻 / 控球数据暂无</p>' : '';
+  return `<div class="live-stats-strip" id="live-pitch-${id}">
+    ${rings ? `<div class="pitch-rings">${rings}</div>` : empty}
+    ${mid}
+  </div>`;
+}
+function liveCommentLine(e) {
+  const min = eventMinuteLab(e) || '·';
+  const { player, assist } = eventPlayerLab(e);
+  let text = '';
+  if (e.kind === 'goal') {
+    const gk = eventGoalKind(e);
+    if (gk === 'own') text = '乌龙球' + (player ? ' — ' + player : '');
+    else if (gk === 'pen') text = '点球' + (player ? ' — ' + player : '');
+    else if (gk === 'missed_pen') text = '点球未进' + (player ? ' — ' + player : '');
+    else text = '进球' + (player ? ' — ' + player : '');
+    if (assist && gk !== 'missed_pen') text += '（助攻 ' + assist + '）';
+  } else if (e.kind === 'yellow') text = '黄牌' + (player ? ' — ' + player : '');
+  else if (e.kind === 'red') text = '红牌' + (player ? ' — ' + player : '');
+  else if (e.kind === 'subst') {
+    const bits = [];
+    if (player) bits.push('换上 ' + player);
+    if (assist) bits.push('换下 ' + assist);
+    text = bits.join('，') || (e.detail || '换人');
+  } else if (e.kind === 'var') text = 'VAR' + (e.detail ? ' — ' + e.detail : '');
+  else text = player || e.detail || e.type || '事件';
+  return `<div class="live-c-row"><div class="live-c-ico">${eventIconHtml(e)}</div><div><b>${esc(min)}</b> ${esc(text)}</div></div>`;
+}
+function liveCommentHtml(x, live) {
+  const pack = weatherPackOf(x);
+  const venue = venueFromLive(x) || {};
+  const wxLine = pack && pack.ok && pack.labelZh
+    ? `<p>本场比赛天气情况：${esc(pack.labelZh)}</p>`
+    : '';
+  const venueLab = [venue.name || (pack && pack.venueName), venue.city || (pack && pack.venueCity)].filter(Boolean).join(' · ');
+  const venueLine = venueLab ? `<p>本场比赛场地：${esc(venueLab)}</p>` : '';
+  const meta = (wxLine || venueLine) ? `<div class="live-c-meta">${wxLine}${venueLine}</div>` : '';
+  if (!live || !live.ok) {
+    return `<div class="live-comment">${meta}<p class="live-c-empty">${esc(live ? liveStatsUserMsg(live) : '正在加载比赛事件…')}</p></div>`;
+  }
+  const raw = (live.events || []).slice();
+  raw.sort((a, b) => {
+    const ae = (a.elapsed == null ? -1 : Number(a.elapsed)) + (a.extra ? Number(a.extra) / 100 : 0);
+    const be = (b.elapsed == null ? -1 : Number(b.elapsed)) + (b.extra ? Number(b.extra) / 100 : 0);
+    return be - ae;
+  });
+  const rows = raw.map(liveCommentLine).join('');
+  const empty = rows ? '' : '<p class="live-c-empty">暂无文字直播（未开赛、无数据源或尚未产生事件）。</p>';
+  return `<div class="live-comment">${meta}${rows || empty}</div>`;
+}
+function liveImportantHtml(x, live, ui) {
+  if (!live || !live.ok) {
+    return `<div class="live-tl"><p class="live-ev-empty">${esc(live ? liveStatsUserMsg(live) : '正在加载比赛事件…')}</p></div>`;
+  }
+  const goalsOnly = !!(ui && ui.goalsOnly);
+  const raw = (live.events || []).filter((e) => {
+    if (e.kind === 'goal') return true;
+    if (goalsOnly) return false;
+    return e.kind === 'yellow' || e.kind === 'red';
+  });
+  raw.sort((a, b) => {
+    const ae = (a.elapsed == null ? 999 : Number(a.elapsed)) + (a.extra ? Number(a.extra) / 100 : 0);
+    const be = (b.elapsed == null ? 999 : Number(b.elapsed)) + (b.extra ? Number(b.extra) / 100 : 0);
+    return ae - be;
+  });
+  if (!raw.length) {
+    return `<div class="live-tl"><p class="live-ev-empty">${goalsOnly ? '暂无进球记录。' : '暂无进球或牌记录。'}</p></div>`;
+  }
+  let sh = 0, sa = 0;
+  const items = raw.map((e) => {
+    const min = eventMinuteLab(e) || '';
+    const { player, assist } = eventPlayerLab(e);
+    let body = '';
+    if (e.kind === 'goal') {
+      const gk = eventGoalKind(e);
+      if (gk !== 'missed_pen') {
+        if (e.side === 'home') sh += 1;
+        else if (e.side === 'away') sa += 1;
+      }
+      const score = (gk === 'missed_pen') ? '' : `<div class="tl-score">${sh}-${sa}</div>`;
+      let name = player || '';
+      if (gk === 'own') name = (name ? name + ' · ' : '') + '乌龙';
+      else if (gk === 'pen') name = (name ? name + ' · ' : '') + '点球';
+      else if (gk === 'missed_pen') name = (name ? name + ' · ' : '') + '点球未进';
+      body = `${score}<div class="tl-player">${eventIconHtml(e)} ${esc(name || '进球')}</div>${assist && gk !== 'missed_pen' ? `<div class="tl-assist">助攻 ${esc(assist)}</div>` : ''}`;
+    } else {
+      const lab = (e.kind === 'red' ? '红牌' : '黄牌') + (player ? ' · ' + player : '');
+      body = `<div class="tl-player is-card">${eventIconHtml(e)} ${esc(lab)}</div>`;
+    }
+    return `<div class="live-tl-item"><div class="live-tl-min">${esc(min)}</div><div class="live-tl-card${e.kind === 'goal' ? '' : ' is-card'}">${body}</div></div>`;
+  }).join('');
+  return `<div class="live-tl"><div class="live-tl-whistle" aria-hidden="true">♪</div>${items}</div>`;
+}
+function liveSubHeadHtml(x, ui) {
+  const id = esc(String(x.id || ''));
+  const sub = ui.sub === 'events' ? 'events' : 'text';
+  const tog = sub === 'events'
+    ? `<button type="button" class="live-goals-tog${ui.goalsOnly ? ' on' : ''}" data-act="liveGoalsOnly" data-id="${id}" aria-pressed="${ui.goalsOnly ? 'true' : 'false'}"><i class="tog"></i>只看进球</button>`
+    : '';
+  return `<div class="live-subhead">
+    <div class="live-subs">
+      <button type="button" class="${sub === 'text' ? 'on' : ''}" data-act="liveSub" data-id="${id}" data-sub="text">文字直播</button>
+      <button type="button" class="${sub === 'events' ? 'on' : ''}" data-act="liveSub" data-id="${id}" data-sub="events">重要事件</button>
+    </div>
+    ${tog}
+  </div>`;
+}
+function liveSubBodyHtml(x, live, ui) {
+  return ui.sub === 'events' ? liveImportantHtml(x, live, ui) : liveCommentHtml(x, live);
+}
+function liveLegendHtml() {
+  return `<div class="live-legend ev-legend">
+    <span><i class="ev-ico goal"><span class="ev-ball">⚽</span></i>进球</span>
+    <span><i class="ev-ico pen"><span class="ev-ball">⚽</span><b>P</b></i>点球</span>
+    <span><i class="ev-ico missed">○</i>点球未进</span>
+    <span><i class="ev-ico own"><span class="ev-ball">⚽</span><b>OG</b></i>乌龙</span>
+    <span><i class="ev-ico yellow"></i>黄牌</span>
+    <span><i class="ev-ico red"></i>红牌</span>
+    <span><i class="ev-ico subst"><b class="up">↑</b><b class="dn">↓</b></i>换人</span>
+    <span><i class="ev-ico var">VAR</i>VAR</span>
+  </div>`;
+}
+function paintLiveSub(id) {
+  const x = findMatch(id) || (S.results || []).find((z) => String(z.id) === String(id)) || (typeof loadFxShell === 'function' && loadFxShell(id));
+  if (!x) return;
+  const live = (S.liveStatsCache && S.liveStatsCache[String(id)]) || null;
+  const ui = liveUiState(id);
+  const head = document.querySelector('#live-tab-' + id + ' .live-subhead');
+  const body = document.getElementById('live-sub-' + id);
+  if (head) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = liveSubHeadHtml(x, ui);
+    if (tmp.firstElementChild) head.replaceWith(tmp.firstElementChild);
+  }
+  if (body) body.innerHTML = liveSubBodyHtml(x, live, ui);
 }
 
-/** 356: match-detail weather/neutral hero + 预测页「赛前参考」. Weather is not live this build. */
-const MATCH_WEATHER_TYPES = ['neutral', 'sunny', 'light-rain', 'storm'];
+function liveTabHtml(x, live) {
+  const id = String(x.id || '');
+  const key = esc(id);
+  const ui = liveUiState(id);
+  return `<div class="live-tab" id="live-tab-${key}">
+    ${weatherCardHtml(x)}
+    ${liveStatsStripHtml(x, live)}
+    <div id="sm-live-${key}" class="sm-slot live-sm-slot"></div>
+    ${liveSubHeadHtml(x, ui)}
+    <div class="live-sub-body" id="live-sub-${key}">${liveSubBodyHtml(x, live, ui)}</div>
+    ${liveLegendHtml()}
+    <div class="match-chat-anchor" id="match-chat-anchor-${key}"></div>
+    ${chatPanelHtml(x)}
+  </div>`;
+}
+
+
+/** 365: match-detail weather/neutral hero. Unknown weather stays Neutral B; never invent a sky. */
+const MATCH_WEATHER_TYPES = ['neutral', 'sunny', 'cloudy', 'light-rain', 'storm'];
 function matchWeatherType(x) {
-  const raw = (x && (x.weatherType || x.weather)) || (S.matchWeather && S.matchWeather[String(x && x.id || '')]) || 'neutral';
-  const t = String(raw || 'neutral').toLowerCase();
-  if (t === 'rain' || t === 'lightrain') return 'light-rain';
-  if (t === 'thunder' || t === 'thunderstorm') return 'storm';
+  const raw = (x && (x.weatherType || x.weather || x.wxType)) || (S.matchWeather && S.matchWeather[String(x && x.id || '')]) || 'neutral';
+  let t = String(raw || 'neutral').toLowerCase().replace(/[\s_]+/g, '-');
+  if (t === 'rain' || t === 'lightrain' || t === 'drizzle' || t === 'showers') t = 'light-rain';
+  if (t === 'thunder' || t === 'thunderstorm' || t === 'lightning') t = 'storm';
+  if (t === 'overcast' || t === 'clouds' || t === 'cloud' || t === 'fog' || t === 'mist') t = 'cloudy';
+  if (t === 'clear' || t === 'fair') t = 'sunny';
   return MATCH_WEATHER_TYPES.includes(t) ? t : 'neutral';
 }
 function setMatchWeatherType(id, type) {
@@ -11472,9 +11689,259 @@ function setMatchWeatherType(id, type) {
   if (id) S.matchWeather[String(id)] = t;
   const hero = id && document.getElementById('match-hero-' + id);
   if (hero && hero.classList.contains('hero--weather')) hero.setAttribute('data-weather', t);
+  const sticky = id && document.getElementById('match-sticky-' + id);
+  if (sticky) sticky.setAttribute('data-weather', t);
+  const card = id && document.getElementById('wx-card-' + id);
+  if (card) card.setAttribute('data-wx', t);
   return t;
 }
+
 try { window.setMatchWeatherType = setMatchWeatherType; } catch (_) {}
+
+function wxDash(v, unit) {
+  if (v == null || v === '' || Number.isNaN(Number(v))) return '—';
+  return unit ? (v + unit) : String(v);
+}
+function wxFmtTemp(v) {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  const n = Number(v);
+  const t = Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : n.toFixed(1).replace(/\.0$/, '');
+  return t;
+}
+function wxFmtWind(v) {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  const n = Number(v);
+  return (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, '.0') + 'm/s';
+}
+function wxFmtHumidity(v) {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  return Math.round(Number(v)) + '%';
+}
+function wxFmtPressure(pack) {
+  if (!pack) return '—';
+  if (pack.pressureMmHg != null && Number.isFinite(Number(pack.pressureMmHg))) return Math.round(Number(pack.pressureMmHg)) + 'mmHg';
+  if (pack.pressureHpa != null && Number.isFinite(Number(pack.pressureHpa))) return Math.round(Number(pack.pressureHpa)) + 'hPa';
+  return '—';
+}
+function wxDateLabel(x) {
+  const raw = (x && (x.date || (typeof issueDate === 'function' && issueDate(x)))) || '';
+  const m = String(raw).match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return '';
+  const lab = Number(m[2]) + '月' + Number(m[3]) + '日';
+  const ko = typeof matchKickoffMs === 'function' ? matchKickoffMs(x) : NaN;
+  if (Number.isFinite(ko) && Date.now() < ko) return '预计' + lab;
+  return lab;
+}
+function venueFromLive(x) {
+  const id = String((x && x.id) || '');
+  const live = (S.liveStatsCache && (S.liveStatsCache[id] || S.liveStatsCache[String(x.homeTeamId || '') + '|' + String(x.awayTeamId || '')])) || null;
+  if (live && live.ok && live.venue && (live.venue.name || live.venue.city)) {
+    return { name: live.venue.name || '', city: live.venue.city || '' };
+  }
+  const pack = S.matchWeatherData && S.matchWeatherData[id];
+  if (pack && (pack.venueName || pack.venueCity)) return { name: pack.venueName || '', city: pack.venueCity || '' };
+  return null;
+}
+function weatherPackOf(x) {
+  const id = String((x && x.id) || '');
+  return (S.matchWeatherData && S.matchWeatherData[id]) || null;
+}
+function weatherCardHtml(x) {
+  const id = String((x && x.id) || '');
+  const pack = weatherPackOf(x);
+  const venue = venueFromLive(x) || {};
+  const venueLab = [venue.name || (pack && pack.venueName), venue.city || (pack && pack.venueCity)].filter(Boolean).join(' · ') || '—';
+  const dateLab = wxDateLabel(x);
+  const ok = !!(pack && pack.ok);
+  const pending = !pack || pack.status === 'pending';
+  const type = ok ? matchWeatherType({ weatherType: pack.type }) : 'neutral';
+  const cond = ok ? (pack.labelZh || '—') : (pending ? '天气读取中' : ((pack && pack.error) || '天气暂无'));
+  const temp = ok ? wxFmtTemp(pack.tempC) : '—';
+  const hum = ok ? wxFmtHumidity(pack.humidity) : '—';
+  const wind = ok ? wxFmtWind(pack.windMs) : '—';
+  const pres = ok ? wxFmtPressure(pack) : '—';
+  let foot = '天气来源 Open-Meteo';
+  if (ok && pack.sourceNote) foot += ' · ' + pack.sourceNote;
+  else if (pack && pack.sourceNote) foot += ' · ' + pack.sourceNote;
+  else if (pack && pack.error) foot += ' · ' + pack.error;
+  else if (pending) foot += ' · 正在定位球场';
+  else foot += ' · 暂无本场天气';
+  const cls = 'wx-slip' + (pending ? ' is-pending' : (ok ? '' : ' is-empty'));
+  return `<section class="${cls}" id="wx-card-${esc(id)}" data-wx="${esc(type)}" data-source="Open-Meteo">
+    <div class="wx-slip-sky"><i class="wx-slip-sky-fx" aria-hidden="true"></i>
+      <div class="wx-slip-kicker">${esc(dateLab || '比赛日')}</div>
+      <div class="wx-slip-venue">${esc(venueLab)}</div>
+    </div>
+    <div class="wx-slip-body">
+      <div class="wx-slip-temp"><b>${esc(temp)}${temp === '—' ? '' : '<small>°C</small>'}</b><span>${esc(cond)}</span></div>
+      <div class="wx-slip-metrics">
+        <div class="wx-slip-m"><i>湿度</i><b>${esc(hum)}</b></div>
+        <div class="wx-slip-m"><i>风速</i><b>${esc(wind)}</b></div>
+        <div class="wx-slip-m"><i>气压</i><b>${esc(pres)}</b></div>
+      </div>
+    </div>
+    <p class="wx-slip-foot">${esc(foot)}</p>
+  </section>`;
+}
+function applyMatchWeather(x, pack) {
+  if (!x) return;
+  const id = String(x.id || '');
+  if (pack && pack.ok && pack.type) setMatchWeatherType(id, pack.type);
+  else setMatchWeatherType(id, 'neutral');
+  const card = document.getElementById('wx-card-' + id);
+  if (card) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = weatherCardHtml(x);
+    if (tmp.firstElementChild) card.replaceWith(tmp.firstElementChild);
+  }
+  const hero = document.getElementById('match-hero-' + id);
+  const sticky = document.getElementById('match-sticky-' + id);
+  const t = matchWeatherType(x);
+  if (hero) hero.setAttribute('data-weather', t);
+  if (sticky) sticky.setAttribute('data-weather', t);
+}
+async function ensureMatchWeather(x) {
+  if (!x || !x.id) return null;
+  const id = String(x.id);
+  S.matchWeatherData = S.matchWeatherData || {};
+  const hit = S.matchWeatherData[id];
+  const age = hit && hit._at ? Date.now() - hit._at : Infinity;
+  if (hit && hit.ok && age < 30 * 60 * 1000) {
+    applyMatchWeather(x, hit);
+    return hit;
+  }
+  if (hit && hit.status === 'pending' && age < 20000) return hit;
+  if (hit && !hit.ok && hit.status !== 'no-venue' && hit.status !== 'pending' && age < 5 * 60 * 1000) {
+    applyMatchWeather(x, hit);
+    return hit;
+  }
+  S.matchWeatherData[id] = Object.assign({}, hit || {}, { status: 'pending', ok: false, type: 'neutral', _at: Date.now() });
+  applyMatchWeather(x, S.matchWeatherData[id]);
+  let venue = venueFromLive(x);
+  if (!venue || !(venue.name || venue.city)) {
+    try { await loadLiveStats(x); } catch (_) {}
+    venue = venueFromLive(x);
+  }
+  if (typeof JCWeather === 'undefined' || !JCWeather.load) {
+    const fail = { ok: false, status: 'fetch-failed', type: 'neutral', error: '天气组件未加载', source: 'Open-Meteo', _at: Date.now() };
+    S.matchWeatherData[id] = fail;
+    applyMatchWeather(x, fail);
+    return fail;
+  }
+  try {
+    const pack = await JCWeather.load(x, venue);
+    pack._at = Date.now();
+    S.matchWeatherData[id] = pack;
+    if (route().name === 'match' && String(route().arg) === id) applyMatchWeather(x, pack);
+    return pack;
+  } catch (e) {
+    const fail = { ok: false, status: 'fetch-failed', type: 'neutral', error: '天气数据暂时不可用', source: 'Open-Meteo', _at: Date.now() };
+    S.matchWeatherData[id] = fail;
+    if (route().name === 'match' && String(route().arg) === id) applyMatchWeather(x, fail);
+    return fail;
+  }
+}
+
+function matchScoreState(x, m, r) {
+  const id = String((x && x.id) || '');
+  const live = (S.liveStatsCache && S.liveStatsCache[id]) || null;
+  const ls = (S.liveScores && S.liveScores[id]) || null;
+  const finished = isMatchFinished(x);
+  const started = !!(m && Date.now() > kickoff(m)) || !!(x && Date.now() > kickoff(x));
+  let hg = null, ag = null, half = '', statusLab = '';
+  if (r && r.full) {
+    const parts = String(r.full).split(/[:：\-]/);
+    hg = parts[0]; ag = parts[1];
+    half = r.half || '';
+    statusLab = r.status || '完场';
+  } else if (x && x.full && (finished || x.afShell)) {
+    const parts = String(x.full).split(/[:：\-]/);
+    hg = parts[0]; ag = parts[1];
+    half = x.half || '';
+    statusLab = x.status || (finished ? '完场' : '');
+  } else if (finished || (live && live.ok && live.score && live.score.home != null)
+    || (ls && ls.homeScore != null)) {
+    if (live && live.ok && live.score && live.score.home != null) {
+      hg = live.score.home; ag = live.score.away;
+      statusLab = finished
+        ? (liveStatusZh((live.status && live.status.short) || 'FT') || '完场')
+        : liveStatusZh(live.status && live.status.short, live.status && live.status.elapsed);
+    } else if (ls && ls.homeScore != null) {
+      hg = ls.homeScore; ag = ls.awayScore;
+      half = ls.half || '';
+      statusLab = finished ? (ls.phaseZh || '完场') : (ls.phaseZh || (started ? '进行中' : '未开赛'));
+    }
+    if (finished && !statusLab) statusLab = '完场';
+  }
+  const short = (live && live.status && live.status.short) || (ls && ls.phase) || '';
+  const pillMap = { '1H': '上半场', HT: '中场', '2H': '下半场', ET: '加时', BT: '加时休息', P: '点球', LIVE: '进行中', FT: '完场', AET: '加时完场', PEN: '点球结束' };
+  let pill = pillMap[short] || '';
+  if (!pill && finished) pill = '完场';
+  if (!pill && statusLab && /上半场|下半场|中场|加时|点球|完场|进行中/.test(String(statusLab))) {
+    pill = String(statusLab).replace(/\s+\d+['′].*$/, '');
+  }
+  return { hg, ag, half, statusLab, started, finished, pill };
+}
+function matchStickyFav(x) {
+  if (!x || x.afShell) return '<span class="ph"></span>';
+  const on = isFav(x.id);
+  return `<button type="button" class="hero-sticky-fav fav-btn ${on ? 'on' : ''}" data-act="fav" data-id="${esc(x.id)}" aria-label="${on ? '已关注' : '关注'}">${on ? I.star : I.starO}</button>`;
+}
+function matchStickyHero(x, m, r) {
+  const id = String(x.id || '');
+  const st = matchScoreState(x, m, r);
+  const wx = matchWeatherType(x);
+  const homeGlow = teamGlowCached(x, 'home');
+  const awayGlow = teamGlowCached(x, 'away');
+  const bg = heroGlowGradient(homeGlow, awayGlow) + ', #0A0B0E';
+  const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
+  let mid;
+  if (st.hg != null && st.ag != null) {
+    mid = `<b class="hero-sticky-score num">${esc(st.hg)}</b>${st.pill ? `<span class="hero-sticky-pill">${esc(st.pill)}</span>` : ''}<b class="hero-sticky-score num">${esc(st.ag)}</b>`;
+  } else {
+    mid = `<span class="hero-sticky-vs">VS</span>${st.pill ? `<span class="hero-sticky-pill">${esc(st.pill)}</span>` : ''}`;
+  }
+  return `<div class="hero-sticky" id="match-sticky-${esc(id)}" data-weather="${esc(wx)}" aria-hidden="true">
+    <div class="hero-sticky-bar" style="background:${esc(bg)}">
+      <div class="hero-sticky-bg">${wxLayer}</div>
+      <button type="button" class="ic-btn hero-ic md-back" data-act="back" aria-label="返回">${I.back}</button>
+      <div class="hero-sticky-mid">${badge(x.home, 'sm', x.homeLogo, { teamId: x.homeTeamId, eager: true })}${mid}${badge(x.away, 'sm', x.awayLogo, { teamId: x.awayTeamId, eager: true })}</div>
+      ${matchStickyFav(x)}
+    </div>
+  </div>`;
+}
+function compactHeroH() {
+  let sat = 0;
+  try { sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0; } catch (_) {}
+  return sat + 52;
+}
+function syncMatchHeroSticky() {
+  const wrap = document.querySelector('#view.view.md-wrap, #view.view.md-wrap--review');
+  if (!wrap) return;
+  const hero = wrap.querySelector('.hero.hero--weather');
+  const sticky = wrap.querySelector('.hero-sticky');
+  if (!hero || !sticky) {
+    wrap.classList.remove('is-hero-stuck');
+    return;
+  }
+  const h = compactHeroH();
+  const bottom = hero.getBoundingClientRect().bottom;
+  const was = wrap.classList.contains('is-hero-stuck');
+  const stuck = was ? (bottom <= h + 28) : (bottom <= h + 10);
+  wrap.classList.toggle('is-hero-stuck', stuck);
+  sticky.setAttribute('aria-hidden', stuck ? 'false' : 'true');
+}
+function bindMatchHeroSticky() {
+  if (!S._heroStickyBound) {
+    S._heroStickyBound = true;
+    const tick = () => { try { syncMatchHeroSticky(); } catch (_) {} };
+    window.addEventListener('scroll', tick, { passive: true });
+    window.addEventListener('resize', tick);
+    S._heroStickyTick = tick;
+  }
+  syncMatchHeroSticky();
+}
+
 /* Scheme B mute: HSV sat=0.28 val=0.20, concrete space-separated rgb (no var(), no commas). */
 const HERO_GLOW_HOME = 'rgb(51 47 37)';
 const HERO_GLOW_AWAY = 'rgb(37 47 51)';
@@ -11537,6 +12004,11 @@ function paintHeroGlow(hero, home, away) {
      semi-transparent ramps dithered into grain on Android WebView. */
   const bg = heroGlowGradient(home || HERO_GLOW_HOME, away || HERO_GLOW_AWAY) + ', #0A0B0E';
   try { hero.style.setProperty('background', bg, 'important'); } catch (_) { hero.style.background = bg; }
+  const id = String((hero.id || '').replace(/^match-hero-/, ''));
+  const bar = id && document.querySelector('#match-sticky-' + id + ' .hero-sticky-bar');
+  if (bar) {
+    try { bar.style.setProperty('background', bg, 'important'); } catch (_) { bar.style.background = bg; }
+  }
 }
 function hsvToRgbCss(hh, s, v) {
   const h = ((Number(hh) % 360) + 360) % 360 / 60;
@@ -11743,6 +12215,52 @@ function leagueHeroLogoUrl(m) {
   const name = m && m.league;
   return (name && LEAGUE_LOGO_BY_NAME[name]) || '';
 }
+function bundledLeagueLogoPath(url) {
+  const s = String(url || '');
+  let m = s.match(/media\.api-sports\.io\/football\/leagues\/(\d+)\.(?:png|jpe?g|webp)/i);
+  if (m) return 'assets/leagues/af-' + m[1] + '.png';
+  m = s.match(/cdn\.sportmonks\.com\/images\/(?:soccer\/)?leagues\/(?:\d+\/)?(\d+)\.(?:png|jpe?g|webp)/i);
+  if (m) return 'assets/leagues/sm-' + m[1] + '.png';
+  return '';
+}
+/* Alternate official CDNs we have actually bundled or already map in LEAGUE_LOGO_BY_NAME.
+   Do not invent a second mark when we cannot resolve it. */
+const LEAGUE_LOGO_ALT = {};
+function leagueLogoSrcChain(logo) {
+  const primary = String(logo || '');
+  const chain = [];
+  const push = (u) => { if (u && chain.indexOf(u) < 0) chain.push(u); };
+  const bundled = bundledLeagueLogoPath(primary);
+  push(bundled);
+  if (primary) {
+    if (/^(data:|blob:|\/)/.test(primary) && !bundled) push(primary);
+    else if (/^https?:/i.test(primary)) {
+      push(API + '/api/logo?url=' + encodeURIComponent(primary));
+      push(primary);
+    }
+  }
+  const alt = LEAGUE_LOGO_ALT[primary] || '';
+  if (alt) {
+    push(bundledLeagueLogoPath(alt));
+    push(API + '/api/logo?url=' + encodeURIComponent(alt));
+  }
+  return chain;
+}
+function onLeagueLogoError(img) {
+  if (!img) return;
+  const chain = (img.getAttribute('data-alts') || '').split('|').filter(Boolean);
+  let i = Number(img.dataset.altI || 0);
+  if (i < chain.length) {
+    img.dataset.altI = String(i + 1);
+    img.src = chain[i];
+    return;
+  }
+  img.style.display = 'none';
+  img.removeAttribute('src');
+  const plate = img.parentNode;
+  if (plate && plate.classList) plate.classList.add('is-empty');
+}
+try { window.onLeagueLogoError = onLeagueLogoError; } catch (_) {}
 function formatHeroKickoff(m) {
   const raw = (m && (m.date || issueDate(m))) || '';
   const day = String(raw).replace(/-/g, '/');
@@ -11757,10 +12275,14 @@ function leagueHeroMark(m) {
   const logo = leagueHeroLogoUrl(m);
   let ico = '';
   if (logo) {
-    const src = String(logo).startsWith('data:') || String(logo).startsWith('blob:') || String(logo).startsWith('/')
-      ? logo
-      : (API + '/api/logo?url=' + encodeURIComponent(logo));
-    ico = `<span class="hero-lg-plate"><img class="hero-lg-ico" alt="" width="40" height="40" src="${esc(src)}" onerror="var p=this.parentNode;if(p)p.remove();"></span>`;
+    const chain = leagueLogoSrcChain(logo);
+    const src = chain[0] || '';
+    const alts = chain.slice(1).join('|');
+    if (src) {
+      ico = `<span class="hero-lg-plate"><img class="hero-lg-ico" alt="" width="40" height="40" src="${esc(src)}"${alts ? ` data-alts="${esc(alts)}"` : ''} onerror="try{onLeagueLogoError(this)}catch(e){this.style.display='none'}"></span>`;
+    } else {
+      ico = `<span class="hero-lg-plate is-empty"></span>`;
+    }
   }
   const when = formatHeroKickoff(m);
   return `<div class="hero-lg">${ico}<span class="hero-lg-name">${esc(title)}</span></div>${when ? `<div class="hero-lg-date">${esc(when)}</div>` : ''}`;
@@ -12365,6 +12887,7 @@ function pageMatch(id) {
     S.detailTab[x.id] = tab;
   }
   let h = matchHero(x, m, r, { favBtn });
+  h += matchStickyHero(x, m, r);
   h += `<div class="dtabs" data-mid="${esc(x.id)}">${tabs.map(([k, lab]) =>
     `<button type="button" class="${tab === k ? 'on' : ''}" data-act="detailTab" data-id="${esc(x.id)}" data-tab="${k}">${lab}</button>`
   ).join('')}</div>`;
@@ -12396,7 +12919,15 @@ function refreshDetailTabs(x) {
     wrap.innerHTML = matchHero(x, m, r, { favBtn: matchFavBtn(x) });
     const next = wrap.firstElementChild;
     if (next) hero.replaceWith(next);
+    const sticky = document.getElementById('match-sticky-' + x.id);
+    if (sticky) {
+      const sw = document.createElement('div');
+      sw.innerHTML = matchStickyHero(x, m, r);
+      if (sw.firstElementChild) sticky.replaceWith(sw.firstElementChild);
+    }
     try { bindMatchHeroWeather(document.getElementById('match-hero-' + x.id) && document.getElementById('match-hero-' + x.id).parentNode || document); } catch (_) {}
+    try { bindMatchHeroSticky(); } catch (_) {}
+    try { applyMatchWeather(x, weatherPackOf(x)); } catch (_) {}
     paintMatchSquadValue(x.id);
   }
 }
@@ -12467,6 +12998,7 @@ async function enrichMatchDetail(x) {
   } else {
     stopMatchStatusPoll();
   }
+  try { ensureMatchWeather(x); } catch (_) {}
 
   if (tab === 'attitude') {
     await loadMatchAttitude(x);
@@ -12528,7 +13060,6 @@ async function enrichMatchDetail(x) {
     if (tab === 'live') tasks.push(loadLiveStats(x, { force: true }));
     if (tab === 'live') {
       tasks.push(loadChat(String(x.id)));
-      tasks.push(loadAiChatHistory(String(x.id)).then(() => loadAiChatQuota(String(x.id))));
     }
     await Promise.all(tasks);
     // FT may arrive from the data-tab fetch — surface 赛后复盘 immediately
@@ -12555,7 +13086,7 @@ async function enrichMatchDetail(x) {
           if (sm) paintSmSurface(String(x.id), sm);
           ensureLivePoll(x);
           ensureChatPoll(x);
-          renderAiChatList(String(x.id));
+          try { applyMatchWeather(x, weatherPackOf(x)); } catch (_) {}
           maybeScrollToChat(String(x.id));
         }
       }
@@ -15166,6 +15697,11 @@ function render(opts) {
     }, 0);
   }
   try { bindMatchHeroWeather(v); } catch (_) {}
+  try { bindMatchHeroSticky(); } catch (_) {}
+  if (r.name === 'match') {
+    const mx = findMatch(r.arg) || (S.results || []).find(z => String(z.id) === String(r.arg)) || (typeof loadFxShell === 'function' && loadFxShell(r.arg));
+    if (mx) { try { ensureMatchWeather(mx); } catch (_) {} }
+  }
   tickClock();
 }
 
@@ -15772,6 +16308,21 @@ document.addEventListener('click', async e => {
         if (pane) pane.innerHTML = predTabHtml(m);
       }
       toast('简报已更新');
+      return;
+    }
+    case 'liveSub': {
+      const id = el.dataset.id;
+      S.liveUi = S.liveUi || {};
+      S.liveUi[id] = Object.assign({}, S.liveUi[id] || {}, { sub: el.dataset.sub === 'events' ? 'events' : 'text' });
+      paintLiveSub(id);
+      return;
+    }
+    case 'liveGoalsOnly': {
+      const id = el.dataset.id;
+      S.liveUi = S.liveUi || {};
+      const cur = S.liveUi[id] || {};
+      S.liveUi[id] = Object.assign({}, cur, { goalsOnly: !cur.goalsOnly });
+      paintLiveSub(id);
       return;
     }
     case 'detailTab': {
