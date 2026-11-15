@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Outline;
@@ -29,6 +30,7 @@ import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import android.webkit.CookieManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -153,7 +155,8 @@ public class MainActivity extends Activity {
             }
         });
         setContentView(buildSplashRoot(web));
-        if (savedInstanceState != null) web.restoreState(savedInstanceState);
+        boolean upgraded = clearWebViewCacheIfUpgraded();
+        if (savedInstanceState != null && !upgraded) web.restoreState(savedInstanceState);
         else web.loadUrl(START);
         alive = this;
         applyOpenHash(getIntent());
@@ -249,6 +252,35 @@ public class MainActivity extends Activity {
         brand.setVisibility(View.GONE);
         ViewGroup parent = (ViewGroup) brand.getParent();
         if (parent != null) parent.removeView(brand);
+    }
+
+    /**
+     * After an APK upgrade, Chromium WebView can keep a stale HTTP cache of
+     * intercepted app.js / style.css even when the response has Cache-Control:
+     * no-cache. Drop the resource cache (not localStorage / login / theme)
+     * before the first loadUrl so the newly bundled assets actually run.
+     * @return true if this launch is the first after a versionCode or buildId change
+     */
+    private boolean clearWebViewCacheIfUpgraded() {
+        SharedPreferences prefs = getSharedPreferences("jingcai_webview", MODE_PRIVATE);
+        final String keyCode = "cleared_version_code";
+        final String keyBuild = "cleared_build_id";
+        int lastCode = prefs.getInt(keyCode, 0);
+        String lastBuild = prefs.getString(keyBuild, "");
+        int code = BuildConfigVersion.CODE;
+        String buildId = BuildConfigVersion.BUILD_ID;
+        if (buildId == null) buildId = "";
+        if (lastCode == code && lastBuild.equals(buildId)) return false;
+        if (web != null) {
+            web.clearCache(true);
+        }
+        try {
+            CookieManager cm = CookieManager.getInstance();
+            cm.removeAllCookies(null);
+            cm.flush();
+        } catch (Exception ignored) { }
+        prefs.edit().putInt(keyCode, code).putString(keyBuild, buildId).apply();
+        return true;
     }
 
     private int statusBarHeightPx() {

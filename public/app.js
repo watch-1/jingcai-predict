@@ -13611,7 +13611,11 @@ function pageAbout() {
     try { rid = window.JingcaiChrome && window.JingcaiChrome.getPushRegId && window.JingcaiChrome.getPushRegId(); } catch (_) {}
     pushLine = `<p class="note">进球推送设备号 ${esc(pushDeviceId())}${rid ? '<br>Registration ID ' + esc(rid) : ''}</p>`;
   }
-  return hdr('关于') + `<div class="doc" style="text-align:center"><div style="width:72px;height:72px;margin:10px auto;border-radius:18px;background:url(icons/icon-192.png) center/cover;box-shadow:var(--sh2)"></div><h2>云球迷</h2><p class="note">版本 ${esc(CFG.version)} · ${IS_APP ? 'Android 应用' : '网页版'}</p>${pushLine}</div>
+  const verBits = ['版本 ' + esc(CFG.version || '')];
+  if (CFG.versionCode) verBits.push('构建 ' + esc(String(CFG.versionCode)));
+  if (CFG.buildId) verBits.push(esc(CFG.buildId));
+  verBits.push(IS_APP ? 'Android 应用' : '网页版');
+  return hdr('关于') + `<div class="doc" style="text-align:center"><div style="width:72px;height:72px;margin:10px auto;border-radius:18px;background:url(icons/icon-192.png) center/cover;box-shadow:var(--sh2)"></div><h2>云球迷</h2><p class="note">${verBits.join(' · ')}</p>${pushLine}</div>
   <div class="doc"><h4>我们提供什么</h4><p>竞彩足球在售赛程、胜平负/让球赔率、基于赔率隐含概率的预测分析、联赛积分榜/射手榜数据中心，以及开奖结果查询。</p>
   <h4>预测如何计算</h4><p>详情「预测」页生成赛前情报简报：赛况背景、近期战绩与进失球、交锋史、伤停（有第三方数据才写，否则标明暂无）、主客日程，以及市场赔率（仅参考项）。由服务端按场次缓存，避免打爆数据源配额。不编造伤停/比分/未发生新闻。</p>
   <h4>历史实测（基线）</h4>${baselineDoc()}
