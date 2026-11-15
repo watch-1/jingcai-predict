@@ -8544,9 +8544,28 @@ html[data-theme="pitch"] .hero.hero--weather {
 .hero.hero--weather[data-weather="cloudy"] .hero-wx-sky {
   opacity: 1;
 }
+/* preview 376: sunny keeps the sun fixed on ::after; only the cloud plate
+   on ::before pans and loops. Sticky uses the same two plates as a top crop. */
 .hero.hero--weather[data-weather="sunny"] .hero-wx-sky::before,
 .hero-sticky[data-weather="sunny"] .hero-wx-sky::before {
+  background-image: url("assets/weather/sunny-clouds.webp");
+  z-index: 1;
+}
+.hero.hero--weather[data-weather="sunny"] .hero-wx-sky::after,
+.hero-sticky[data-weather="sunny"] .hero-wx-sky::after {
+  content: "";
+  position: absolute;
+  top: -18%;
+  left: 0;
+  height: 136%;
+  width: 100%;
   background-image: url("assets/weather/sunny.webp");
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: 0 42%;
+  pointer-events: none;
+  z-index: 0;
+  animation: none;
 }
 .hero.hero--weather[data-weather="light-rain"] .hero-wx-sky::before,
 .hero.hero--weather[data-weather="rain"] .hero-wx-sky::before,
@@ -9709,6 +9728,11 @@ html[data-theme="pitch"] .live-c-row { border-color: #243044; }
   height: 220%;
   background-position: 0 0;
   animation-duration: 52s;
+}
+.hero-sticky[data-weather="sunny"] .hero-wx-sky::after {
+  top: 0;
+  height: 220%;
+  background-position: 0 0;
 }
 .hero.hero--weather[data-weather="light-rain"] .hero-wx-rain::before,
 .hero-sticky[data-weather="light-rain"] .hero-wx-rain::before {
