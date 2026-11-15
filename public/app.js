@@ -593,6 +593,114 @@ function bundledCrestPath(teamId) {
 function isNationalFlagLogo(logo) {
   return /teamlogos\/countries\/|\/flags\/|flagcdn|country.?flag/i.test(String(logo || ''));
 }
+
+/* Rectangular national flags (preview 369). ESPN country marks are circular
+   cutouts; map a known country slug to a rectangular flagcdn / bundled asset.
+   Do not invent a flag when the logo cannot be resolved to an ISO/IOC code. */
+const FLAG_CODE_TO_ISO2 = {
+  'abw':'aw','ad':'ad','ae':'ae','af':'af','afg':'af','ag':'ag','ago':'ao','ai':'ai',
+  'aia':'ai','al':'al','ala':'ax','alb':'al','alg':'dz','am':'am','and':'ad','ang':'ao',
+  'ao':'ao','aq':'aq','ar':'ar','are':'ae','arg':'ar','arm':'am','as':'as','asm':'as',
+  'at':'at','ata':'aq','atf':'tf','atg':'ag','au':'au','aus':'au','aut':'at','aw':'aw',
+  'ax':'ax','az':'az','aze':'az','ba':'ba','bah':'bs','ban':'bd','bar':'bb','bb':'bb',
+  'bd':'bd','bdi':'bi','be':'be','bel':'be','ben':'bj','ber':'bm','bes':'bq','bf':'bf',
+  'bfa':'bf','bg':'bg','bgd':'bd','bgr':'bg','bh':'bh','bhr':'bh','bhs':'bs','bhu':'bt',
+  'bi':'bi','bih':'ba','bj':'bj','bl':'bl','blm':'bl','blr':'by','blz':'bz','bm':'bm',
+  'bmu':'bm','bn':'bn','bo':'bo','bol':'bo','bot':'bw','bq':'bq','br':'br','bra':'br',
+  'brb':'bb','brn':'bn','bru':'bn','bs':'bs','bt':'bt','btn':'bt','bul':'bg','bur':'bf',
+  'bv':'bv','bvt':'bv','bw':'bw','bwa':'bw','by':'by','bz':'bz','ca':'ca','caf':'cf',
+  'cam':'kh','can':'ca','cay':'ky','cc':'cc','cck':'cc','cd':'cd','cf':'cf','cg':'cg',
+  'cgo':'cg','ch':'ch','cha':'td','che':'ch','chi':'cl','chl':'cl','chn':'cn','ci':'ci',
+  'civ':'ci','ck':'ck','cl':'cl','cm':'cm','cmr':'cm','cn':'cn','co':'co','cod':'cd',
+  'cog':'cg','cok':'ck','col':'co','com':'km','cpv':'cv','cr':'cr','crc':'cr','cri':'cr',
+  'cro':'hr','cta':'cf','cu':'cu','cub':'cu','cuw':'cw','cv':'cv','cw':'cw','cx':'cx',
+  'cxr':'cx','cy':'cy','cym':'ky','cyp':'cy','cz':'cz','cze':'cz','de':'de','den':'dk',
+  'deu':'de','dj':'dj','dji':'dj','dk':'dk','dm':'dm','dma':'dm','dnk':'dk','do':'do',
+  'dom':'do','dz':'dz','dza':'dz','ec':'ec','ecu':'ec','ee':'ee','eg':'eg','egy':'eg',
+  'eh':'eh','eng':'gb-eng','eqg':'gq','er':'er','eri':'er','es':'es','esa':'sv','esh':'eh',
+  'esp':'es','est':'ee','et':'et','eth':'et','fai':'fo','fi':'fi','fin':'fi','fj':'fj',
+  'fji':'fj','fk':'fk','flk':'fk','fm':'fm','fo':'fo','fr':'fr','fra':'fr','fro':'fo',
+  'fsm':'fm','ga':'ga','gab':'ga','gam':'gm','gb':'gb','gb-eng':'gb-eng','gb-nir':'gb-nir','gb-sct':'gb-sct',
+  'gb-wls':'gb-wls','gbr':'gb','gbs':'gw','gd':'gd','ge':'ge','geo':'ge','geq':'gq','ger':'de',
+  'gf':'gf','gg':'gg','ggy':'gg','gh':'gh','gha':'gh','gi':'gi','gib':'gi','gin':'gn',
+  'gl':'gl','glp':'gp','gm':'gm','gmb':'gm','gn':'gn','gnb':'gw','gnq':'gq','gp':'gp',
+  'gq':'gq','gr':'gr','grc':'gr','grd':'gd','gre':'gr','grl':'gl','gs':'gs','gt':'gt',
+  'gtm':'gt','gu':'gu','gua':'gt','guf':'gf','gui':'gn','gum':'gu','guy':'gy','gw':'gw',
+  'gy':'gy','hai':'ht','hk':'hk','hkg':'hk','hm':'hm','hmd':'hm','hn':'hn','hnd':'hn',
+  'hon':'hn','hr':'hr','hrv':'hr','ht':'ht','hti':'ht','hu':'hu','hun':'hu','id':'id',
+  'idn':'id','ie':'ie','il':'il','im':'im','imn':'im','in':'in','ina':'id','ind':'in',
+  'io':'io','iot':'io','iq':'iq','ir':'ir','ire':'ie','iri':'ir','irl':'ie','irn':'ir',
+  'irq':'iq','is':'is','isl':'is','isr':'il','it':'it','ita':'it','ivb':'vg','ivc':'ci',
+  'jam':'jm','je':'je','jey':'je','jm':'jm','jo':'jo','jor':'jo','jp':'jp','jpn':'jp',
+  'kaz':'kz','ke':'ke','ken':'ke','kg':'kg','kgz':'kg','kh':'kh','khm':'kh','ki':'ki',
+  'kir':'ki','km':'km','kn':'kn','kna':'kn','kor':'kr','kos':'xk','kp':'kp','kr':'kr',
+  'ksa':'sa','kuw':'kw','kw':'kw','kwt':'kw','ky':'ky','kz':'kz','la':'la','lao':'la',
+  'lat':'lv','lb':'lb','lba':'ly','lbn':'lb','lbr':'lr','lby':'ly','lc':'lc','lca':'lc',
+  'les':'ls','li':'li','lib':'lb','lie':'li','lk':'lk','lka':'lk','lr':'lr','ls':'ls',
+  'lso':'ls','lt':'lt','ltu':'lt','lu':'lu','lux':'lu','lv':'lv','lva':'lv','ly':'ly',
+  'ma':'ma','mac':'mo','mad':'mg','maf':'mf','mar':'ma','mas':'my','maw':'mw','mc':'mc',
+  'mco':'mc','md':'md','mda':'md','mdg':'mg','mdv':'mv','me':'me','mex':'mx','mf':'mf',
+  'mg':'mg','mgl':'mn','mh':'mh','mhl':'mh','mk':'mk','mkd':'mk','ml':'ml','mli':'ml',
+  'mlt':'mt','mm':'mm','mmr':'mm','mn':'mn','mne':'me','mng':'mn','mnp':'mp','mnt':'me',
+  'mo':'mo','mon':'mc','moz':'mz','mp':'mp','mq':'mq','mr':'mr','mri':'mu','mrt':'mr',
+  'ms':'ms','msr':'ms','mt':'mt','mtn':'mr','mtq':'mq','mu':'mu','mus':'mu','mv':'mv',
+  'mw':'mw','mwi':'mw','mx':'mx','my':'my','mya':'mm','mys':'my','myt':'yt','mz':'mz',
+  'na':'na','nam':'na','nc':'nc','nca':'ni','ncl':'nc','ne':'ne','ned':'nl','nep':'np',
+  'ner':'ne','nf':'nf','nfk':'nf','ng':'ng','nga':'ng','ngr':'ng','ni':'ni','nic':'ni',
+  'nig':'ne','nir':'gb-nir','niu':'nu','nl':'nl','nld':'nl','no':'no','nor':'no','np':'np',
+  'npl':'np','nr':'nr','nru':'nr','nu':'nu','nz':'nz','nzl':'nz','om':'om','oma':'om',
+  'omn':'om','pa':'pa','pak':'pk','pan':'pa','par':'py','pcn':'pn','pe':'pe','per':'pe',
+  'pf':'pf','pg':'pg','ph':'ph','phi':'ph','phl':'ph','pk':'pk','pl':'pl','ple':'ps',
+  'plw':'pw','pm':'pm','pn':'pn','png':'pg','pol':'pl','por':'pt','pr':'pr','pri':'pr',
+  'prk':'kp','prt':'pt','pry':'py','ps':'ps','pse':'ps','pt':'pt','pur':'pr','pw':'pw',
+  'py':'py','pyf':'pf','qa':'qa','qat':'qa','re':'re','reu':'re','ro':'ro','rom':'ro',
+  'rou':'ro','rs':'rs','rsa':'za','ru':'ru','rus':'ru','rw':'rw','rwa':'rw','sa':'sa',
+  'sam':'ws','sau':'sa','sb':'sb','sc':'sc','sco':'gb-sct','sd':'sd','sdn':'sd','se':'se',
+  'sen':'sn','sey':'sc','sg':'sg','sgp':'sg','sgs':'gs','sh':'sh','shn':'sh','si':'si',
+  'sin':'sg','sj':'sj','sjm':'sj','sk':'sk','skn':'kn','sl':'sl','slb':'sb','sle':'sl',
+  'slo':'si','slv':'sv','sm':'sm','smr':'sm','sn':'sn','so':'so','sol':'sb','som':'so',
+  'spm':'pm','sr':'sr','srb':'rs','sri':'lk','ss':'ss','ssd':'ss','st':'st','stp':'st',
+  'sud':'sd','sui':'ch','sur':'sr','sv':'sv','svk':'sk','svn':'si','swe':'se','swz':'sz',
+  'sx':'sx','sxm':'sx','sy':'sy','syc':'sc','syr':'sy','sz':'sz','tan':'tz','tc':'tc',
+  'tca':'tc','tcd':'td','td':'td','tf':'tf','tg':'tg','tga':'to','tgo':'tg','th':'th',
+  'tha':'th','tj':'tj','tjk':'tj','tk':'tk','tkl':'tk','tkm':'tm','tl':'tl','tls':'tl',
+  'tm':'tm','tn':'tn','to':'to','tog':'tg','ton':'to','tpe':'tw','tr':'tr','tri':'tt',
+  'tt':'tt','tto':'tt','tun':'tn','tur':'tr','tuv':'tv','tv':'tv','tw':'tw','twn':'tw',
+  'tz':'tz','tza':'tz','ua':'ua','uae':'ae','ug':'ug','uga':'ug','ukr':'ua','um':'um',
+  'umi':'um','uru':'uy','ury':'uy','us':'us','usa':'us','uy':'uy','uz':'uz','uzb':'uz',
+  'va':'va','van':'vu','vat':'va','vc':'vc','vct':'vc','ve':'ve','ven':'ve','vg':'vg',
+  'vgb':'vg','vi':'vi','vie':'vn','vin':'vc','vir':'vi','vn':'vn','vnm':'vn','vu':'vu',
+  'vut':'vu','wal':'gb-wls','wf':'wf','wlf':'wf','wls':'gb-wls','ws':'ws','wsm':'ws','xk':'xk',
+  'xkx':'xk','ye':'ye','yem':'ye','yt':'yt','za':'za','zaf':'za','zam':'zm','zim':'zw',
+  'zm':'zm','zmb':'zm','zw':'zw','zwe':'zw'
+};
+
+function flagIso2FromLogo(logo) {
+  const s = String(logo || '');
+  const cdn = s.match(/flagcdn\.com\/(?:w\d+\/|\d+x\d+\/)?([a-z]{2}(?:-[a-z]{3})?)\.(?:png|svg|webp)/i);
+  if (cdn) return FLAG_CODE_TO_ISO2[cdn[1].toLowerCase()] || cdn[1].toLowerCase();
+  const af = s.match(/media\.api-sports\.io\/flags\/([a-z]{2}(?:-[a-z]{3})?)\.(?:png|svg|webp)/i);
+  if (af) return FLAG_CODE_TO_ISO2[af[1].toLowerCase()] || af[1].toLowerCase();
+  const espn = s.match(/teamlogos\/countries\/(?:\d+\/)?([a-z]{2,3}|gb-[a-z]{3})\.(?:png|jpe?g|svg|webp)/i);
+  if (espn) return FLAG_CODE_TO_ISO2[espn[1].toLowerCase()] || '';
+  const generic = s.match(/\/flags\/(?:w\d+\/)?([a-z]{2}(?:-[a-z]{3})?)\.(?:png|svg|webp)/i);
+  if (generic) return FLAG_CODE_TO_ISO2[generic[1].toLowerCase()] || '';
+  return '';
+}
+function flagcdnUrl(iso2) {
+  const c = String(iso2 || '').toLowerCase();
+  return c ? ('https://flagcdn.com/w160/' + c + '.png') : '';
+}
+function bundledFlagPath(iso2) {
+  const c = String(iso2 || '').toLowerCase();
+  return c ? ('assets/flags/' + c + '.png') : '';
+}
+function rectangularFlagSrc(logo) {
+  if (!isNationalFlagLogo(logo)) return '';
+  const iso = flagIso2FromLogo(logo);
+  return iso ? bundledFlagPath(iso) : '';
+}
+
 function espnIdFromCrestLogo(logo) {
   const m = String(logo || '').match(/\/teamlogos\/soccer\/(?:500|50000)\/(\d+)\.(?:png|jpe?g)/i);
   return m ? m[1] : '';
@@ -773,18 +881,31 @@ function badge(name, cls = '', logo, opts) {
   const ckey = crestCacheKey(logo, tid);
   const apiUrl = API + '/api/logo?url=' + encodeURIComponent(logo);
   const bundled = bundledCrestFor(logo, tid);
-  // 1.9.202: APK-bundled crest first (zero network), then mem/IDB blob, then /api/logo
-  let srcUrl = bundled || (_crestMem.has(ckey) ? _crestMem.get(ckey) : apiUrl);
+  const isFlag = isNationalFlagLogo(logo);
+  const iso2 = isFlag ? flagIso2FromLogo(logo) : '';
+  const flagBundled = iso2 ? bundledFlagPath(iso2) : '';
+  const flagRemote = iso2 ? flagcdnUrl(iso2) : '';
+  const flagProxy = flagRemote ? (API + '/api/logo?url=' + encodeURIComponent(flagRemote)) : '';
+  // National teams: bundled rectangular flag first, then flagcdn via /api/logo, then the original logo.
+  // Club crests unchanged (not forced to rectangles).
+  let srcUrl = flagBundled || bundled || (_crestMem.has(ckey) ? _crestMem.get(ckey) : (flagProxy || apiUrl));
   const src = esc(srcUrl);
-  const fbAttr = bundled && srcUrl === bundled ? ` data-fb="${esc(apiUrl)}"` : '';
-  // Intrinsic 160≈3–4× of 40–42 CSS px crests; sources TSDB 512 / ESPN 500 (1.9.91 sharper).
-  // Broken or missing crest (404) falls back to the letter badge. Do not invent a logo.
-  // 1.9.200: tribe hub uses eager — Capacitor first-paint + loading=lazy left empty crest discs.
+  let fbAttr = '';
+  if (flagBundled && srcUrl === flagBundled) {
+    fbAttr = ` data-fb="${esc(flagProxy || apiUrl)}"`;
+    if (flagProxy && apiUrl && flagProxy !== apiUrl) fbAttr += ` data-fb2="${esc(apiUrl)}"`;
+  } else if (flagProxy && srcUrl === flagProxy) {
+    fbAttr = ` data-fb="${esc(apiUrl)}"`;
+  } else if (bundled && srcUrl === bundled) {
+    fbAttr = ` data-fb="${esc(apiUrl)}"`;
+  }
   const lazyAttr = (opts && opts.eager) ? '' : ' loading="lazy"';
-  const dataAttrs = ` data-crest-key="${esc(ckey)}" data-crest-logo="${esc(logo)}"${tid ? ` data-team-id="${esc(tid)}"` : ''}`;
-  const onerr = "var img=this,p=img.parentNode;if(!p)return;var fb=img.getAttribute('data-fb');if(fb&&!img.dataset.triedFb){img.dataset.triedFb=1;img.src=fb;return;}if(p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter " + cls + "';p.style.background='" + bg + "';p.textContent=p.dataset.letter||'';img.remove()";
+  const dataAttrs = ` data-crest-key="${esc(ckey)}" data-crest-logo="${esc(logo)}"${tid ? ` data-team-id="${esc(tid)}"` : ''}${iso2 ? ` data-flag-iso="${esc(iso2)}"` : ''}`;
+  const onerr = "var img=this,p=img.parentNode;if(!p)return;var fb=img.getAttribute('data-fb');if(fb&&!img.dataset.triedFb){img.dataset.triedFb=1;img.src=fb;return;}var fb2=img.getAttribute('data-fb2');if(fb2&&!img.dataset.triedFb2){img.dataset.triedFb2=1;img.src=fb2;return;}if(p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter " + cls + "';p.style.background='" + bg + "';p.textContent=p.dataset.letter||'';img.remove()";
   const corsAttr = /^https?:/i.test(srcUrl) ? ' crossorigin="anonymous"' : '';
-  return `<span class="badge crest ${cls}" data-letter="${letter}"${dataAttrs}><img alt="" width="160" height="160" decoding="async"${lazyAttr}${fbAttr}${corsAttr} src="${src}" onerror="${onerr}"></span>`;
+  const flagCls = isFlag ? ' flag' : '';
+  const wh = isFlag ? 'width="160" height="107"' : 'width="160" height="160"';
+  return `<span class="badge crest${flagCls} ${cls}" data-letter="${letter}"${dataAttrs}><img alt="" ${wh} decoding="async"${lazyAttr}${fbAttr}${corsAttr} src="${src}" onerror="${onerr}"></span>`;
 }
 const shortRk = s => (String(s || '').length <= 5 ? esc(s) : ''); // long group ranks like [亚运男足1] only shown on the detail page
 const lgTag = m => homeTheme() === 'pitch'
@@ -11813,6 +11934,7 @@ function applyMatchWeather(x, pack) {
   const t = matchWeatherType(x);
   if (hero) hero.setAttribute('data-weather', t);
   if (sticky) sticky.setAttribute('data-weather', t);
+  try { bindHeroRainDrops((hero && hero.parentNode) || document); } catch (_) {}
 }
 async function ensureMatchWeather(x) {
   if (!x || !x.id) return null;
@@ -11927,7 +12049,7 @@ function matchStickyHero(x, m, r) {
   const homeGlow = teamGlowCached(x, 'home');
   const awayGlow = teamGlowCached(x, 'away');
   const bg = heroGlowGradient(homeGlow, awayGlow) + ', #0A0B0E';
-  const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
+  const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow" style="background:${esc(bg)}"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
   let mid;
   if (st.hg != null && st.ag != null) {
     mid = `<b class="hero-sticky-score num">${esc(st.hg)}</b>${st.pill ? `<span class="hero-sticky-pill">${esc(st.pill)}</span>` : ''}<b class="hero-sticky-score num">${esc(st.ag)}</b>`;
@@ -11935,7 +12057,7 @@ function matchStickyHero(x, m, r) {
     mid = `<span class="hero-sticky-vs">VS</span>${st.pill ? `<span class="hero-sticky-pill">${esc(st.pill)}</span>` : ''}`;
   }
   return `<div class="hero-sticky" id="match-sticky-${esc(id)}" data-weather="${esc(wx)}" aria-hidden="true">
-    <div class="hero-sticky-bar" style="background:${esc(bg)}">
+    <div class="hero-sticky-bar">
       <div class="hero-sticky-bg">${wxLayer}</div>
       <button type="button" class="ic-btn hero-ic md-back" data-act="back" aria-label="返回">${I.back}</button>
       <div class="hero-sticky-mid">${badge(x.home, 'sm', x.homeLogo, { teamId: x.homeTeamId, eager: true })}${mid}${badge(x.away, 'sm', x.awayLogo, { teamId: x.awayTeamId, eager: true })}</div>
@@ -11976,10 +12098,10 @@ function bindMatchHeroSticky() {
 }
 
 /* Scheme B mute: HSV sat=0.28 val=0.20, concrete space-separated rgb (no var(), no commas). */
-const HERO_GLOW_HOME = 'rgb(51 47 37)';
-const HERO_GLOW_AWAY = 'rgb(37 47 51)';
-const HERO_GLOW_SAT = 0.34;
-const HERO_GLOW_VAL = 0.24;
+const HERO_GLOW_HOME = 'rgb(107 90 56)';
+const HERO_GLOW_AWAY = 'rgb(56 90 107)';
+const HERO_GLOW_SAT = 0.48;
+const HERO_GLOW_VAL = 0.42;
 const HERO_GLOW_BASE = [10, 11, 14];
 function formatHeroRgb(r, g, b) {
   return 'rgb(' + Math.round(r) + ' ' + Math.round(g) + ' ' + Math.round(b) + ')';
@@ -12038,9 +12160,16 @@ function paintHeroGlow(hero, home, away) {
   const bg = heroGlowGradient(home || HERO_GLOW_HOME, away || HERO_GLOW_AWAY) + ', #0A0B0E';
   try { hero.style.setProperty('background', bg, 'important'); } catch (_) { hero.style.background = bg; }
   const id = String((hero.id || '').replace(/^match-hero-/, ''));
-  const bar = id && document.querySelector('#match-sticky-' + id + ' .hero-sticky-bar');
+  const sticky = id && document.querySelector('#match-sticky-' + id);
+  const bar = sticky && sticky.querySelector('.hero-sticky-bar');
+  const glowEl = sticky && sticky.querySelector('.hero-wx-glow');
+  /* Keep the compact bar in sync, but never paint an opaque plate over the
+     weather slice — glow lives on .hero-wx-glow under the sky / droplets. */
   if (bar) {
-    try { bar.style.setProperty('background', bg, 'important'); } catch (_) { bar.style.background = bg; }
+    try { bar.style.setProperty('background', 'transparent', 'important'); } catch (_) { bar.style.background = 'transparent'; }
+  }
+  if (glowEl) {
+    try { glowEl.style.setProperty('background', bg, 'important'); } catch (_) { glowEl.style.background = bg; }
   }
 }
 function hsvToRgbCss(hh, s, v) {
@@ -12109,13 +12238,13 @@ function sampleImgGlowPack(img) {
     const data = ctx.getImageData(0, 0, w, h).data;
     const acc = new Array(bins).fill(0);
     for (let i = 0; i < data.length; i += 4) {
-      if (data[i + 3] < 40) continue;
+      if (data[i + 3] < 28) continue;
       const rr = data[i], gg = data[i + 1], bb = data[i + 2];
       const lum = (rr + gg + bb) / 3;
-      if (lum > 245 || lum < 14) continue;
+      if (lum > 250 || lum < 10) continue;
       const mx = Math.max(rr, gg, bb), mn = Math.min(rr, gg, bb);
       const sat = mx === 0 ? 0 : (mx - mn) / mx;
-      if (sat < 0.12) continue;
+      if (sat < 0.08) continue;
       let hh = 0;
       const d = mx - mn;
       if (d !== 0) {
@@ -12130,7 +12259,7 @@ function sampleImgGlowPack(img) {
     const clusters = acc.map((weight, i) => ({ hue: (i + 0.5) * 360 / bins, weight }))
       .filter((x) => x.weight > 0)
       .sort((a, b) => b.weight - a.weight);
-    if (!clusters.length || clusters[0].weight < 4) return null;
+    if (!clusters.length || clusters[0].weight < 2) return null;
     const pack = packFromHue(clusters[0].hue);
     if (!pack) return null;
     pack.clusters = clusters.slice(0, 4);
@@ -12164,6 +12293,8 @@ function rememberTeamGlow(x, side, pack) {
   S.teamGlowColors[teamGlowSeed(x, side)] = { glow: pack.glow, accent: pack.accent || '', sampled: true };
 }
 function crestSampleSrc(logo, teamId) {
+  const flagSrc = typeof rectangularFlagSrc === 'function' ? rectangularFlagSrc(logo) : '';
+  if (flagSrc) return flagSrc;
   const tid = teamId != null && teamId !== '' ? String(teamId) : '';
   const bundled = tid && typeof bundledCrestFor === 'function' ? bundledCrestFor(logo, tid) : '';
   if (bundled) return bundled;
@@ -12325,6 +12456,172 @@ function syncHeroWeatherMotion() {
   const off = !!(document.hidden || (typeof route === 'function' && route().name !== 'match'));
   try { document.documentElement.classList.toggle('wx-paused', off); } catch (_) {}
 }
+
+/* preview 369: lens droplets on the camera glass, not a repeating streak grid. */
+const _heroRainLoops = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+const _heroRainAlive = [];
+function rainDropCount(type, compact) {
+  if (type === 'light-rain') return compact ? 16 : 34;
+  if (type === 'rain') return compact ? 28 : 68;
+  if (type === 'storm') return compact ? 36 : 92;
+  return 0;
+}
+function stopHeroRain(el) {
+  if (!el) return;
+  const st = _heroRainLoops && _heroRainLoops.get(el);
+  if (st) {
+    st.dead = true;
+    if (st.raf) try { cancelAnimationFrame(st.raf); } catch (_) {}
+    try { _heroRainLoops.delete(el); } catch (_) {}
+  }
+  const i = _heroRainAlive.indexOf(el);
+  if (i >= 0) _heroRainAlive.splice(i, 1);
+  try { el.innerHTML = ''; } catch (_) {}
+}
+function bindHeroRainDrops(root) {
+  const scope = root || document;
+  for (let i = _heroRainAlive.length - 1; i >= 0; i--) {
+    const el = _heroRainAlive[i];
+    if (!el || !el.isConnected) stopHeroRain(el);
+  }
+  const nodes = scope.querySelectorAll
+    ? scope.querySelectorAll('.hero.hero--weather .hero-wx-rain, .hero-sticky .hero-wx-rain')
+    : [];
+  nodes.forEach((el) => { try { startHeroRain(el); } catch (_) {} });
+}
+function startHeroRain(el) {
+  if (!el) return;
+  const host = el.closest('.hero.hero--weather, .hero-sticky');
+  const type = (host && host.getAttribute('data-weather')) || '';
+  const compact = !!(host && host.classList.contains('hero-sticky'));
+  const n = rainDropCount(type, compact);
+  const prev = _heroRainLoops && _heroRainLoops.get(el);
+  if (prev && !prev.dead && prev.type === type && prev.n === n && el.querySelector('canvas')) return;
+  stopHeroRain(el);
+  if (!n) return;
+  const canvas = document.createElement('canvas');
+  canvas.className = 'hero-wx-drops';
+  canvas.setAttribute('aria-hidden', 'true');
+  el.appendChild(canvas);
+  const st = { dead: false, type, n, compact, canvas, drops: [], last: 0, raf: 0, dpr: 1, w: 0, h: 0, cssW: 0, cssH: 0 };
+  if (_heroRainLoops) _heroRainLoops.set(el, st);
+  _heroRainAlive.push(el);
+  const spawn = (anyY) => {
+    const dpr = st.dpr || 1;
+    const mul = compact ? 0.72 : 1;
+    const kind = Math.random();
+    let r;
+    if (kind < 0.6) r = (1.15 + Math.random() * 2.05) * dpr * mul;
+    else if (kind < 0.9) r = (2.3 + Math.random() * 3.1) * dpr * mul;
+    else r = (4.2 + Math.random() * 5.2) * dpr * mul;
+    const trail = Math.random() < (type === 'light-rain' ? 0.16 : 0.3) && r > 2.1 * dpr;
+    return {
+      x: Math.random() * (st.w || 2),
+      y: anyY ? Math.random() * (st.h || 2) : -r * 5 - Math.random() * 50 * dpr,
+      r,
+      vy: (18 + Math.random() * 36 + r * 1.6) * (compact ? 0.75 : 1),
+      vx: (Math.random() - 0.5) * 7,
+      wob: Math.random() * Math.PI * 2,
+      wobSp: 1.1 + Math.random() * 2.0,
+      trail,
+      trailLen: trail ? (8 + Math.random() * 20) * dpr : 0,
+      alpha: 0.32 + Math.random() * 0.42
+    };
+  };
+  const resize = () => {
+    const box = el.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(1, Math.round(box.width));
+    const h = Math.max(1, Math.round(box.height));
+    if (w === st.cssW && h === st.cssH && dpr === st.dpr) return;
+    st.cssW = w; st.cssH = h; st.dpr = dpr;
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.max(1, Math.round(h * dpr));
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    st.w = canvas.width; st.h = canvas.height;
+    st.drops = [];
+    for (let i = 0; i < n; i++) st.drops.push(spawn(true));
+  };
+  const drawDrop = (ctx, d) => {
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    if (d.trail && d.trailLen > 0) {
+      const g = ctx.createLinearGradient(0, -d.trailLen - d.r, 0, -d.r);
+      g.addColorStop(0, 'rgba(210,225,245,0)');
+      g.addColorStop(1, 'rgba(210,225,245,' + (d.alpha * 0.3).toFixed(3) + ')');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(-0.5, -d.r);
+      ctx.lineTo(0.5, -d.r);
+      ctx.lineTo(0.16, -d.trailLen - d.r);
+      ctx.lineTo(-0.16, -d.trailLen - d.r);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.scale(1, 1.2);
+    const rg = ctx.createRadialGradient(-d.r * 0.32, -d.r * 0.38, d.r * 0.04, 0, 0, d.r);
+    rg.addColorStop(0, 'rgba(255,255,255,' + Math.min(0.9, d.alpha + 0.28).toFixed(3) + ')');
+    rg.addColorStop(0.38, 'rgba(210,224,240,' + (d.alpha * 0.52).toFixed(3) + ')');
+    rg.addColorStop(1, 'rgba(150,172,200,' + (d.alpha * 0.1).toFixed(3) + ')');
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.arc(0, 0, d.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + d.alpha * 0.32).toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.ellipse(-d.r * 0.28, -d.r * 0.34, Math.max(0.4, d.r * 0.28), Math.max(0.3, d.r * 0.16), -0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+  const tick = (now) => {
+    if (st.dead) return;
+    st.raf = requestAnimationFrame(tick);
+    if (document.documentElement.classList.contains('wx-paused')) { st.last = now; return; }
+    if (!st.cssW) resize();
+    const dt = Math.min(0.05, st.last ? (now - st.last) / 1000 : 0.016);
+    st.last = now;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, st.w, st.h);
+    const drops = st.drops;
+    for (let i = 0; i < drops.length; i++) {
+      const a = drops[i];
+      if (!a) continue;
+      for (let j = i + 1; j < drops.length; j++) {
+        const b = drops[j];
+        if (!b) continue;
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const lim = a.r + b.r + 0.7;
+        if (dx * dx + dy * dy < lim * lim) {
+          const big = a.r >= b.r ? a : b;
+          const sm = a.r >= b.r ? b : a;
+          big.r = Math.min(big.r + sm.r * 0.26, (compact ? 6.5 : 11) * st.dpr);
+          big.alpha = Math.min(0.86, big.alpha + 0.04);
+          drops[j] = null;
+        }
+      }
+    }
+    st.drops = drops.filter(Boolean);
+    while (st.drops.length < n) st.drops.push(spawn(false));
+    for (const d of st.drops) {
+      d.wob += d.wobSp * dt;
+      d.x += (d.vx + Math.sin(d.wob) * 3.6 * st.dpr) * dt;
+      d.y += d.vy * dt;
+      if (d.y - d.r > st.h + 10 || d.x < -40 || d.x > st.w + 40) {
+        Object.assign(d, spawn(false));
+        continue;
+      }
+      drawDrop(ctx, d);
+    }
+  };
+  resize();
+  st.raf = requestAnimationFrame(tick);
+  if (typeof ResizeObserver !== 'undefined' && !el._heroRainRo) {
+    el._heroRainRo = new ResizeObserver(() => { try { resize(); } catch (_) {} });
+    try { el._heroRainRo.observe(el); } catch (_) {}
+  }
+}
 function bindMatchHeroWeather(root) {
   const scope = root || document;
   const heroes = scope.querySelectorAll ? scope.querySelectorAll('.hero.hero--weather') : [];
@@ -12356,7 +12653,7 @@ function bindMatchHeroWeather(root) {
       packs[side] = pack;
       commitPair();
     };
-    const imgs = hero.querySelectorAll('.tm .badge.crest img');
+    const imgs = hero.querySelectorAll('.tm .badge img');
     imgs.forEach((img, i) => {
       const side = i === 0 ? 'home' : 'away';
       const tryImg = () => applyPack(side, sampleImgGlowPack(img));
@@ -12368,6 +12665,7 @@ function bindMatchHeroWeather(root) {
     fetchCrestGlow(homeLogo, x.homeTeamId).then((pack) => applyPack('home', pack));
     fetchCrestGlow(awayLogo, x.awayTeamId).then((pack) => applyPack('away', pack));
   });
+  try { bindHeroRainDrops(scope); } catch (_) {}
   syncHeroWeatherMotion();
 }
 function impliedMap(odds) {
@@ -12921,8 +13219,8 @@ function pageMatch(id) {
     S.detailTab = S.detailTab || {};
     S.detailTab[x.id] = tab;
   }
-  let h = matchHero(x, m, r, { favBtn });
-  h += matchStickyHero(x, m, r);
+  let h = matchStickyHero(x, m, r);
+  h += matchHero(x, m, r, { favBtn });
   h += `<div class="dtabs" data-mid="${esc(x.id)}">${tabs.map(([k, lab]) =>
     `<button type="button" class="${tab === k ? 'on' : ''}" data-act="detailTab" data-id="${esc(x.id)}" data-tab="${k}">${lab}</button>`
   ).join('')}</div>`;

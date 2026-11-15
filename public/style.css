@@ -8399,8 +8399,8 @@ html[data-theme="pitch"] .lu-teamseg button.on{background:#eef1f8;color:#121826}
      Beats the older .hero { background: ... var(--pri-g) !important } navy fill. */
   /* Opaque premultiplied stops only — alpha-over-black dithers into grain on Android WebView. */
   background:
-    radial-gradient(ellipse 66% 120% at 13% 52%, rgb(51 47 37) 0%, rgb(45 40 32) 18%, rgb(35 33 28) 33%, rgb(25 24 22) 50%, rgb(16 16 17) 67%, rgb(12 13 15) 82%, rgb(10 11 14) 100%),
-    radial-gradient(ellipse 66% 120% at 87% 52%, rgb(37 47 51) 0%, rgb(32 40 44) 18%, rgb(26 33 37) 33%, rgb(20 24 27) 50%, rgb(14 16 19) 67%, rgb(11 13 16) 82%, rgb(10 11 14) 100%),
+    radial-gradient(ellipse 66% 120% at 13% 52%, rgb(107 90 56) 0%, rgb(90 76 50) 18%, rgb(68 59 42) 33%, rgb(42 38 30) 50%, rgb(22 21 20) 67%, rgb(14 14 16) 82%, rgb(10 11 14) 100%),
+    radial-gradient(ellipse 66% 120% at 87% 52%, rgb(56 90 107) 0%, rgb(50 76 90) 18%, rgb(42 59 70) 33%, rgb(30 40 48) 50%, rgb(18 21 24) 67%, rgb(13 14 16) 82%, rgb(10 11 14) 100%),
     #0A0B0E !important;
   color: #fff;
   padding: 0 16px 20px;
@@ -8436,8 +8436,8 @@ html[data-theme="pitch"] .lu-teamseg button.on{background:#eef1f8;color:#121826}
 html[data-theme="pitch"] .hero.hero--weather {
   /* Opaque premultiplied stops only — alpha-over-black dithers into grain on Android WebView. */
   background:
-    radial-gradient(ellipse 66% 120% at 13% 52%, rgb(51 47 37) 0%, rgb(45 40 32) 18%, rgb(35 33 28) 33%, rgb(25 24 22) 50%, rgb(16 16 17) 67%, rgb(12 13 15) 82%, rgb(10 11 14) 100%),
-    radial-gradient(ellipse 66% 120% at 87% 52%, rgb(37 47 51) 0%, rgb(32 40 44) 18%, rgb(26 33 37) 33%, rgb(20 24 27) 50%, rgb(14 16 19) 67%, rgb(11 13 16) 82%, rgb(10 11 14) 100%),
+    radial-gradient(ellipse 66% 120% at 13% 52%, rgb(107 90 56) 0%, rgb(90 76 50) 18%, rgb(68 59 42) 33%, rgb(42 38 30) 50%, rgb(22 21 20) 67%, rgb(14 14 16) 82%, rgb(10 11 14) 100%),
+    radial-gradient(ellipse 66% 120% at 87% 52%, rgb(56 90 107) 0%, rgb(50 76 90) 18%, rgb(42 59 70) 33%, rgb(30 40 48) 50%, rgb(18 21 24) 67%, rgb(13 14 16) 82%, rgb(10 11 14) 100%),
     #0A0B0E !important;
 }
 .hero-wx-base,
@@ -8469,9 +8469,11 @@ html[data-theme="pitch"] .hero.hero--weather {
 .hero.hero--weather[data-weather="rain"] .hero-wx-sky,
 .hero.hero--weather[data-weather="storm"] .hero-wx-sky {
   opacity: 1;
-  background-size: 124% 124%;
+  background-size: cover;
   background-repeat: no-repeat;
-  animation: wx-drift 14s linear infinite alternate;
+  background-position: center 28%;
+  transform-origin: center center;
+  animation: wx-drift-sky 18s ease-in-out infinite alternate;
 }
 .hero.hero--weather[data-weather="sunny"] .hero-wx-sky {
   background-image: url("assets/weather/sunny.webp");
@@ -8481,69 +8483,29 @@ html[data-theme="pitch"] .hero.hero--weather {
   background-image: url("assets/weather/light-rain.webp");
 }
 .hero.hero--weather[data-weather="storm"] .hero-wx-sky {
-  /* Rain sky without the bolt baked into storm.webp; lightning is animated. */
-  background-image: url("assets/weather/light-rain.webp");
-  filter: brightness(0.68) saturate(0.78) contrast(1.12);
+  background-image: url("assets/weather/storm.webp");
 }
-/* Nearly vertical streaks (~15° from vertical). 90deg would be vertical
-   stripes; 105deg adds a slight wind slant. -18deg was almost horizontal. */
+/* preview 369: rain is a canvas of lens droplets, not repeating-linear-gradient streaks. */
 .hero-wx-rain {
   opacity: 0;
-  background-image: repeating-linear-gradient(
-    105deg,
-    transparent 0 17px,
-    rgba(220, 230, 245, .28) 18px 19px,
-    transparent 20px 36px
-  );
-  background-size: 42px 90px;
-  animation: wx-rain .55s linear infinite;
+  overflow: hidden;
+  background: none;
 }
-.hero-wx-rain::before,
-.hero-wx-rain::after {
-  content: "";
+.hero-wx-rain .hero-wx-drops,
+canvas.hero-wx-drops {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
   pointer-events: none;
-  opacity: 0;
-}
-.hero-wx-rain::before {
-  background-image: repeating-linear-gradient(
-    100deg,
-    transparent 0 26px,
-    rgba(210, 222, 240, .16) 27px 28px,
-    transparent 29px 58px
-  );
-  background-size: 64px 130px;
-  animation: wx-rain-far 1.05s linear infinite;
-}
-.hero-wx-rain::after {
-  background-image: repeating-linear-gradient(
-    108deg,
-    transparent 0 11px,
-    rgba(235, 242, 255, .38) 12px 12.7px,
-    transparent 13.5px 24px
-  );
-  background-size: 28px 64px;
-  animation: wx-rain-near .38s linear infinite;
 }
 .hero.hero--weather[data-weather="light-rain"] .hero-wx-rain,
-.hero-sticky[data-weather="light-rain"] .hero-wx-rain { opacity: .72; }
-.hero.hero--weather[data-weather="light-rain"] .hero-wx-rain::before,
-.hero-sticky[data-weather="light-rain"] .hero-wx-rain::before { opacity: .55; }
-.hero.hero--weather[data-weather="light-rain"] .hero-wx-rain::after,
-.hero-sticky[data-weather="light-rain"] .hero-wx-rain::after { opacity: .4; }
+.hero-sticky[data-weather="light-rain"] .hero-wx-rain { opacity: 1; }
 .hero.hero--weather[data-weather="rain"] .hero-wx-rain,
-.hero-sticky[data-weather="rain"] .hero-wx-rain { opacity: .9; }
-.hero.hero--weather[data-weather="rain"] .hero-wx-rain::before,
-.hero-sticky[data-weather="rain"] .hero-wx-rain::before { opacity: .8; }
-.hero.hero--weather[data-weather="rain"] .hero-wx-rain::after,
-.hero-sticky[data-weather="rain"] .hero-wx-rain::after { opacity: .75; }
+.hero-sticky[data-weather="rain"] .hero-wx-rain { opacity: 1; }
 .hero.hero--weather[data-weather="storm"] .hero-wx-rain,
-.hero-sticky[data-weather="storm"] .hero-wx-rain { opacity: .95; }
-.hero.hero--weather[data-weather="storm"] .hero-wx-rain::before,
-.hero-sticky[data-weather="storm"] .hero-wx-rain::before { opacity: .85; }
-.hero.hero--weather[data-weather="storm"] .hero-wx-rain::after,
-.hero-sticky[data-weather="storm"] .hero-wx-rain::after { opacity: .8; }
+.hero-sticky[data-weather="storm"] .hero-wx-rain { opacity: 1; }
 .hero-wx-flash {
   opacity: 0;
   background:
@@ -8635,6 +8597,30 @@ html[data-theme="pitch"] .hero.hero--weather {
   overflow: visible;
   border-radius: 0;
 }
+/* preview 369: national flags are complete rectangles (~3:2), not circular badges. */
+.hero.hero--weather.hero--edge .badge.lg.flag,
+.hero.hero--weather.hero--edge .tm .badge.lg.crest.flag,
+.hero.hero--weather .tm .badge.crest.flag,
+.hero.hero--weather .badge.crest.flag {
+  width: 13.8vw;
+  height: 9.2vw;
+  min-width: 48px;
+  min-height: 32px;
+  max-width: 72px;
+  max-height: 48px;
+  aspect-ratio: 3 / 2;
+  border-radius: 2px !important;
+  overflow: hidden !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.hero.hero--weather .badge.crest.flag img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 0;
+}
 .hero.hero--weather .teams {
   margin-top: 10px;
   column-gap: 8px;
@@ -8713,17 +8699,9 @@ html[data-theme="pitch"] .hero.hero--weather {
   from { background-position: 16% 48%; }
   to { background-position: 84% 52%; }
 }
-@keyframes wx-rain {
-  from { background-position: 0 0; }
-  to { background-position: 24px 90px; }
-}
-@keyframes wx-rain-far {
-  from { background-position: 0 0; }
-  to { background-position: 18px 130px; }
-}
-@keyframes wx-rain-near {
-  from { background-position: 0 0; }
-  to { background-position: 16px 64px; }
+@keyframes wx-drift-sky {
+  from { transform: scale(1.14) translateX(-3.2%); }
+  to { transform: scale(1.14) translateX(3.2%); }
 }
 @keyframes wx-flash {
   0%, 7%, 12%, 54%, 61%, 100% { opacity: 0; }
@@ -8760,14 +8738,13 @@ html[data-theme="pitch"] .hero.hero--weather {
    Android WebView often reports that even when the user wants motion. */
 html.wx-paused .hero-wx-sky,
 html.wx-paused .hero-wx-rain,
-html.wx-paused .hero-wx-rain::before,
-html.wx-paused .hero-wx-rain::after,
 html.wx-paused .hero-wx-flash,
 html.wx-paused .hero-wx-flash::before,
 html.wx-paused .hero-wx-flash::after,
 html.wx-paused .hero.hero--weather[data-weather] .hero-wx-sky,
 html.wx-paused .hero.hero--weather[data-weather] .hero-wx-rain,
-html.wx-paused .hero.hero--weather[data-weather] .hero-wx-flash {
+html.wx-paused .hero.hero--weather[data-weather] .hero-wx-flash,
+html.wx-paused .hero-sticky[data-weather] .hero-wx-sky {
   animation-play-state: paused !important;
 }
 
@@ -9051,12 +9028,13 @@ html:not([data-theme="pitch"]) .view.sub.md-wrap .intel-scoop-hd h3 {
   transform: translateY(-6px);
   transition: opacity .22s ease, transform .22s ease;
   pointer-events: none;
-  overflow: visible;
+  overflow: hidden;
+  background: #0A0B0E;
 }
 .hero-sticky-bg {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 0 !important;
   overflow: hidden;
   pointer-events: none;
 }
@@ -9076,7 +9054,7 @@ html[data-theme="pitch"] .view.sub.md-wrap.is-hero-stuck .dtabs,
 html[data-theme="pitch"] .view.sub.md-wrap--review.is-hero-stuck .dtabs {
   top: calc(var(--sat, 0px) + 52px);
 }
-.hero-sticky-bar > * { position: relative; z-index: 1; }
+.hero-sticky-bar > *:not(.hero-sticky-bg) { position: relative; z-index: 1; }
 .hero-sticky-bar .ic-btn.hero-ic,
 .hero-sticky-bar .ic-btn.hero-ic.md-back {
   width: 32px;
@@ -9110,10 +9088,24 @@ html[data-theme="pitch"] .view.sub.md-wrap--review.is-hero-stuck .dtabs {
   border-width: 0;
   flex: none;
 }
-.hero-sticky-mid .badge.crest img {
+.hero-sticky-mid .badge.crest.flag,
+.hero-sticky-mid .badge.flag {
+  width: 30px;
+  height: 20px;
+  min-width: 30px;
+  min-height: 20px;
+  max-width: 30px;
+  max-height: 20px;
+  aspect-ratio: 3 / 2;
+  border-radius: 1px !important;
+  overflow: hidden !important;
+}
+.hero-sticky-mid .badge.crest img,
+.hero-sticky-mid .badge.crest.flag img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  object-position: center;
   border-radius: 0;
 }
 .hero-sticky-score {
@@ -9162,18 +9154,21 @@ html[data-theme="pitch"] .view.sub.md-wrap--review.is-hero-stuck .dtabs {
 .hero-sticky-fav svg { width: 18px; height: 18px; }
 .hero-sticky-fav.on { color: #f5c14a !important; }
 
-/* preview 368: cloudy uses opaque premultiplied stops mixed onto #0A0B0E.
-   Partial-alpha veils over the charcoal Neutral B glow dithered into 颗粒感
-   on Android WebView (same class of bug as the 361 glow). Cloud ellipses
-   stay in the upper sky so mid-side team glows remain visible. */
+/* preview 369: cloudy stays in the upper sky only. The previous full-layer
+   opaque #0A0B0E ramps covered mid-side team glows (looked like a flat black
+   hero). Clouds are opaque inside this band; mid-sides show the glow beneath.
+   No full-hero alpha veil (that dithered into 颗粒感 on Android WebView). */
 .hero.hero--weather[data-weather="cloudy"] .hero-wx-sky,
 .hero-sticky[data-weather="cloudy"] .hero-wx-sky {
   opacity: 1;
+  top: 0;
+  bottom: auto;
+  height: 46%;
   background:
-    radial-gradient(ellipse 62% 38% at 22% 12%, rgb(66 69 74) 0%, rgb(36 38 43) 46%, rgb(10 11 14) 74%),
-    radial-gradient(ellipse 54% 32% at 78% 8%, rgb(49 52 57) 0%, rgb(28 30 35) 50%, rgb(10 11 14) 76%),
-    radial-gradient(ellipse 48% 28% at 50% 0%, rgb(41 48 58) 0%, rgb(18 20 24) 58%, rgb(10 11 14) 80%);
-  background-size: 130% 130%;
+    radial-gradient(ellipse 70% 70% at 22% 28%, rgb(74 78 84) 0%, rgb(48 52 58) 42%, rgb(28 30 34) 70%, rgb(18 19 22) 100%),
+    radial-gradient(ellipse 62% 64% at 78% 18%, rgb(58 62 70) 0%, rgb(38 42 48) 48%, rgb(22 24 28) 78%, rgb(16 17 20) 100%),
+    radial-gradient(ellipse 80% 58% at 50% 0%, rgb(52 60 72) 0%, rgb(30 34 40) 55%, rgb(18 20 24) 100%);
+  background-size: 120% 120%;
   animation: wx-drift 16s linear infinite alternate;
 }
 .hero.hero--weather[data-weather="cloudy"] .hero-wx-scrim,
@@ -9613,15 +9608,17 @@ html[data-theme="pitch"] .live-tl-card { background: #1a2336; }
 html[data-theme="pitch"] .live-c-meta { border-color: #243044; }
 html[data-theme="pitch"] .live-c-row { border-color: #243044; }
 
-/* Sticky bar reuses the same weather layers as the large hero, scaled down. */
+/* preview 369: sticky bar is a continuous top crop of the same weather sky. */
 .hero-sticky[data-weather="sunny"] .hero-wx-sky,
 .hero-sticky[data-weather="light-rain"] .hero-wx-sky,
 .hero-sticky[data-weather="rain"] .hero-wx-sky,
 .hero-sticky[data-weather="storm"] .hero-wx-sky {
   opacity: 1;
-  background-size: 124% 124%;
+  background-size: cover;
   background-repeat: no-repeat;
-  animation: wx-drift 14s linear infinite alternate;
+  background-position: center 16%;
+  transform-origin: center top;
+  animation: wx-drift-sky 18s ease-in-out infinite alternate;
 }
 .hero-sticky[data-weather="sunny"] .hero-wx-sky {
   background-image: url("assets/weather/sunny.webp");
@@ -9631,6 +9628,8 @@ html[data-theme="pitch"] .live-c-row { border-color: #243044; }
   background-image: url("assets/weather/light-rain.webp");
 }
 .hero-sticky[data-weather="storm"] .hero-wx-sky {
-  background-image: url("assets/weather/light-rain.webp");
-  filter: brightness(0.68) saturate(0.78) contrast(1.12);
+  background-image: url("assets/weather/storm.webp");
+}
+.hero-sticky .hero-wx-glow:not([style*="background"]) {
+  background: #0A0B0E;
 }
