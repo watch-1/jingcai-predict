@@ -8583,22 +8583,23 @@ html[data-theme="pitch"] .hero.hero--weather {
   max-width: 92vw;
 }
 .hero-lg-plate {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(236, 232, 224, .92);
-  display: inline-grid;
-  place-items: center;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .28);
-  overflow: hidden;
+  box-shadow: none;
+  overflow: visible;
 }
 .hero-lg-ico {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   object-fit: contain;
   flex: none;
-  filter: none;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .55));
 }
 .hero-lg-name {
   font-size: 13px;
@@ -8856,6 +8857,58 @@ html:not([data-theme="pitch"]) .view.sub.md-wrap .intel-scoop-hd h3 {
 }
 .hero-lg-plate.is-empty::after {
   content: none;
+}
+
+/* ---------- preview 367: unframed league mark, tight title+time in nav center, no hero 身价 ---------- */
+.hero.hero--weather .hero-edge-nav {
+  position: relative;
+  min-height: calc(var(--sat, 0px) + 4px + 32px + 14px);
+  padding-bottom: 14px;
+}
+.hero.hero--weather .hero-edge-mid {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(var(--sat, 0px) + 4px);
+  width: calc(100% - 112px);
+  max-width: 78vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1px;
+  z-index: 2;
+  pointer-events: none;
+}
+.hero-lg-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.15;
+}
+.hero.hero--weather .hero-lg-name {
+  font-size: 13px;
+  font-weight: 650;
+}
+.hero.hero--weather .hero-lg-date {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(220, 226, 234, .88);
+  letter-spacing: .02em;
+  margin: 0;
+}
+.hero.hero--weather .meta {
+  margin-top: 2px;
+  gap: 0;
+}
+.hero.hero--weather .teams {
+  margin-top: 8px;
+}
+.hero.hero--weather .tm .tm-mv {
+  display: none !important;
 }
 .hero-sticky {
   position: sticky;

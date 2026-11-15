@@ -588,19 +588,30 @@ function bundledCrestPath(teamId) {
   if (_bundledCrestIds.has(tid)) return BUNDLED_CREST_BASE + tid + '.png';
   return '';
 }
-/* Bundled files are ESPN club ids. Jingcai national-team ids can collide (359 = 阿森纳 club vs 亚美尼亚). */
+/* Bundled files are ESPN-500 club ids. Jingcai/sporttery ids are a different namespace
+   (359 = 亚美尼亚 vs Arsenal, 367 = 塞浦路斯 vs Tottenham). Never treat jingcai ids as ESPN ids. */
 function isNationalFlagLogo(logo) {
   return /teamlogos\/countries\/|\/flags\/|flagcdn|country.?flag/i.test(String(logo || ''));
 }
+function espnIdFromCrestLogo(logo) {
+  const m = String(logo || '').match(/\/teamlogos\/soccer\/(?:500|50000)\/(\d+)\.(?:png|jpe?g)/i);
+  return m ? m[1] : '';
+}
 function bundledCrestFor(logo, teamId) {
   if (isNationalFlagLogo(logo)) return '';
-  return bundledCrestPath(teamId);
+  const espnId = espnIdFromCrestLogo(logo);
+  if (espnId) return bundledCrestPath(espnId);
+  return '';
 }
 
 function crestCacheKey(logo, teamId) {
+  const url = String(logo || '');
   const tid = teamId != null && String(teamId) !== '' ? String(teamId) : '';
+  // Include the logo URL so a national flag cannot reuse a tid-only club blob
+  // (old IDB/mem keys like tid:359 stay unused after this change).
+  if (url) return (tid ? 'tid:' + tid + '|' : '') + 'url:' + url;
   if (tid) return 'tid:' + tid;
-  return 'url:' + String(logo || '');
+  return '';
 }
 
 function openCrestDb() {
@@ -725,7 +736,7 @@ function hydrateTribeCrests(root) {
       const logo = wrap.getAttribute('data-crest-logo') || '';
       const tid = wrap.getAttribute('data-team-id') || '';
       if (!key || !logo) return;
-      const bundled = bundledCrestPath(tid);
+      const bundled = bundledCrestFor(logo, tid);
       const srcNow = img.getAttribute('src') || '';
       const onBundled = bundled && srcNow === bundled;
       if (onBundled && img.complete && img.naturalWidth > 0) return;
@@ -2596,9 +2607,10 @@ function matchFavBtn(x) {
   return `<button type="button" class="fav-btn ${isFav(x.id) ? 'on' : ''}" data-act="fav" data-id="${esc(x.id)}">${isFav(x.id) ? I.star + '已关注' : I.starO + '关注'}</button>`;
 }
 
-function matchEdgeNavBar(rightHtml) {
+function matchEdgeNavBar(rightHtml, centerHtml) {
   return `<div class="hero-edge-nav" aria-label="赛事导航">
     <button type="button" class="ic-btn hero-ic md-back" data-act="back" aria-label="返回">${I.back}</button>
+    ${centerHtml ? `<div class="hero-edge-mid">${centerHtml}</div>` : ''}
     <div class="hero-edge-r">${rightHtml || '<span class="ph"></span>'}</div>
   </div>`;
 }
@@ -12278,7 +12290,7 @@ function onLeagueLogoError(img) {
   img.style.display = 'none';
   img.removeAttribute('src');
   const plate = img.parentNode;
-  if (plate && plate.classList) plate.classList.add('is-empty');
+  if (plate && plate.classList && plate.classList.contains('hero-lg-plate')) plate.classList.add('is-empty');
 }
 try { window.onLeagueLogoError = onLeagueLogoError; } catch (_) {}
 function formatHeroKickoff(m) {
@@ -12299,13 +12311,14 @@ function leagueHeroMark(m) {
     const src = chain[0] || '';
     const alts = chain.slice(1).join('|');
     if (src) {
-      ico = `<span class="hero-lg-plate"><img class="hero-lg-ico" alt="" width="40" height="40" src="${esc(src)}"${alts ? ` data-alts="${esc(alts)}"` : ''} onerror="try{onLeagueLogoError(this)}catch(e){this.style.display='none'}"></span>`;
-    } else {
-      ico = `<span class="hero-lg-plate is-empty"></span>`;
+      ico = `<img class="hero-lg-ico" alt="" width="40" height="40" src="${esc(src)}"${alts ? ` data-alts="${esc(alts)}"` : ''} onerror="try{onLeagueLogoError(this)}catch(e){this.style.display='none'}">`;
     }
   }
   const when = formatHeroKickoff(m);
-  return `<div class="hero-lg">${ico}<span class="hero-lg-name">${esc(title)}</span></div>${when ? `<div class="hero-lg-date">${esc(when)}</div>` : ''}`;
+  return `<div class="hero-lg-block"><div class="hero-lg">${ico}<span class="hero-lg-name">${esc(title)}</span></div>${when ? `<div class="hero-lg-date">${esc(when)}</div>` : ''}</div>`;
+}
+function formatHeroRank(rank) {
+  return String(rank || '').replace(/Group\s*/gi, '小组');
 }
 function syncHeroWeatherMotion() {
   const off = !!(document.hidden || (typeof route === 'function' && route().name !== 'match'));
@@ -12626,16 +12639,17 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
   const mid = (hg != null && ag != null)
     ? `<div class="score num">${esc(hg)} : ${esc(ag)}</div><small>${half ? '半场 ' + esc(half) + ' · ' : ''}${esc(statusLab || (finished ? '完场' : '进行中'))}</small>`
     : `<div class="vs">VS</div><small>${started ? (finished ? '完场' : '已开赛 · 待开奖') : esc(x.time) + ' 开赛'}</small>`;
-  const nav = matchEdgeNavBar(favBtn);
+  const nav = matchEdgeNavBar(favBtn, leagueHeroMark(x));
   const wx = matchWeatherType(x);
   const homeGlow = teamGlowCached(x, 'home');
   const awayGlow = teamGlowCached(x, 'away');
   const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
   const heroBg = heroGlowGradient(homeGlow, awayGlow) + ', #0A0B0E';
-  let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="background:${esc(heroBg)}">${wxLayer}${nav}<div class="meta">${leagueHeroMark(x)}${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
-    <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo, { teamId: x.homeTeamId, eager: true })}<em class="tm-mv" id="tm-mv-h-${esc(id)}" hidden></em><span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small><i class="tm-tick" hidden></i></div>
+  const sample = x.sample ? '<div class="meta"><span class="sample-tag">示例数据</span></div>' : '';
+  let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="background:${esc(heroBg)}">${wxLayer}${nav}${sample}
+    <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo, { teamId: x.homeTeamId, eager: true })}<span>${esc(x.home)}</span><small>主队 ${esc(formatHeroRank(x.homeRank || ''))}</small><i class="tm-tick" hidden></i></div>
     <div class="mid">${mid}</div>
-    <div class="tm">${badge(x.away, 'lg', x.awayLogo, { teamId: x.awayTeamId, eager: true })}<em class="tm-mv" id="tm-mv-a-${esc(id)}" hidden></em><span>${esc(x.away)}</span><small>客队 ${esc(x.awayRank || '')}</small><i class="tm-tick" hidden></i></div></div></div>`;
+    <div class="tm">${badge(x.away, 'lg', x.awayLogo, { teamId: x.awayTeamId, eager: true })}<span>${esc(x.away)}</span><small>客队 ${esc(formatHeroRank(x.awayRank || ''))}</small><i class="tm-tick" hidden></i></div></div></div>`;
   return h;
 }
 
