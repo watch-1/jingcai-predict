@@ -588,6 +588,14 @@ function bundledCrestPath(teamId) {
   if (_bundledCrestIds.has(tid)) return BUNDLED_CREST_BASE + tid + '.png';
   return '';
 }
+/* Bundled files are ESPN club ids. Jingcai national-team ids can collide (359 = 阿森纳 club vs 亚美尼亚). */
+function isNationalFlagLogo(logo) {
+  return /teamlogos\/countries\/|\/flags\/|flagcdn|country.?flag/i.test(String(logo || ''));
+}
+function bundledCrestFor(logo, teamId) {
+  if (isNationalFlagLogo(logo)) return '';
+  return bundledCrestPath(teamId);
+}
 
 function crestCacheKey(logo, teamId) {
   const tid = teamId != null && String(teamId) !== '' ? String(teamId) : '';
@@ -753,7 +761,7 @@ function badge(name, cls = '', logo, opts) {
   const tid = opts && opts.teamId != null && opts.teamId !== '' ? String(opts.teamId) : '';
   const ckey = crestCacheKey(logo, tid);
   const apiUrl = API + '/api/logo?url=' + encodeURIComponent(logo);
-  const bundled = bundledCrestPath(tid);
+  const bundled = bundledCrestFor(logo, tid);
   // 1.9.202: APK-bundled crest first (zero network), then mem/IDB blob, then /api/logo
   let srcUrl = bundled || (_crestMem.has(ckey) ? _crestMem.get(ckey) : apiUrl);
   const src = esc(srcUrl);
@@ -11652,7 +11660,7 @@ function rememberTeamGlow(x, side, pack) {
 }
 function crestSampleSrc(logo, teamId) {
   const tid = teamId != null && teamId !== '' ? String(teamId) : '';
-  const bundled = tid && typeof bundledCrestPath === 'function' ? bundledCrestPath(tid) : '';
+  const bundled = tid && typeof bundledCrestFor === 'function' ? bundledCrestFor(logo, tid) : '';
   if (bundled) return bundled;
   const s = String(logo || '');
   if (!s) return '';

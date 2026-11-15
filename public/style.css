@@ -8552,6 +8552,8 @@ html[data-theme="pitch"] .hero.hero--weather {
   margin-top: 10px;
   column-gap: 8px;
 }
+.hero.hero--weather .teams > .tm:first-child { justify-self: start; }
+.hero.hero--weather .teams > .tm:last-child { justify-self: end; }
 .hero.hero--weather .tm {
   gap: 6px;
   font-size: 15px;
