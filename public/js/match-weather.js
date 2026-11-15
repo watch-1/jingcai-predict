@@ -1,4 +1,4 @@
-/* 365: client-side match weather via Open-Meteo (no production deploy required).
+/* 366: Open-Meteo fallback when /api/match-weather is missing or has no SportMonks data.
    Never invent temperature / wind / humidity / pressure. If a field is missing, leave it null. */
 (function (root) {
   'use strict';

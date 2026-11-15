@@ -11760,14 +11760,15 @@ function weatherCardHtml(x) {
   const hum = ok ? wxFmtHumidity(pack.humidity) : '—';
   const wind = ok ? wxFmtWind(pack.windMs) : '—';
   const pres = ok ? wxFmtPressure(pack) : '—';
-  let foot = '天气来源 Open-Meteo';
+  const srcName = (pack && /sportmonks/i.test(String(pack.source || ''))) ? 'SportMonks' : 'Open-Meteo';
+  let foot = '天气来源 ' + srcName;
   if (ok && pack.sourceNote) foot += ' · ' + pack.sourceNote;
   else if (pack && pack.sourceNote) foot += ' · ' + pack.sourceNote;
   else if (pack && pack.error) foot += ' · ' + pack.error;
-  else if (pending) foot += ' · 正在定位球场';
+  else if (pending) foot += ' · 正在读取天气';
   else foot += ' · 暂无本场天气';
   const cls = 'wx-slip' + (pending ? ' is-pending' : (ok ? '' : ' is-empty'));
-  return `<section class="${cls}" id="wx-card-${esc(id)}" data-wx="${esc(type)}" data-source="Open-Meteo">
+  return `<section class="${cls}" id="wx-card-${esc(id)}" data-wx="${esc(type)}" data-source="${esc(srcName)}">
     <div class="wx-slip-sky"><i class="wx-slip-sky-fx" aria-hidden="true"></i>
       <div class="wx-slip-kicker">${esc(dateLab || '比赛日')}</div>
       <div class="wx-slip-venue">${esc(venueLab)}</div>
@@ -11806,7 +11807,8 @@ async function ensureMatchWeather(x) {
   S.matchWeatherData = S.matchWeatherData || {};
   const hit = S.matchWeatherData[id];
   const age = hit && hit._at ? Date.now() - hit._at : Infinity;
-  if (hit && hit.ok && age < 30 * 60 * 1000) {
+  const hitTtl = (hit && /sportmonks/i.test(String(hit.source || ''))) ? 30 * 60 * 1000 : 10 * 60 * 1000;
+  if (hit && hit.ok && age < hitTtl) {
     applyMatchWeather(x, hit);
     return hit;
   }
@@ -11822,23 +11824,41 @@ async function ensureMatchWeather(x) {
     try { await loadLiveStats(x); } catch (_) {}
     venue = venueFromLive(x);
   }
+  function smUsable(pack) {
+    if (!pack || pack.ok !== true) return false;
+    if (pack.tempC != null || pack.humidity != null || pack.windMs != null || pack.pressureHpa != null) return true;
+    if (pack.type && pack.type !== 'neutral') return true;
+    if (pack.description) return true;
+    return false;
+  }
+  function cacheAndApply(pack, sourceFallback) {
+    const next = Object.assign({ source: sourceFallback || (pack && pack.source) || '' }, pack || {});
+    next._at = Date.now();
+    S.matchWeatherData[id] = next;
+    if (route().name === 'match' && String(route().arg) === id) applyMatchWeather(x, next);
+    return next;
+  }
+  try {
+    const q = new URLSearchParams();
+    if (x.id) q.set('matchId', x.id);
+    if (x.homeTeamId) q.set('homeTeamId', x.homeTeamId);
+    if (x.awayTeamId) q.set('awayTeamId', x.awayTeamId);
+    if (x.home) q.set('home', x.home);
+    if (x.away) q.set('away', x.away);
+    if (x.date) q.set('date', x.date);
+    if (x.time) q.set('time', x.time);
+    if (x.businessDate) q.set('businessDate', x.businessDate);
+    const sm = await api('/match-weather?' + q.toString(), { timeout: 10000 });
+    if (smUsable(sm)) return cacheAndApply(sm, 'sportmonks');
+  } catch (_) { /* 404 / network / not yet deployed → Open-Meteo */ }
   if (typeof JCWeather === 'undefined' || !JCWeather.load) {
-    const fail = { ok: false, status: 'fetch-failed', type: 'neutral', error: '天气组件未加载', source: 'Open-Meteo', _at: Date.now() };
-    S.matchWeatherData[id] = fail;
-    applyMatchWeather(x, fail);
-    return fail;
+    return cacheAndApply({ ok: false, status: 'fetch-failed', type: 'neutral', error: '天气组件未加载', source: 'Open-Meteo' }, 'Open-Meteo');
   }
   try {
     const pack = await JCWeather.load(x, venue);
-    pack._at = Date.now();
-    S.matchWeatherData[id] = pack;
-    if (route().name === 'match' && String(route().arg) === id) applyMatchWeather(x, pack);
-    return pack;
+    return cacheAndApply(pack, (pack && pack.source) || 'Open-Meteo');
   } catch (e) {
-    const fail = { ok: false, status: 'fetch-failed', type: 'neutral', error: '天气数据暂时不可用', source: 'Open-Meteo', _at: Date.now() };
-    S.matchWeatherData[id] = fail;
-    if (route().name === 'match' && String(route().arg) === id) applyMatchWeather(x, fail);
-    return fail;
+    return cacheAndApply({ ok: false, status: 'fetch-failed', type: 'neutral', error: '天气数据暂时不可用', source: 'Open-Meteo' }, 'Open-Meteo');
   }
 }
 

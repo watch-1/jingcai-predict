@@ -1660,6 +1660,57 @@ app.get('/api/live-stats', async (req, res) => {
   }
 });
 
+app.get('/api/match-weather', async (req, res) => {
+  try {
+    let matchId = String(req.query.matchId || '').trim();
+    let homeTeamId = String(req.query.homeTeamId || '').trim();
+    let awayTeamId = String(req.query.awayTeamId || '').trim();
+    let home = String(req.query.home || req.query.homeTeam || '').trim();
+    let away = String(req.query.away || req.query.awayTeam || '').trim();
+    let date = String(req.query.date || '').trim();
+    let time = String(req.query.time || '').trim();
+    let businessDate = String(req.query.businessDate || '').trim();
+
+    if (matchId || (homeTeamId && awayTeamId && !home)) {
+      const findIn = (list) => (list || []).find(m =>
+        (matchId && String(m.id) === matchId) ||
+        (homeTeamId && awayTeamId && String(m.homeTeamId) === homeTeamId && String(m.awayTeamId) === awayTeamId && (!date || m.date === date))
+      );
+      let hit = null;
+      for (const kind of ['schedule', 'matches', 'results']) {
+        try {
+          const payload = await getData(kind);
+          hit = findIn(payload.data);
+          if (hit) break;
+        } catch { /* ignore */ }
+      }
+      if (hit) {
+        matchId = matchId || String(hit.id);
+        homeTeamId = homeTeamId || String(hit.homeTeamId || '');
+        awayTeamId = awayTeamId || String(hit.awayTeamId || '');
+        home = home || hit.home || '';
+        away = away || hit.away || '';
+        date = date || hit.date || '';
+        time = time || hit.time || '';
+        businessDate = businessDate || hit.businessDate || '';
+      }
+    }
+
+    if (!matchId && !(homeTeamId && awayTeamId) && !(home && away && date)) {
+      return res.status(400).json({ ok: false, source: 'sportmonks', reason: 'bad_request', error: '需要 matchId，或 homeTeamId+awayTeamId，或 home+away+date' });
+    }
+
+    const kickoffMs = Date.parse(`${date || ''}T${String(time || '00:00').slice(0, 5)}:00+08:00`);
+    const payload = await require('./lib/match-weather').getMatchWeather({
+      matchId, homeTeamId, awayTeamId, home, away, date, time, businessDate,
+      kickoffMs: Number.isFinite(kickoffMs) ? kickoffMs : null,
+    });
+    res.json(payload);
+  } catch (e) {
+    res.status(502).json({ ok: false, source: 'sportmonks', reason: 'error', error: '天气数据暂时不可用' });
+  }
+});
+
 app.get('/api/match-stats', async (req, res) => {
   try {
     const homeTeamId = String(req.query.homeTeamId || '').trim();
