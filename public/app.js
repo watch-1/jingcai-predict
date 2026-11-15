@@ -12457,33 +12457,59 @@ function syncHeroWeatherMotion() {
   try { document.documentElement.classList.toggle('wx-paused', off); } catch (_) {}
 }
 
-/* preview 370: atmospheric rain is CSS (seamless plate); this canvas is
-   lens/screen droplets that sit and slowly slide, like water on glass. */
+/* preview 371: atmospheric rain stays CSS (seamless plate). This canvas
+   draws clear lens/screen droplets that refract the same weather sky
+   texture used by .hero-wx-sky — organic beads, soft Fresnel rims, tight
+   speculars, short wet traces. Not a filled sticker sheet. */
 const _heroRainLoops = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 const _heroRainAlive = [];
-const DROP_SHEET_SRC = 'assets/weather/drops.png';
-const DROP_CELL = 128;
-const DROP_COLS = 4;
-const DROP_ROWS = 3;
-let _dropSheet = null;
-let _dropSheetOk = false;
-let _dropSheetWait = [];
-function ensureDropSheet() {
-  if (_dropSheetOk) return;
-  if (_dropSheet) return;
-  const img = new Image();
-  _dropSheet = img;
-  img.onload = () => {
-    _dropSheetOk = !!(img.naturalWidth && img.naturalHeight);
-    const q = _dropSheetWait.splice(0);
-    q.forEach((fn) => { try { fn(); } catch (_) {} });
+const HERO_SKY_SRC = {
+  'light-rain': 'assets/weather/light-rain.webp',
+  rain: 'assets/weather/light-rain.webp',
+  storm: 'assets/weather/storm.webp',
+  sunny: 'assets/weather/sunny.webp',
+  cloudy: 'assets/weather/cloudy.webp'
+};
+const _heroSkyCache = Object.create(null);
+function ensureHeroSky(type, cb) {
+  const src = HERO_SKY_SRC[type] || HERO_SKY_SRC['light-rain'];
+  let rec = _heroSkyCache[src];
+  if (rec && rec.ok && rec.tile) {
+    if (cb) cb(rec);
+    return rec;
+  }
+  if (rec && rec.img) {
+    if (cb) rec.wait.push(cb);
+    return rec;
+  }
+  rec = { img: new Image(), ok: false, tile: null, wait: cb ? [cb] : [] };
+  _heroSkyCache[src] = rec;
+  rec.img.onload = () => {
+    rec.ok = !!(rec.img.naturalWidth && rec.img.naturalHeight);
+    if (rec.ok) {
+      try {
+        const c = document.createElement('canvas');
+        c.width = rec.img.naturalWidth * 2;
+        c.height = rec.img.naturalHeight;
+        const g = c.getContext('2d');
+        if (g) {
+          g.drawImage(rec.img, 0, 0);
+          g.drawImage(rec.img, rec.img.naturalWidth, 0);
+          rec.tile = c;
+        } else rec.ok = false;
+      } catch (_) { rec.ok = false; }
+    }
+    const q = rec.wait.splice(0);
+    q.forEach((fn) => { try { fn(rec); } catch (_) {} });
   };
-  img.onerror = () => {
-    _dropSheetOk = false;
-    const q = _dropSheetWait.splice(0);
-    q.forEach((fn) => { try { fn(); } catch (_) {} });
+  rec.img.onerror = () => {
+    rec.ok = false;
+    rec.tile = null;
+    const q = rec.wait.splice(0);
+    q.forEach((fn) => { try { fn(rec); } catch (_) {} });
   };
-  img.src = DROP_SHEET_SRC;
+  rec.img.src = src;
+  return rec;
 }
 function rainDropCount(type, compact) {
   if (type === 'light-rain') return compact ? 7 : 14;
@@ -12516,6 +12542,58 @@ function bindHeroRainDrops(root) {
     : [];
   nodes.forEach((el) => { try { startHeroRain(el); } catch (_) {} });
 }
+function _cssLen(val, ref) {
+  if (!val || val === 'auto' || val === 'none') return null;
+  const n = parseFloat(val);
+  if (!Number.isFinite(n)) return null;
+  if (val.indexOf('%') >= 0) return n / 100 * (ref || 0);
+  return n;
+}
+function _parseTx(tr) {
+  if (!tr || tr === 'none') return null;
+  const m3 = /^matrix3d\((.+)\)$/.exec(tr);
+  if (m3) {
+    const p = m3[1].split(',');
+    const tx = parseFloat(p[12]);
+    return Number.isFinite(tx) ? tx : null;
+  }
+  const m = /^matrix\((.+)\)$/.exec(tr);
+  if (m) {
+    const p = m[1].split(',');
+    const tx = parseFloat(p[4]);
+    return Number.isFinite(tx) ? tx : null;
+  }
+  return null;
+}
+function _skyLayout(host, compact, cssW, cssH) {
+  let top = compact ? 0 : -0.18 * cssH;
+  let tileH = (compact ? 2.2 : 1.36) * cssH;
+  let tileW = cssW;
+  let panX = 0;
+  let gotPan = false;
+  const sky = host && host.querySelector ? host.querySelector('.hero-wx-sky') : null;
+  if (sky) {
+    try {
+      const cs = window.getComputedStyle(sky, '::before');
+      if (cs) {
+        const t = _cssLen(cs.top, cssH);
+        const h = _cssLen(cs.height, cssH);
+        if (t != null) top = t;
+        if (h != null && h > 1) tileH = h;
+        const bw = _cssLen(cs.width, cssW);
+        if (bw != null && bw > 1) tileW = bw * 0.5;
+        const tx = _parseTx(cs.transform);
+        if (tx != null) { panX = tx; gotPan = true; }
+      }
+    } catch (_) {}
+  }
+  if (!gotPan) {
+    const dur = 52;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+    panX = -((now % dur) / dur) * tileW;
+  }
+  return { top: top, tileW: tileW, tileH: tileH, panX: panX };
+}
 function startHeroRain(el) {
   if (!el) return;
   const host = el.closest('.hero.hero--weather, .hero-sticky');
@@ -12526,23 +12604,22 @@ function startHeroRain(el) {
   if (prev && !prev.dead && prev.type === type && prev.n === n && el.querySelector('canvas.hero-wx-drops')) return;
   stopHeroRain(el);
   if (!n) return;
-  ensureDropSheet();
+  const skyRec = ensureHeroSky(type);
   const canvas = document.createElement('canvas');
   canvas.className = 'hero-wx-drops';
   canvas.setAttribute('aria-hidden', 'true');
   el.appendChild(canvas);
   const st = {
-    dead: false, type, n, compact, canvas, drops: [], trails: [],
+    dead: false, type, n, compact, canvas, host, skyRec, drops: [],
     last: 0, raf: 0, dpr: 1, w: 0, h: 0, cssW: 0, cssH: 0
   };
   if (_heroRainLoops) _heroRainLoops.set(el, st);
   _heroRainAlive.push(el);
   const rollKind = () => {
     const r = Math.random();
-    if (r < 0.55) return { kind: Math.floor(Math.random() * 4), shape: 'bead' };
-    if (r < 0.82) return { kind: 4 + Math.floor(Math.random() * 4), shape: 'tear' };
-    if (r < 0.92) return { kind: 8 + Math.floor(Math.random() * 2), shape: 'trail' };
-    return { kind: 10 + Math.floor(Math.random() * 2), shape: Math.random() < 0.5 ? 'bead' : 'tear' };
+    if (r < 0.55) return { shape: 'bead', tear: Math.random() * 0.08 };
+    if (r < 0.84) return { shape: 'tear', tear: 0.22 + Math.random() * 0.16 };
+    return { shape: 'trail', tear: 0.42 + Math.random() * 0.16 };
   };
   const spawn = (anywhere) => {
     const dpr = st.dpr || 1;
@@ -12559,16 +12636,29 @@ function startHeroRain(el) {
       x: Math.random() * Math.max(2, st.w || 2),
       y: anywhere ? Math.random() * Math.max(2, st.h || 2) : Math.random() * Math.max(2, (st.h || 2) * 0.85),
       size: size * dpr,
-      kind: meta.kind,
       shape: meta.shape,
+      tear: meta.tear,
       sitting,
       vy: slide ? (8 + Math.random() * 16 + size * 0.4) * dpr * (compact ? 0.7 : 1) : 0,
       vx: slide ? (Math.random() - 0.45) * 5 * dpr : (Math.random() - 0.5) * 0.6 * dpr,
       wait: sitting ? 1.2 + Math.random() * 7 : 0,
       rot: (Math.random() - 0.5) * 0.18,
-      alpha: anywhere ? (0.72 + Math.random() * 0.28) : 0,
+      alpha: anywhere ? (0.82 + Math.random() * 0.18) : 0,
       fade: anywhere ? 0 : (0.9 + Math.random() * 0.6),
-      path: []
+      path: [],
+      a1: 0.04 + Math.random() * 0.08,
+      p1: Math.random() * Math.PI * 2,
+      a2: 0.02 + Math.random() * 0.06,
+      p2: Math.random() * Math.PI * 2,
+      a3: 0.01 + Math.random() * 0.035,
+      p3: Math.random() * Math.PI * 2,
+      sy: meta.shape === 'bead' ? (1.02 + Math.random() * 0.10) : (1.06 + Math.random() * 0.12),
+      fov: 0.42 + Math.random() * 0.20,
+      loffx: Math.random() * 0.55 - 0.35,
+      loffy: Math.random() * 0.55 - 0.45,
+      hx: 0.18 + Math.random() * 0.18,
+      hy: 0.26 + Math.random() * 0.20,
+      hs: 0.09 + Math.random() * 0.05
     };
   };
   const startSlide = (d) => {
@@ -12599,47 +12689,50 @@ function startHeroRain(el) {
       }
     }
   };
-  const drawProcedural = (ctx, d) => {
-    const r = Math.max(1.2, d.size * 0.5);
-    ctx.save();
-    ctx.translate(d.x, d.y);
-    ctx.rotate(d.rot || 0);
-    ctx.globalAlpha = d.alpha;
-    const sy = d.shape === 'bead' ? 1.08 : (d.shape === 'trail' ? 1.55 : 1.28);
-    ctx.scale(1, sy);
+  const dropPath = (ctx, d, r) => {
+    const segs = 16;
+    const tear = d.tear || 0;
+    const sy = d.sy || 1;
     ctx.beginPath();
-    ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(210,226,240,0.08)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(16,20,26,0.38)';
-    ctx.lineWidth = Math.max(0.7, r * 0.08);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(0, r * 0.15, r * 0.92, r * 0.85, 0, 0.12 * Math.PI, 0.88 * Math.PI);
-    ctx.strokeStyle = 'rgba(10,12,16,0.42)';
-    ctx.lineWidth = Math.max(0.8, r * 0.1);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(0, 0, r * 0.78, r * 0.78, 0, -0.95 * Math.PI, -0.15 * Math.PI);
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-    ctx.lineWidth = Math.max(0.6, r * 0.07);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.beginPath();
-    ctx.ellipse(-r * 0.28, -r * 0.38, Math.max(0.5, r * 0.18), Math.max(0.35, r * 0.1), -0.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      const a = t * Math.PI * 2 - Math.PI / 2;
+      const rr = r * (1 + d.a1 * Math.sin(a * 2 + d.p1) + d.a2 * Math.sin(a * 3 + d.p2) + d.a3 * Math.sin(a * 5 + d.p3));
+      let x = Math.cos(a) * rr;
+      let y = Math.sin(a) * rr * sy;
+      if (tear) {
+        const down = Math.max(0, Math.min(1, (y / (r * sy) + 1) * 0.5));
+        y += tear * r * down * down;
+        x *= 1 - tear * 0.38 * down;
+      }
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
   };
   const drawTrail = (ctx, d) => {
     if (!d.path || d.path.length < 2) return;
     ctx.save();
     ctx.globalCompositeOperation = 'source-over';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     for (let i = 1; i < d.path.length; i++) {
       const p = d.path[i];
       const q = d.path[i - 1];
-      const t = i / d.path.length;
-      ctx.strokeStyle = 'rgba(220,232,245,' + (0.08 + 0.16 * t * d.alpha).toFixed(3) + ')';
-      ctx.lineWidth = Math.max(0.6, d.size * 0.08 * t);
+      const t = i / (d.path.length - 1);
+      ctx.strokeStyle = 'rgba(8,10,14,' + (0.04 + 0.14 * t * d.alpha).toFixed(3) + ')';
+      ctx.lineWidth = Math.max(0.8, d.size * 0.28 * (0.28 + 0.72 * t));
+      ctx.beginPath();
+      ctx.moveTo(q.x, q.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+    for (let i = 1; i < d.path.length; i++) {
+      const p = d.path[i];
+      const q = d.path[i - 1];
+      const t = i / (d.path.length - 1);
+      ctx.strokeStyle = 'rgba(220,230,240,' + (0.025 + 0.05 * t * d.alpha).toFixed(3) + ')';
+      ctx.lineWidth = Math.max(0.5, d.size * 0.08 * (0.3 + 0.7 * t));
       ctx.beginPath();
       ctx.moveTo(q.x, q.y);
       ctx.lineTo(p.x, p.y);
@@ -12647,23 +12740,115 @@ function startHeroRain(el) {
     }
     ctx.restore();
   };
-  const drawDrop = (ctx, d) => {
+  const drawSkyInside = (ctx, d, r, layout, tile) => {
+    if (!tile || !tile.width || !layout.tileW || !layout.tileH) return false;
+    const dpr = st.dpr || 1;
+    const imgW = tile.width / 2;
+    const imgH = tile.height;
+    const fov = d.fov || 0.55;
+    const box = r * (1.2 + (d.tear || 0) * 0.6);
+    const cssX = d.x / dpr;
+    const cssY = d.y / dpr;
+    const rCss = box / dpr;
+    let u = (cssX - layout.panX) / layout.tileW;
+    u -= Math.floor(u);
+    let v = (cssY - layout.top) / layout.tileH;
+    u += (d.loffx || 0) * (r / dpr) / layout.tileW;
+    v += (d.loffy || 0) * (r / dpr) / layout.tileH;
+    v = Math.max(0, Math.min(1, v));
+    u -= Math.floor(u);
+    const srcW = Math.max(2, (2 * rCss / layout.tileW) * imgW / fov);
+    const srcH = Math.max(2, (2 * rCss / layout.tileH) * imgH / fov);
+    let sx = u * imgW - srcW / 2;
+    sx = ((sx % imgW) + imgW) % imgW;
+    let sy = v * imgH - srcH / 2;
+    if (sy < 0) sy = 0;
+    if (sy + srcH > imgH) sy = Math.max(0, imgH - srcH);
+    try {
+      ctx.drawImage(tile, sx, sy, srcW, srcH, -box, -box, box * 2, box * 2);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
+  const drawProcedural = (ctx, d, r) => {
+    /* Clear-glass fallback when the sky texture is not ready. Almost
+       transparent body, soft rim, tight specular — not a pale-blue bead. */
+    const g = ctx.createRadialGradient(-r * 0.1, -r * 0.22, r * 0.08, 0, r * 0.06, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.07)');
+    g.addColorStop(0.55, 'rgba(16,20,26,0.04)');
+    g.addColorStop(1, 'rgba(6,8,12,0.16)');
+    ctx.fillStyle = g;
+    dropPath(ctx, d, r);
+    ctx.fill();
+  };
+  const drawGlass = (ctx, d, r) => {
+    ctx.globalCompositeOperation = 'source-atop';
+    const fres = ctx.createRadialGradient(-r * 0.12, -r * 0.22, r * 0.10, 0, r * 0.10, r);
+    fres.addColorStop(0, 'rgba(255,255,255,0.08)');
+    fres.addColorStop(0.52, 'rgba(255,255,255,0.00)');
+    fres.addColorStop(0.78, 'rgba(0,0,0,0.06)');
+    fres.addColorStop(0.92, 'rgba(0,0,0,0.30)');
+    fres.addColorStop(1, 'rgba(0,0,0,0.42)');
+    ctx.fillStyle = fres;
+    dropPath(ctx, d, r);
+    ctx.fill();
+    const bot = ctx.createRadialGradient(0, r * 0.48, 0, 0, r * 0.55, r * 0.9);
+    bot.addColorStop(0, 'rgba(0,0,0,0.16)');
+    bot.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bot;
+    ctx.beginPath();
+    ctx.ellipse(0, r * 0.52, r * 0.82, r * 0.38, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.86, r * 0.86 * (d.sy || 1), 0, -0.95 * Math.PI, -0.12 * Math.PI);
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = Math.max(0.6, r * 0.055);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'lighter';
+    const hx = -r * (d.hx || 0.28);
+    const hy = -r * (d.hy || 0.36);
+    const hs = Math.max(0.7, r * (d.hs || 0.12));
+    const spec = ctx.createRadialGradient(hx, hy, 0, hx, hy, hs);
+    spec.addColorStop(0, 'rgba(255,255,255,0.78)');
+    spec.addColorStop(0.32, 'rgba(255,255,255,0.28)');
+    spec.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = spec;
+    ctx.beginPath();
+    ctx.ellipse(hx, hy, hs, hs * 0.60, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(hx + hs * 1.15, hy + hs * 0.7, hs * 0.28, hs * 0.18, -0.3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  };
+  const drawDrop = (ctx, d, layout) => {
     if (d.alpha <= 0.01) return;
     drawTrail(ctx, d);
-    if (_dropSheetOk && _dropSheet && _dropSheet.naturalWidth) {
-      const cell = DROP_CELL;
-      const col = d.kind % DROP_COLS;
-      const row = Math.min(DROP_ROWS - 1, Math.floor(d.kind / DROP_COLS));
-      const s = d.size;
-      ctx.save();
-      ctx.translate(d.x, d.y);
-      ctx.rotate(d.rot || 0);
-      ctx.globalAlpha = d.alpha;
-      ctx.drawImage(_dropSheet, col * cell, row * cell, cell, cell, -s, -s, s * 2, s * 2);
-      ctx.restore();
-      return;
-    }
-    drawProcedural(ctx, d);
+    const r = Math.max(1.2, d.size * 0.5);
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.rotate(d.rot || 0);
+    ctx.globalAlpha = d.alpha;
+    const sh = ctx.createRadialGradient(0, r * 0.5, 0, 0, r * 0.55, r * 0.95);
+    sh.addColorStop(0, 'rgba(0,0,0,0.22)');
+    sh.addColorStop(0.55, 'rgba(0,0,0,0.08)');
+    sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh;
+    ctx.beginPath();
+    ctx.ellipse(0, r * (0.50 + (d.tear || 0) * 0.25), r * 0.85, r * 0.36, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    dropPath(ctx, d, r);
+    ctx.clip();
+    const rec = st.skyRec;
+    const tiled = rec && rec.ok && rec.tile;
+    const drew = tiled ? drawSkyInside(ctx, d, r, layout, rec.tile) : false;
+    if (!drew) drawProcedural(ctx, d, r);
+    drawGlass(ctx, d, r);
+    ctx.restore();
+    ctx.restore();
   };
   const tick = (now) => {
     if (st.dead) return;
@@ -12674,8 +12859,13 @@ function startHeroRain(el) {
     st.last = now;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    ctx.imageSmoothingEnabled = true;
+    try { ctx.imageSmoothingQuality = 'high'; } catch (_) {}
     ctx.clearRect(0, 0, st.w, st.h);
+    const layout = _skyLayout(st.host, compact, st.cssW, st.cssH);
     while (st.drops.length < n) st.drops.push(spawn(false));
+    const maxTrail = Math.max(18, 36 * (st.dpr || 1));
+    const minStep = 2 * (st.dpr || 1);
     for (const d of st.drops) {
       if (d.alpha < 1 && d.fade >= 0) {
         d.alpha = Math.min(1, d.alpha + dt / (d.fade || 0.8));
@@ -12689,20 +12879,27 @@ function startHeroRain(el) {
         d.y += d.vy * dt;
         d.vy += 6 * (st.dpr || 1) * dt;
         d.vy = Math.min(d.vy, 42 * (st.dpr || 1));
-        d.path.push({ x: d.x, y: d.y });
-        if (d.path.length > 14) d.path.shift();
+        const last = d.path.length ? d.path[d.path.length - 1] : null;
+        if (!last || Math.hypot(d.x - last.x, d.y - last.y) >= minStep) {
+          d.path.push({ x: d.x, y: d.y });
+        }
+        let span = 0;
+        for (let i = 1; i < d.path.length; i++) {
+          span += Math.hypot(d.path[i].x - d.path[i - 1].x, d.path[i].y - d.path[i - 1].y);
+        }
+        while (d.path.length > 2 && span > maxTrail) {
+          const a = d.path.shift();
+          span -= Math.hypot(d.path[0].x - a.x, d.path[0].y - a.y);
+        }
       }
       if (d.y - d.size > st.h + 8 || d.x < -40 || d.x > st.w + 40) {
         Object.assign(d, spawn(false));
         continue;
       }
-      drawDrop(ctx, d);
+      drawDrop(ctx, d, layout);
     }
   };
   resize();
-  const kick = () => { if (!st.dead && !st.raf) st.raf = requestAnimationFrame(tick); };
-  if (_dropSheetOk) kick();
-  else _dropSheetWait.push(kick);
   st.raf = requestAnimationFrame(tick);
   if (typeof ResizeObserver !== 'undefined' && !el._heroRainRo) {
     el._heroRainRo = new ResizeObserver(() => { try { resize(); } catch (_) {} });
