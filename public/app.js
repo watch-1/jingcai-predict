@@ -1092,7 +1092,7 @@ async function loadData(kind, force) {
     if (c) j = { ...c, fromCache: true };
     else { const SM = window.SAMPLE; j = { source: 'sample', local: true, note: '无法连接服务器，当前展示内置示例数据（非真实赛事/赔率）', fetchedAt: new Date().toISOString(), data: kind === 'results' ? SM.results() : SM.matches() }; }
   }
-  if (kind === 'matches') { S.matches = j.data; S.msrc = j; try { warmupMatchWeather(j.data); } catch (_) {} }
+  if (kind === 'matches') { S.matches = j.data; S.msrc = j; try { warmupMatchWeather(j.data); } catch (_) {} try { warmupMatchOddsAndReports(j.data); } catch (_) {} }
   else if (kind === 'schedule') { S.schedule = j.data; S.ssrc = j; }
   else { S.results = j.data; S.rsrc = j; }
 }
@@ -5840,6 +5840,7 @@ function pageSchedule() {
   const allDayIds = classifiedDay.map(x => String(x.id));
   if (allDayIds.length) {
     try { warmupMatchWeather(classifiedDay); } catch (_) {}
+    try { warmupMatchOddsAndReports(classifiedDay); } catch (_) {}
     setTimeout(async () => {
       const pending = scheduleNeedLivePoll(classifiedDay, model.counts);
       const missing = allDayIds.some(id => !(S.liveScores && S.liveScores[id]));
@@ -8815,6 +8816,7 @@ async function loadMatchStats(x) {
     return { ok: false, homeForm: { matches: [], summary: { w: 0, d: 0, l: 0 } }, awayForm: { matches: [], summary: { w: 0, d: 0, l: 0 } }, h2h: { matches: [], summary: { homeWins: 0, draws: 0, awayWins: 0 } } };
   }
 }
+const _predictReportInflight = Object.create(null);
 async function loadPredictReport(m, { force } = {}) {
   if (!m || !m.id) return null;
   const id = String(m.id);
@@ -8830,6 +8832,8 @@ async function loadPredictReport(m, { force } = {}) {
       if (!(ai && ai.pending)) return cached;
     }
   }
+  if (!force && _predictReportInflight[id]) return _predictReportInflight[id];
+  const predJob = (async () => {
   try {
     const q = '/predict-report?matchId=' + encodeURIComponent(id) + (force ? '&refresh=1' : '') + prematchQ;
     const j = await api(q, { timeout: prematchQ ? 45000 : 20000 });
@@ -8860,6 +8864,11 @@ async function loadPredictReport(m, { force } = {}) {
       }
     }
     return S.predictCache[id];
+  }
+  })();
+  _predictReportInflight[id] = predJob;
+  try { return await predJob; } finally {
+    if (_predictReportInflight[id] === predJob) delete _predictReportInflight[id];
   }
 }
 
@@ -12868,6 +12877,7 @@ function formatOddsAge(iso) {
   return (iso.replace('T', ' ').slice(0, 16));
 }
 /** Prefer live full sheet before kickoff; after KO use frozen snapshot. */
+const _oddsSnapInflight = Object.create(null);
 async function loadOddsSnapshot(matchId, date, x) {
   const id = String(matchId || '');
   if (!id) return null;
@@ -12880,7 +12890,10 @@ async function loadOddsSnapshot(matchId, date, x) {
   // 60s poll, even though the server is already fine.
   if (cache[key] && cache[key].ok !== false && cache[key].pools
       && Date.now() - (cache[key]._at || 0) < (started ? 120e3 : 45e3)) return cache[key];
+  if (_oddsSnapInflight[key]) return _oddsSnapInflight[key];
+  const oddsJob = (async () => {
   const fetchOnce = async () => {
+    // After kickoff, use the frozen snapshot only — odds-live is off sale.
     if (!started) {
       const live = await api('/odds-live?matchId=' + encodeURIComponent(id), { timeout: 12000 });
       if (live && live.ok && live.pools) {
@@ -12909,6 +12922,54 @@ async function loadOddsSnapshot(matchId, date, x) {
   } catch (e) {
     return { ok: false, reason: 'error', error: e.message || '加载失败' };
   }
+  })();
+  _oddsSnapInflight[key] = oddsJob;
+  try { return await oddsJob; } finally {
+    if (_oddsSnapInflight[key] === oddsJob) delete _oddsSnapInflight[key];
+  }
+}
+
+function warmupMatchOddsAndReports(list, opts) {
+  const concurrency = (opts && opts.concurrency) || 3;
+  const limit = (opts && opts.limit) || 32;
+  const items = Array.isArray(list) ? list : [];
+  const todo = [];
+  const seen = Object.create(null);
+  const cache = typeof oddsSnapCache === 'function' ? oddsSnapCache() : {};
+  S.predictCache = S.predictCache || {};
+  for (let i = 0; i < items.length; i++) {
+    const x = items[i];
+    if (!x || !x.id) continue;
+    const id = String(x.id);
+    if (seen[id]) continue;
+    seen[id] = true;
+    const pred = S.predictCache[id];
+    const predOk = predictReportFull(pred);
+    const snapKey = id + '|' + (x.date || '');
+    const snap = cache[snapKey];
+    const ko = typeof matchKickoffMs === 'function' ? matchKickoffMs(x) : NaN;
+    const started = Number.isFinite(ko) && Date.now() >= ko;
+    const oddsOk = !!(snap && snap.ok !== false && snap.pools
+      && Date.now() - (snap._at || 0) < (started ? 120e3 : 45e3));
+    if (predOk && oddsOk) continue;
+    todo.push(x);
+    if (todo.length >= limit) break;
+  }
+  if (!todo.length) return;
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < todo.length) {
+      const x = todo[cursor++];
+      try {
+        await Promise.all([
+          loadOddsSnapshot(x.id, x.date, x).catch(function () { return null; }),
+          loadPredictReport(x).catch(function () { return null; }),
+        ]);
+      } catch (_) {}
+    }
+  };
+  const n = Math.min(concurrency, todo.length);
+  for (let k = 0; k < n; k++) worker();
 }
 function fmtOdd(v) {
   if (v == null || v === '' || Number.isNaN(Number(v))) return '-';
@@ -13213,40 +13274,46 @@ async function enrichMatchDetail(x) {
   try { ensureSmSurface(x); } catch (_) {}
   try { ensureMatchSquadValue(x); } catch (_) {}
   try { ensureMatchRadar(x); } catch (_) {}
+  try { ensureMatchWeather(x); } catch (_) {}
 
-  // Bug 2: after kickoff, always warm live-stats so FT → 赛后复盘 tab without switching tabs
+  // Start 赔率 / 情报 immediately, in parallel, never behind live-stats.
+  const reportP = loadPredictReport(findMatch(x.id) || x).catch(() => null);
+  const oddsP = loadOddsSnapshot(x.id, x.date, x).catch(() => null);
+
+  // After kickoff, warm live-stats in the background only. A hung
+  // /live-stats must not block 赔率, 情报, or 天气 (20s client timeout).
   const ko = matchKickoffMs(x);
   const kickedOff = Number.isFinite(ko) && Date.now() >= ko;
   const wasFin = isMatchFinished(x);
   const hadReviewTab = detailTabsFor(x).some(t => t[0] === 'review');
+  let liveStatsP = null;
   if (kickedOff || wasFin) {
-    try { await loadLiveStats(x); } catch (_) {}
-    const nowFin = isMatchFinished(x);
-    const hasReviewTab = detailTabsFor(x).some(t => t[0] === 'review');
-    if ((!wasFin && nowFin) || (!hadReviewTab && hasReviewTab)) {
-      refreshDetailTabs(x);
-    } else if (kickedOff) {
-      refreshDetailTabs(x); // hero score even if not FT yet
-    }
+    liveStatsP = loadLiveStats(x).then(() => {
+      if (route().name !== 'match' || String(route().arg) !== String(x.id)) return;
+      const nowFin = isMatchFinished(x);
+      const hasReviewTab = detailTabsFor(x).some(t => t[0] === 'review');
+      if ((!wasFin && nowFin) || (!hadReviewTab && hasReviewTab) || kickedOff) {
+        refreshDetailTabs(x); // hero score / 赛后复盘 tab when it arrives
+      }
+    }).catch(() => {});
     ensureMatchStatusPoll(x);
   } else {
     stopMatchStatusPoll();
   }
-  try { ensureMatchWeather(x); } catch (_) {}
 
   if (tab === 'attitude') {
     await loadMatchAttitude(x);
   }
   if (tab === 'squad') {
     await ensureSquad(x);
-    try { await loadPredictReport(findMatch(x.id) || x); } catch (_) {}
+    try { await reportP; } catch (_) {}
     const box = document.getElementById('lineup-box-' + x.id);
     const L = S.lineupCache && S.lineupCache[x.id];
     if (box && L) box.innerHTML = lineupHtml(findMatch(x.id) || x, L);
   }
   if (tab === 'odds') {
     stopOddsLivePoll();
-    const snap = await loadOddsSnapshot(x.id, x.date, x);
+    const snap = await oddsP;
     if (route().name === 'match' && String(route().arg) === String(x.id) && detailTabOf(x.id) === 'odds') {
       const pane = document.getElementById('detail-pane-' + x.id);
       if (pane) pane.innerHTML = oddsTabHtml(x, snap);
@@ -13258,10 +13325,7 @@ async function enrichMatchDetail(x) {
   }
   if (tab === 'pred') {
     const m = findMatch(x.id) || x;
-    await Promise.all([
-      loadPredictReport(m),
-      loadOddsSnapshot(x.id, x.date, x).catch(() => null),
-    ]);
+    await Promise.all([reportP, oddsP]);
     if (route().name === 'match' && String(route().arg) === String(x.id) && detailTabOf(x.id) === 'pred') {
       const pane = document.getElementById('detail-pane-' + x.id);
       if (pane) pane.innerHTML = predTabHtml(m);
@@ -13286,12 +13350,12 @@ async function enrichMatchDetail(x) {
   if (tab === 'intel' || tab === 'data' || tab === 'live') {
     const tasks = [];
     if (tab === 'intel') tasks.push(loadMatchStats(x));
-    if (tab === 'intel') tasks.push(loadPredictReport(findMatch(x.id) || x));
+    if (tab === 'intel') tasks.push(reportP);
     if (tab === 'intel') tasks.push(ensureSmBracket(x));
     if (tab === 'data' || tab === 'live') tasks.push(ensureSmSurface(x));
-    if (tab === 'data') tasks.push(loadPredictReport(findMatch(x.id) || x));
+    if (tab === 'data') tasks.push(reportP);
     if (tab === 'data') tasks.push(ensureMatchRadar(x));
-    if (tab === 'live') tasks.push(loadLiveStats(x, { force: true }));
+    if (tab === 'live') tasks.push(liveStatsP || loadLiveStats(x, { force: true }));
     if (tab === 'live') {
       tasks.push(loadChat(String(x.id)));
     }
