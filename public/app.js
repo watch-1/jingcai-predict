@@ -11471,13 +11471,29 @@ const HERO_GLOW_HOME = 'rgb(51 47 37)';
 const HERO_GLOW_AWAY = 'rgb(37 47 51)';
 const HERO_GLOW_SAT = 0.28;
 const HERO_GLOW_VAL = 0.20;
+const HERO_GLOW_BASE = [10, 11, 14];
 function formatHeroRgb(r, g, b) {
   return 'rgb(' + Math.round(r) + ' ' + Math.round(g) + ' ' + Math.round(b) + ')';
 }
-function heroColorAlpha(color, a) {
-  const s = String(color || '');
-  if (s.charAt(s.length - 1) === ')') return s.slice(0, -1) + ' / ' + a + ')';
-  return s;
+function parseHeroRgb(color) {
+  const m = String(color || '').match(/-?\d+(?:\.\d+)?/g);
+  if (!m || m.length < 3) return HERO_GLOW_BASE.slice();
+  return [Number(m[0]), Number(m[1]), Number(m[2])];
+}
+function mixHeroRgb(color, a) {
+  const c = parseHeroRgb(color);
+  const b = HERO_GLOW_BASE;
+  const t = Math.max(0, Math.min(1, Number(a) || 0));
+  return formatHeroRgb(c[0] * t + b[0] * (1 - t), c[1] * t + b[1] * (1 - t), c[2] * t + b[2] * (1 - t));
+}
+function heroGlowStops(color) {
+  return mixHeroRgb(color, 1) + ' 0%, '
+    + mixHeroRgb(color, 0.85) + ' 18%, '
+    + mixHeroRgb(color, 0.61) + ' 33%, '
+    + mixHeroRgb(color, 0.36) + ' 50%, '
+    + mixHeroRgb(color, 0.14) + ' 67%, '
+    + mixHeroRgb(color, 0.05) + ' 82%, '
+    + 'rgb(10 11 14) 100%';
 }
 function muteHsvToGlow(hue) {
   const s = HERO_GLOW_SAT, v = HERO_GLOW_VAL;
@@ -11503,27 +11519,15 @@ function hashTeamGlow(seed) {
 function heroGlowGradient(home, away) {
   const h = home || HERO_GLOW_HOME;
   const a = away || HERO_GLOW_AWAY;
-  const stops = (c) => c + ' 0%, ' + heroColorAlpha(c, '.61') + ' 33%, ' + heroColorAlpha(c, '.14') + ' 67%, transparent 100%';
-  return 'radial-gradient(ellipse 66% 120% at 13% 52%, ' + stops(h) + '),'
-    + 'radial-gradient(ellipse 66% 120% at 87% 52%, ' + stops(a) + ')';
-}
-function heroOrbGradient(color) {
-  const c = color || HERO_GLOW_HOME;
-  return 'radial-gradient(ellipse 50% 50% at 50% 50%, ' + c + ' 0%, '
-    + heroColorAlpha(c, '.61') + ' 33%, ' + heroColorAlpha(c, '.14') + ' 67%, transparent 100%)';
+  return 'radial-gradient(ellipse 66% 120% at 13% 52%, ' + heroGlowStops(h) + '),'
+    + 'radial-gradient(ellipse 66% 120% at 87% 52%, ' + heroGlowStops(a) + ')';
 }
 function paintHeroGlow(hero, home, away) {
   if (!hero) return;
-  const glow = hero.querySelector('.hero-wx-glow');
-  const homeOrb = hero.querySelector('.hero-wx-orb--home');
-  const awayOrb = hero.querySelector('.hero-wx-orb--away');
-  /* Paint the washes on the hero element itself (setProperty important) so they
-     beat both the charcoal !important and the older navy !important fill. */
+  /* Single opaque layer on the hero itself. Do not also paint orbs/glow — stacked
+     semi-transparent ramps dithered into grain on Android WebView. */
   const bg = heroGlowGradient(home || HERO_GLOW_HOME, away || HERO_GLOW_AWAY) + ', #0A0B0E';
   try { hero.style.setProperty('background', bg, 'important'); } catch (_) { hero.style.background = bg; }
-  if (glow) glow.style.background = 'none';
-  if (homeOrb) homeOrb.style.background = heroOrbGradient(home || HERO_GLOW_HOME);
-  if (awayOrb) awayOrb.style.background = heroOrbGradient(away || HERO_GLOW_AWAY);
 }
 function muteRgbForGlow(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -11892,7 +11896,7 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
   const wx = matchWeatherType(x);
   const homeGlow = teamGlowCached(x, 'home');
   const awayGlow = teamGlowCached(x, 'away');
-  const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow" style="background:none"><div class="hero-wx-orb hero-wx-orb--home" style="background:${esc(heroOrbGradient(homeGlow))}"></div><div class="hero-wx-orb hero-wx-orb--away" style="background:${esc(heroOrbGradient(awayGlow))}"></div></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
+  const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
   const heroBg = heroGlowGradient(homeGlow, awayGlow) + ', #0A0B0E';
   let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="background:${esc(heroBg)}">${wxLayer}${nav}<div class="meta">${leagueHeroMark(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
     <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo)}<em class="tm-mv" id="tm-mv-h-${esc(id)}" hidden></em><span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small></div>
