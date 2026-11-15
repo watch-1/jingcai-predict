@@ -756,6 +756,11 @@ async function completeSchedule(list) {
 
 const _getDataInflight = Object.create(null);
 
+function peekCachedPayload(kind) {
+  const c = cache[kind];
+  return (c && c.payload && Array.isArray(c.payload.data)) ? c.payload : null;
+}
+
 async function getData(kind) {
   const c = cache[kind];
   let ttl = CACHE_MS;
@@ -897,17 +902,12 @@ async function refreshData(kind) {
       console.warn('[matches] schedule salvage before sample failed', e.message);
     }
   }
-  // Fallback: clearly labeled sample data (cached shorter so live is retried soon)
-  let sampleData = kind === 'results' ? sample.results() : sample.matches();
-  if (kind === 'results') {
-    try {
-      const merged = resultsArchive.mergeSeenIntoResults(sampleData);
-      sampleData = merged.data;
-    } catch { /* optional */ }
-  }
-  const payload = { source: 'sample', note: '官方接口不可达，当前展示为示例数据（非真实赛事/赔率）', errors, fetchedAt: new Date().toISOString(),
-    data: sampleData, meta: { total: sampleData.length, byBusinessDate: summarizeByBusinessDate(sampleData) } };
+  // 374: never mix sample/demo rows into live data. Keep last-good live cache.
+  // Only if there is no last-good live payload, serve an empty honest state.
+  const prev = cache[kind] && cache[kind].payload;
+  const payload = require('./lib/live-fallback').liveFallbackPayload(kind, errors, prev);
   cache[kind] = { at: Date.now() - CACHE_MS + 60 * 1000, payload };
+  console.warn('[' + kind + '] official fetch failed, fallback', payload.source, payload.note, 'rows=', (payload.data || []).length);
   return payload;
 }
 
@@ -1626,7 +1626,7 @@ app.get('/api/live-stats', async (req, res) => {
     let time = String(req.query.time || '').trim();
     let businessDate = String(req.query.businessDate || '').trim();
 
-    // Enrich from sporttery caches when only matchId (or partial ids) given
+    // Enrich from in-memory sporttery caches only (do not trigger a slow refresh).
     if (matchId || (homeTeamId && awayTeamId && !home)) {
       const findIn = (list) => (list || []).find(m =>
         (matchId && String(m.id) === matchId) ||
@@ -1635,8 +1635,8 @@ app.get('/api/live-stats', async (req, res) => {
       let hit = null;
       for (const kind of ['schedule', 'matches', 'results']) {
         try {
-          const payload = await getData(kind);
-          hit = findIn(payload.data);
+          const payload = peekCachedPayload(kind);
+          hit = findIn(payload && payload.data);
           if (hit) break;
         } catch { /* ignore */ }
       }
@@ -1657,7 +1657,14 @@ app.get('/api/live-stats', async (req, res) => {
     }
 
     const live = require('./lib/live-stats');
-    const payload = await live.getLiveStats({ matchId, homeTeamId, awayTeamId, home, away, date, time, businessDate });
+    // Hard cap so a hung upstream (previously 25s / 0 bytes) cannot stall other work.
+    // Do not invent stats when the cap fires.
+    const payload = await Promise.race([
+      live.getLiveStats({ matchId, homeTeamId, awayTeamId, home, away, date, time, businessDate }),
+      new Promise((resolve) => setTimeout(() => resolve({
+        ok: false, reason: 'timeout', error: '实时技术统计暂时不可用',
+      }), 8000)),
+    ]);
     // Never leak the API key; quota remaining is fine to expose for ops.
     res.json(payload);
   } catch (e) {
@@ -1684,8 +1691,8 @@ app.get('/api/match-weather', async (req, res) => {
       let hit = null;
       for (const kind of ['schedule', 'matches', 'results']) {
         try {
-          const payload = await getData(kind);
-          hit = findIn(payload.data);
+          const payload = peekCachedPayload(kind);
+          hit = findIn(payload && payload.data);
           if (hit) break;
         } catch { /* ignore */ }
       }
@@ -2722,15 +2729,100 @@ setInterval(() => slatePrefetchJob('tick'), 10 * 60e3);
 async function weatherPrefetchJob(reason) {
   try {
     const wx = require('./lib/match-weather');
+    const nearby = require('./lib/nearby-prefetch');
     const mat = await getData('matches').catch(() => ({ data: [] }));
     const sch = await getData('schedule').catch(() => ({ data: [] }));
-    const list = wx.selectPrefetchMatches((mat && mat.data) || [], (sch && sch.data) || []);
+    const res = await getData('results').catch(() => ({ data: [] }));
+    const list = wx.selectPrefetchMatches(
+      (mat && mat.data) || [],
+      (sch && sch.data) || [],
+      Date.now(),
+      { results: (res && res.data) || [] }
+    );
     const r = await wx.prefetchWeather(list, { reason, gapMs: 800 });
     if (r && r.skippedRun) console.log('[weather-prefetch]', reason, 'already running');
   } catch (e) { console.warn('[weather-prefetch]', reason, e.message); }
 }
 setTimeout(() => weatherPrefetchJob('startup'), 55e3);
 setInterval(() => weatherPrefetchJob('tick'), 20 * 60e3);
+
+async function warmClubLogos(entries, opts) {
+  const gapMs = opts && opts.gapMs != null ? Number(opts.gapMs) : 200;
+  const limit = opts && opts.logoLimit != null ? Number(opts.logoLimit) : 80;
+  const slice = (entries || []).slice(0, limit);
+  let ok = 0, skip = 0, fail = 0;
+  for (let i = 0; i < slice.length; i++) {
+    const target = safeLogoTarget(slice[i] && slice[i].url);
+    if (!target) { skip += 1; continue; }
+    try {
+      const hash = crypto.createHash('sha256').update(target).digest('hex');
+      const file = path.join(LOGO_DIR, hash);
+      const hit = await readCachedLogo(file);
+      if (hit) { ok += 1; continue; }
+      const got = await fetchLogo(target);
+      if (!got) { fail += 1; continue; }
+      try {
+        await fs.promises.mkdir(LOGO_DIR, { recursive: true });
+        const tmp = file + '.tmp';
+        await fs.promises.writeFile(tmp, got.buf);
+        await fs.promises.rename(tmp, file);
+        ok += 1;
+      } catch (_) { fail += 1; }
+    } catch (_) { fail += 1; }
+    if (gapMs > 0 && i < slice.length - 1) await new Promise((r) => setTimeout(r, gapMs));
+  }
+  return { n: slice.length, ok, skip, fail };
+}
+
+async function nearbyPrefetchJob(reason) {
+  try {
+    const nearby = require('./lib/nearby-prefetch');
+    const wx = require('./lib/match-weather');
+    const mat = await getData('matches').catch(() => ({ data: [] }));
+    const sch = await getData('schedule').catch(() => ({ data: [] }));
+    const res = await getData('results').catch(() => ({ data: [] }));
+    const lists = [(mat && mat.data) || [], (sch && sch.data) || [], (res && res.data) || []];
+    const r = await nearby.prefetchNearby(lists, {
+      reason,
+      daysBack: 2,
+      daysForward: 2,
+      gapMs: 400,
+      reportLimit: 24,
+      logoLimit: 80,
+      prefetchWeather: (matches, o) => wx.prefetchWeather(matches, { reason: (o && o.reason) || reason, gapMs: 800 }),
+      warmLogos: (entries, o) => warmClubLogos(entries, o),
+      tickOdds: async (matches) => {
+        try {
+          return await require('./lib/odds-snapshot').tick({ schedule: matches, matches: (mat && mat.data) || [] });
+        } catch (e) {
+          return { error: e.message };
+        }
+      },
+      warmReports: async (matches) => {
+        const out = { n: 0, ok: 0, fail: 0 };
+        try {
+          if (!require('./lib/feature-flags').isEnabled('predict_report')) return { n: 0, skipped: 'disabled' };
+        } catch (_) { /* continue */ }
+        const pr = require('./lib/predict-report');
+        const pool = (sch && sch.data) || (mat && mat.data) || [];
+        for (const m of matches || []) {
+          if (!m || !m.id) continue;
+          out.n += 1;
+          try {
+            const report = await pr.buildReport(m, { schedulePool: pool, force: false, aiAsync: true });
+            if (report && report.ok !== false) out.ok += 1;
+            else out.fail += 1;
+          } catch (_) { out.fail += 1; }
+          await new Promise((r) => setTimeout(r, 400));
+        }
+        return out;
+      },
+    });
+    if (r && r.skippedRun) console.log('[nearby-prefetch]', reason, 'already running');
+  } catch (e) { console.warn('[nearby-prefetch]', reason, e.message); }
+}
+setTimeout(() => nearbyPrefetchJob('startup'), 70e3);
+setInterval(() => nearbyPrefetchJob('tick'), 15 * 60e3);
 
 
 // 1.9.53: auto-fill missing team badges (ESPN → API-Football) into crests.json + hot-reload maps

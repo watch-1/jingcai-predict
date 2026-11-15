@@ -394,7 +394,7 @@ function matchScoreColumn(row) {
   return `${statusHtml}${scoreMain}${footHtml}`;
 }
 function matchTeamsRow(m, row) {
-  return `<div class="mc-teams"><div class="t h">${badge(m.home, 'sm', m.homeLogo)}<span class="n" title="${esc(m.home)}">${esc(m.home)}</span></div><div class="mc-mid">${matchScoreColumn(row)}</div><div class="t a"><span class="n" title="${esc(m.away)}">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div></div>`;
+  return `<div class="mc-teams"><div class="t h">${matchTeamBadge(m, 'home', 'sm')}<span class="n" title="${esc(m.home)}">${esc(m.home)}</span></div><div class="mc-mid">${matchScoreColumn(row)}</div><div class="t a"><span class="n" title="${esc(m.away)}">${esc(m.away)}</span>${matchTeamBadge(m, 'away', 'sm')}</div></div>`;
 }
 const kickoff = m => new Date(`${m.date}T${m.time || '00:00'}:00+08:00`).getTime();
 const BADGE_COLORS = ['#e5484d', '#1a62f0', '#12a150', '#ff8a1f', '#7b4ce0', '#0aa5b8', '#c2185b', '#546e7a', '#d97706', '#0f766e'];
@@ -700,6 +700,29 @@ function rectangularFlagSrc(logo) {
   const iso = flagIso2FromLogo(logo);
   return iso ? bundledFlagPath(iso) : '';
 }
+function ntFlagsApi() {
+  try { return (typeof NTFlags !== 'undefined' && NTFlags) || (typeof window !== 'undefined' && window.NTFlags) || null; } catch (_) { return null; }
+}
+function resolveFlagIso2(logo, name, league) {
+  const fromLogo = flagIso2FromLogo(logo);
+  if (fromLogo) return fromLogo;
+  const api = ntFlagsApi();
+  if (api && typeof api.flagIso2FromName === 'function') return api.flagIso2FromName(name, { league: league }) || '';
+  return '';
+}
+function isCrestPlaceholderLogo(logo) {
+  const api = ntFlagsApi();
+  if (api && typeof api.isCrestPlaceholderLogo === 'function') return api.isCrestPlaceholderLogo(logo);
+  return /placeholder\.(?:png|jpe?g|webp)|team_placeholder/i.test(String(logo || ''));
+}
+function officialStatusZh(s, fallback) {
+  const raw = String(s == null ? '' : s).trim();
+  if (/^selling$/i.test(raw)) return '在售';
+  if (/^define$/i.test(raw)) return '未开赛';
+  if (/^(payout|finished|ft)$/i.test(raw)) return '完场';
+  if (!raw) return fallback || '';
+  return raw;
+}
 
 function espnIdFromCrestLogo(logo) {
   const m = String(logo || '').match(/\/teamlogos\/soccer\/(?:500|50000)\/(\d+)\.(?:png|jpe?g)/i);
@@ -844,6 +867,9 @@ function hydrateTribeCrests(root) {
       const logo = wrap.getAttribute('data-crest-logo') || '';
       const tid = wrap.getAttribute('data-team-id') || '';
       if (!key || !logo) return;
+      // 374: never overlay a bundled rectangular flag with a cached circular
+      // ESPN/SM blob or a football-ball placeholder from the original logo URL.
+      if (wrap.classList.contains('flag') || wrap.getAttribute('data-flag-iso')) return;
       const bundled = bundledCrestFor(logo, tid);
       const srcNow = img.getAttribute('src') || '';
       const onBundled = bundled && srcNow === bundled;
@@ -876,26 +902,30 @@ function badge(name, cls = '', logo, opts) {
   const c1 = BADGE_COLORS[h % BADGE_COLORS.length];
   const letter = esc([...String(name)][0] || '?');
   const bg = `linear-gradient(145deg,${c1}cc,${c1})`;
-  if (!logo) return `<span class="badge ${cls}" style="background:${bg}">${letter}</span>`;
+  const iso2 = resolveFlagIso2(logo, name, opts && opts.league);
+  const isFlag = !!iso2;
+  if (!logo && !isFlag) return `<span class="badge ${cls}" style="background:${bg}">${letter}</span>`;
   const tid = opts && opts.teamId != null && opts.teamId !== '' ? String(opts.teamId) : '';
   const ckey = crestCacheKey(logo, tid);
-  const apiUrl = API + '/api/logo?url=' + encodeURIComponent(logo);
+  const apiUrl = logo ? (API + '/api/logo?url=' + encodeURIComponent(logo)) : '';
+  if (logo && isCrestPlaceholderLogo(logo) && !isFlag) {
+    return `<span class="badge ${cls}" style="background:${bg}">${letter}</span>`;
+  }
   const bundled = bundledCrestFor(logo, tid);
-  const isFlag = isNationalFlagLogo(logo);
-  const iso2 = isFlag ? flagIso2FromLogo(logo) : '';
   const flagBundled = iso2 ? bundledFlagPath(iso2) : '';
   const flagRemote = iso2 ? flagcdnUrl(iso2) : '';
   const flagProxy = flagRemote ? (API + '/api/logo?url=' + encodeURIComponent(flagRemote)) : '';
-  // National teams: bundled rectangular flag first, then flagcdn via /api/logo, then the original logo.
+  // National teams: bundled rectangular flag first, then flagcdn via /api/logo.
+  // Never fall back to the original circular SM / sporttery / football-ball logo.
   // Club crests unchanged (not forced to rectangles).
-  let srcUrl = flagBundled || bundled || (_crestMem.has(ckey) ? _crestMem.get(ckey) : (flagProxy || apiUrl));
+  let srcUrl = flagBundled || bundled || (_crestMem.has(ckey) ? _crestMem.get(ckey) : (isFlag ? (flagProxy || '') : apiUrl));
+  if (!srcUrl) return `<span class="badge ${cls}" style="background:${bg}">${letter}</span>`;
   const src = esc(srcUrl);
   let fbAttr = '';
   if (flagBundled && srcUrl === flagBundled) {
-    fbAttr = ` data-fb="${esc(flagProxy || apiUrl)}"`;
-    if (flagProxy && apiUrl && flagProxy !== apiUrl) fbAttr += ` data-fb2="${esc(apiUrl)}"`;
+    if (flagProxy) fbAttr = ` data-fb="${esc(flagProxy)}"`;
   } else if (flagProxy && srcUrl === flagProxy) {
-    fbAttr = ` data-fb="${esc(apiUrl)}"`;
+    // no data-fb2 to the original SM/sporttery URL
   } else if (bundled && srcUrl === bundled) {
     fbAttr = ` data-fb="${esc(apiUrl)}"`;
   }
@@ -906,6 +936,15 @@ function badge(name, cls = '', logo, opts) {
   const flagCls = isFlag ? ' flag' : '';
   const wh = isFlag ? 'width="160" height="107"' : 'width="160" height="160"';
   return `<span class="badge crest${flagCls} ${cls}" data-letter="${letter}"${dataAttrs}><img alt="" ${wh} decoding="async"${lazyAttr}${fbAttr}${corsAttr} src="${src}" onerror="${onerr}"></span>`;
+}
+function matchTeamBadge(m, side, cls, extra) {
+  if (!m) return badge('', cls || '');
+  const away = side === 'away';
+  const name = away ? (m.away || m.awayZh || '') : (m.home || m.homeZh || '');
+  const logo = away ? m.awayLogo : m.homeLogo;
+  const tid = away ? (m.awayTeamId || '') : (m.homeTeamId || '');
+  const opts = Object.assign({ teamId: tid, league: m.league || m.leagueName || '' }, extra || {});
+  return badge(name, cls || '', logo, opts);
 }
 const shortRk = s => (String(s || '').length <= 5 ? esc(s) : ''); // long group ranks like [亚运男足1] only shown on the detail page
 const lgTag = m => homeTheme() === 'pitch'
@@ -1081,16 +1120,35 @@ try { window.isUserFollow = isUserFollow; window.toggleUserFollow = toggleUserFo
 function sessionExpired() { if (!S.token) return; clearSession(); toast('登录已过期，请重新登录'); go('#/login'); }
 
 // ---------- match data ----------
+function isUsableLiveCache(c) {
+  return !!(c && c.source === 'live' && Array.isArray(c.data) && c.data.length);
+}
+function acceptMatchPayload(kind, incoming, cachedLive) {
+  const j = incoming && typeof incoming === 'object' ? incoming : null;
+  if (j && j.source === 'live' && Array.isArray(j.data)) return j;
+  if (isUsableLiveCache(cachedLive)) {
+    return Object.assign({}, cachedLive, {
+      fromCache: true,
+      stale: true,
+      note: (j && j.note) || '官方接口暂时不可达，已保留上次成功刷新的场次',
+    });
+  }
+  if (j && j.source === 'sample') {
+    return { source: 'empty', local: true, note: '无法刷新，暂无场次', fetchedAt: new Date().toISOString(), data: [] };
+  }
+  if (j && Array.isArray(j.data)) return j;
+  return { source: 'empty', local: true, note: '无法刷新，暂无场次', fetchedAt: new Date().toISOString(), data: [] };
+}
 async function loadData(kind, force) {
   let j;
+  const cachedLive = LS.get('jc_cache_' + kind, null);
   try {
     j = await api('/' + kind + (force ? '?t=' + Date.now() : ''), { timeout: 10000 });
     if (!j || !Array.isArray(j.data)) throw new Error('格式错误');
-    if (j.source === 'live') LS.set('jc_cache_' + kind, j);
+    j = acceptMatchPayload(kind, j, cachedLive);
+    if (j.source === 'live' && !j.stale && !j.fromCache) LS.set('jc_cache_' + kind, j);
   } catch (e) {
-    const c = LS.get('jc_cache_' + kind, null);
-    if (c) j = { ...c, fromCache: true };
-    else { const SM = window.SAMPLE; j = { source: 'sample', local: true, note: '无法连接服务器，当前展示内置示例数据（非真实赛事/赔率）', fetchedAt: new Date().toISOString(), data: kind === 'results' ? SM.results() : SM.matches() }; }
+    j = acceptMatchPayload(kind, null, cachedLive);
   }
   if (kind === 'matches') { S.matches = j.data; S.msrc = j; try { warmupMatchWeather(j.data); } catch (_) {} try { warmupMatchOddsAndReports(j.data); } catch (_) {} }
   else if (kind === 'schedule') { S.schedule = j.data; S.ssrc = j; }
@@ -1137,6 +1195,7 @@ function hydrateFromCache() {
     for (const kind of ['matches', 'schedule', 'results']) {
       const c = LS.get('jc_cache_' + kind, null);
       if (!c || !Array.isArray(c.data) || !c.data.length) continue;
+      if (c.source === 'sample') continue;
       if (kind === 'matches' && !S.matches) { S.matches = c.data; S.msrc = Object.assign({}, c, { fromCache: true }); }
       else if (kind === 'schedule' && !S.schedule) { S.schedule = c.data; S.ssrc = Object.assign({}, c, { fromCache: true }); }
       else if (kind === 'results' && !S.results) { S.results = c.data; S.rsrc = Object.assign({}, c, { fromCache: true }); }
@@ -2004,10 +2063,15 @@ function tickClock() {
     const clk = el.querySelector('.clk'); if (clk && clk.textContent !== t) clk.textContent = t;
   });
 }
-function warnBar() {
-  const s = S.msrc; if (!s) return '';
-  if (s.source === 'sample') return `<div class="warn-bar">⚠️ <b>示例数据</b>：${esc(s.note || '官方接口暂不可达')}。以下赛事与赔率仅作演示，<b>非真实数据</b>。</div>`;
+function sourceWarnHtml(src) {
+  if (!src) return '';
+  if (src.source === 'sample') return `<div class="warn-bar">⚠️ <b>示例数据</b>：${esc(src.note || '官方接口暂不可达')}。以下赛事与赔率仅作演示，<b>非真实数据</b>。</div>`;
+  if (src.source === 'empty') return `<div class="warn-bar">${esc(src.note || '无法刷新，暂无场次')}</div>`;
+  if (src.stale) return `<div class="warn-bar">${esc(src.note || '场次刷新未成功，已保留上次数据')}</div>`;
   return '';
+}
+function warnBar() {
+  return sourceWarnHtml(S.msrc) || sourceWarnHtml(S.ssrc) || sourceWarnHtml(S.rsrc);
 }
 
 // ---------- account lists (plans / favorites) ----------
@@ -2829,17 +2893,39 @@ function schSpindleCenterTapHit(spindle, clientX, clientY) {
   const halfW = SCH_SPINDLE_SLOT / 2;
   return clientX >= midX - halfW && clientX <= midX + halfW && clientY >= r.top && clientY <= r.bottom;
 }
+function warmVisibleScheduleDay() {
+  try {
+    const model = typeof scheduleDayModel === 'function' ? scheduleDayModel() : null;
+    const day = model && model.classifiedDay;
+    if (day && day.length) {
+      try { warmupMatchWeather(day); } catch (_) {}
+      try { warmupMatchOddsAndReports(day); } catch (_) {}
+      return model;
+    }
+  } catch (_) {}
+  return null;
+}
 function commitSchDate(next) {
   if (!next || next === S.schDate) return false;
   S.schDate = next;
   invalidateTabKeep('schedule');
+  // Paint from already-loaded S.schedule immediately. Do not refetch the slate
+  // or block on logo/weather; warm the visible day in the background.
   if (softPatchSchedule()) {
     syncTopChrome('schedule');
-    kickScheduleLiveRefresh();
+    const model = warmVisibleScheduleDay();
+    const day = model && model.classifiedDay;
+    if (day && typeof scheduleNeedLivePoll === 'function' && scheduleNeedLivePoll(day, model.counts)) {
+      kickScheduleLiveRefresh();
+    }
     return true;
   }
   render({ force: true });
-  kickScheduleLiveRefresh();
+  const model = warmVisibleScheduleDay();
+  const day = model && model.classifiedDay;
+  if (day && typeof scheduleNeedLivePoll === 'function' && scheduleNeedLivePoll(day, model.counts)) {
+    kickScheduleLiveRefresh();
+  }
   return true;
 }
 function schDateSpindleShort(d) { return String(d).slice(5); }
@@ -3292,9 +3378,9 @@ function slideHotMatch(m, theme) {
     <div class="bn-poster bn-match-poster">
       <span class="bn-kicker">${esc(m.league || '热门赛事')} · ${when}</span>
       <div class="bn-vs">
-        <div class="bn-side">${badge(m.home, '', m.homeLogo)}<b>${esc(m.home)}</b></div>
+        <div class="bn-side">${matchTeamBadge(m, 'home', '')}<b>${esc(m.home)}</b></div>
         <div class="bn-mid">${midHtml}</div>
-        <div class="bn-side r"><b>${esc(m.away)}</b>${badge(m.away, '', m.awayLogo)}</div>
+        <div class="bn-side r"><b>${esc(m.away)}</b>${matchTeamBadge(m, 'away', '')}</div>
       </div>
       <span class="hero-cta">${row._kind === 'ft' ? '查看复盘' : '赛前情报'}</span>
     </div>
@@ -3343,9 +3429,9 @@ function slideContra(hit) {
     <div class="bn-poster bn-contra-poster">
       <span class="bn-kicker">逆盘命中 · ${esc(r.league || '')}</span>
       <div class="bn-vs">
-        <div class="bn-side">${badge(r.home, 'sm', r.homeLogo)}<b>${esc(r.home)}</b></div>
+        <div class="bn-side">${matchTeamBadge(r, 'home', 'sm')}<b>${esc(r.home)}</b></div>
         <div class="bn-mid"><span class="bn-score num">${esc(r.full || '-')}</span><small>完场</small></div>
-        <div class="bn-side r"><b>${esc(r.away)}</b>${badge(r.away, 'sm', r.awayLogo)}</div>
+        <div class="bn-side r"><b>${esc(r.away)}</b>${matchTeamBadge(r, 'away', 'sm')}</div>
       </div>
       <p class="bn-contra-tag">表态 ${esc(leanLab)} ✓${mktLab ? ' · 热门 ' + esc(mktLab) + ' ✗' : ''}</p>
       <span class="hero-cta">查看复盘</span>
@@ -3580,9 +3666,9 @@ function focusCardCompact(m) {
   }
   return `<button type="button" class="focus-card" data-go="#/match/${encodeURIComponent(m.id)}">
     <div class="fc-teams">
-      <div class="fc-side"><span class="fc-name">${esc(m.home)}</span>${badge(m.home, 'sm', m.homeLogo)}</div>
+      <div class="fc-side"><span class="fc-name">${esc(m.home)}</span>${matchTeamBadge(m, 'home', 'sm')}</div>
       <div class="fc-mid"><span class="fc-score num">${mid}</span><small>${meta}</small></div>
-      <div class="fc-side r"><span class="fc-name">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div>
+      <div class="fc-side r"><span class="fc-name">${esc(m.away)}</span>${matchTeamBadge(m, 'away', 'sm')}</div>
     </div>
   </button>`;
 }
@@ -3599,11 +3685,11 @@ function focusCardPitch(m) {
     center = esc((m.time || '') || '—');
   }
   return `<button type="button" class="focus-bar" data-go="#/match/${encodeURIComponent(m.id)}">
-    ${badge(m.home, 'sm', m.homeLogo)}
+    ${matchTeamBadge(m, 'home', 'sm')}
     <span class="fb-name">${esc(m.home)}</span>
     <span class="fb-time num">${center}</span>
     <span class="fb-name r">${esc(m.away)}</span>
-    ${badge(m.away, 'sm', m.awayLogo)}
+    ${matchTeamBadge(m, 'away', 'sm')}
   </button>`;
 }
 /** 1.9.139: home 「比赛态度」 — same column_posts as match 态度 tab (平台简报). */
@@ -4635,9 +4721,9 @@ function scoreCard(row) {
   return `<button type="button" class="ls-row ${statusCls}" data-go="#/match/${encodeURIComponent(row.id)}">
     ${matchCardMeta(row, { favSize: 14 })}
     <div class="ls-body">
-      <div class="ls-side h">${badge(row.home, 'sm', row.homeLogo)}<span class="nm" title="${esc(row.home)}">${esc(row.home)}</span></div>
+      <div class="ls-side h">${matchTeamBadge(row, 'home', 'sm')}<span class="nm" title="${esc(row.home)}">${esc(row.home)}</span></div>
       <div class="ls-mid">${midInner}</div>
-      <div class="ls-side a"><span class="nm" title="${esc(row.away)}">${esc(row.away)}</span>${badge(row.away, 'sm', row.awayLogo)}</div>
+      <div class="ls-side a"><span class="nm" title="${esc(row.away)}">${esc(row.away)}</span>${matchTeamBadge(row, 'away', 'sm')}</div>
     </div>
     ${cards}
   </button>`;
@@ -5396,7 +5482,7 @@ function calcMatchCard(m) {
   const phase = closed ? (m._phaseZh || (Date.now() >= kickoff(m) ? '已开赛' : '')) : '';
   return `<div class="calc-card${closed ? ' is-closed' : ''}" data-mid="${esc(m.id)}">
     <div class="calc-card-top">
-      <div class="calc-teams-line"><span class="ct h">${badge(m.home, 'sm', m.homeLogo)}<b>${esc(m.home)}</b></span><span class="ct-vs">VS</span><span class="ct a"><b>${esc(m.away)}</b>${badge(m.away, 'sm', m.awayLogo)}</span></div>
+      <div class="calc-teams-line"><span class="ct h">${matchTeamBadge(m, 'home', 'sm')}<b>${esc(m.home)}</b></span><span class="ct-vs">VS</span><span class="ct a"><b>${esc(m.away)}</b>${matchTeamBadge(m, 'away', 'sm')}</span></div>
       <div class="calc-card-meta"><span class="calc-num">${esc(m.num || '')}</span><span class="calc-lg" style="color:${lg}">${esc(m.league || '')}</span><span class="calc-tm">${esc(m.time || '--:--')}</span>${phase ? `<span class="calc-st">${esc(phase)}</span>` : ''}</div>
     </div>
     <div class="calc-card-odds">
@@ -5616,7 +5702,7 @@ function calcResultMatchBlock(x) {
   const lines = x.keys.map((k, i) => `<li>${esc(calcPickLineText(k, x.odds[i]))}</li>`).join('');
   return `<div class="calc-rc-match">
     <div class="calc-rc-hd">
-      <div class="calc-rc-teams">${badge(m.home, 'sm', m.homeLogo)}<span class="nm">${esc(m.home)}${hcap}</span><span class="vs">VS</span><span class="nm">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div>
+      <div class="calc-rc-teams">${matchTeamBadge(m, 'home', 'sm')}<span class="nm">${esc(m.home)}${hcap}</span><span class="vs">VS</span><span class="nm">${esc(m.away)}</span>${matchTeamBadge(m, 'away', 'sm')}</div>
       <span class="calc-rc-num">${esc(m.num || '')}</span>
     </div>
     <ul class="calc-rc-lines">${lines}</ul>
@@ -5989,7 +6075,7 @@ function predCardHtml(m, pr, i, opts) {
     <div class="pr-hd"><span class="rank ${i < 3 && !isWatch && !isPending ? 'r' + (i + 1) : ''} num">${i + 1}</span>
       <div class="pr-hd-body">
         <div class="pr-meta">${lgTag(m)}<span>${esc(m.num)} · ${esc(m.date.slice(5))} ${esc(m.time)}</span>${flag}${m.sample ? '<span class="sample-tag">示例</span>' : ''}</div>
-        <div class="pr-teams">${badge(m.home, 'sm', m.homeLogo)}<span class="nm">${esc(m.home)}</span><span class="vs">vs</span><span class="nm">${esc(m.away)}</span>${badge(m.away, 'sm', m.awayLogo)}</div>
+        <div class="pr-teams">${matchTeamBadge(m, 'home', 'sm')}<span class="nm">${esc(m.home)}</span><span class="vs">vs</span><span class="nm">${esc(m.away)}</span>${matchTeamBadge(m, 'away', 'sm')}</div>
       </div>${ring(pr.conf, (isWatch || isPending) ? { muted: true } : null)}</div>
     <div class="pr-pick"><div class="pk-l">${leftLab} <b class="${pickCls.trim()}">${esc(pickLab)}</b> <span class="lvl ${pr.lvl[0]}">${esc(pr.lvl[1])}</span>${mf}</div>
       <div class="pk-r">${esc(rightLab)}</div></div>
@@ -7335,9 +7421,7 @@ function resultsDayModel() {
 /** Inner HTML under #rsBody — daysum / meta / cards (navy wrap paints around white cards). */
 function resultsBodyHtml(list) {
   let h = '';
-  if (S.rsrc?.source === 'sample') {
-    h += `<div class="warn-bar">⚠️ <b>示例数据</b>：${esc(S.rsrc.note || '官方接口暂不可达')}，<b>非真实赛果</b>。</div>`;
-  }
+  h += sourceWarnHtml(S.rsrc);
   let upsetN = 0, tot = 0;
   (list || []).forEach(r => {
     if (!r.full) return;
@@ -8383,7 +8467,7 @@ function processStatsCard(x, stats) {
 
     body = `<div class="proc-teams">
       <div class="proc-team home">
-        ${badge(x.home, 'sm', x.homeLogo)}
+        ${matchTeamBadge(x, 'home', 'sm')}
         <div class="proc-team-meta">
           <b>${esc(x.home)}</b>
           <small>${esc(homeCap)}</small>
@@ -8395,7 +8479,7 @@ function processStatsCard(x, stats) {
           <b>${esc(x.away)}</b>
           <small>${esc(awayCap)}</small>
         </div>
-        ${badge(x.away, 'sm', x.awayLogo)}
+        ${matchTeamBadge(x, 'away', 'sm')}
       </div>
     </div>
     ${missNotes.length ? `<div class="proc-miss-banner">${missNotes.map(n => `<p>${n}</p>`).join('')}</div>` : ''}
@@ -12136,7 +12220,7 @@ function matchStickyHero(x, m, r) {
     <div class="hero-sticky-bar">
       <div class="hero-sticky-bg">${wxLayer}</div>
       <button type="button" class="ic-btn hero-ic md-back" data-act="back" aria-label="返回">${I.back}</button>
-      <div class="hero-sticky-mid">${badge(x.home, 'sm', x.homeLogo, { teamId: x.homeTeamId, eager: true })}${mid}${badge(x.away, 'sm', x.awayLogo, { teamId: x.awayTeamId, eager: true })}</div>
+      <div class="hero-sticky-mid">${matchTeamBadge(x, 'home', 'sm', { eager: true })}${mid}${matchTeamBadge(x, 'away', 'sm', { eager: true })}</div>
       ${matchStickyFav(x)}
     </div>
   </div>`;
@@ -12846,7 +12930,7 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
     if (finished && !statusLab) statusLab = '完场';
   }
   const mid = (hg != null && ag != null)
-    ? `<div class="score num">${esc(hg)} : ${esc(ag)}</div><small>${half ? '半场 ' + esc(half) + ' · ' : ''}${esc(statusLab || (finished ? '完场' : '进行中'))}</small>`
+    ? `<div class="score num">${esc(hg)} : ${esc(ag)}</div><small>${half ? '半场 ' + esc(half) + ' · ' : ''}${esc(officialStatusZh(statusLab, finished ? '完场' : '进行中'))}</small>`
     : `<div class="vs">VS</div><small>${started ? (finished ? '完场' : '已开赛 · 待开奖') : esc(x.time) + ' 开赛'}</small>`;
   const nav = matchEdgeNavBar(favBtn, leagueHeroMark(x));
   const wx = matchWeatherType(x);
@@ -12856,9 +12940,9 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
   const heroBg = heroGlowGradient(homeGlow, awayGlow) + ', #0A0B0E';
   const sample = x.sample ? '<div class="meta"><span class="sample-tag">示例数据</span></div>' : '';
   let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="background:${esc(heroBg)}">${wxLayer}${nav}${sample}
-    <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo, { teamId: x.homeTeamId, eager: true })}<span>${esc(x.home)}</span><small>主队 ${esc(formatHeroRank(x.homeRank || ''))}</small><i class="tm-tick" hidden></i></div>
+    <div class="teams"><div class="tm">${matchTeamBadge(x, 'home', 'lg', { eager: true })}<span>${esc(x.home)}</span><small>主队 ${esc(formatHeroRank(x.homeRank || ''))}</small><i class="tm-tick" hidden></i></div>
     <div class="mid">${mid}</div>
-    <div class="tm">${badge(x.away, 'lg', x.awayLogo, { teamId: x.awayTeamId, eager: true })}<span>${esc(x.away)}</span><small>客队 ${esc(formatHeroRank(x.awayRank || ''))}</small><i class="tm-tick" hidden></i></div></div></div>`;
+    <div class="tm">${matchTeamBadge(x, 'away', 'lg', { eager: true })}<span>${esc(x.away)}</span><small>客队 ${esc(formatHeroRank(x.awayRank || ''))}</small><i class="tm-tick" hidden></i></div></div></div>`;
   return h;
 }
 
@@ -14683,7 +14767,7 @@ function pageFavs() {
     const m = findMatch(f.matchId); if (m) return matchCard(m, { odds: false });
     const r = (S.results || []).find(x => x.id === f.matchId); if (r) return resultCard(r);
     return `<div class="card mc"><div class="mc-top">${lgTag(f)}<span>${esc(f.num)}</span><span class="sp">${esc(f.date)} ${esc(f.time)}</span><button style="color:var(--t3);font-size:12px" data-act="unfav" data-id="${esc(f.matchId)}">取消关注</button></div>
-      <div class="mc-teams"><div class="t h"><span class="n">${esc(f.home)}</span>${badge(f.home, '', f.homeLogo)}</div><div class="mc-mid"><div class="vs">VS</div><small>已结束/下架</small></div><div class="t">${badge(f.away, '', f.awayLogo)}<span class="n">${esc(f.away)}</span></div></div></div>`;
+      <div class="mc-teams"><div class="t h"><span class="n">${esc(f.home)}</span>${matchTeamBadge(f, 'home', '')}</div><div class="mc-mid"><div class="vs">VS</div><small>已结束/下架</small></div><div class="t">${matchTeamBadge(f, 'away', '')}<span class="n">${esc(f.away)}</span></div></div></div>`;
   }).join('') + '</div>';
   return h + foot();
 }
@@ -14792,7 +14876,7 @@ function pageAbout() {
   <h4>预测如何计算</h4><p>详情「预测」页生成赛前情报简报：赛况背景、近期战绩与进失球、交锋史、伤停（有第三方数据才写，否则标明暂无）、主客日程，以及市场赔率（仅参考项）。由服务端按场次缓存，避免打爆数据源配额。不编造伤停/比分/未发生新闻。</p>
   <h4>历史实测（基线）</h4>${baselineDoc()}
   <h4>服务说明</h4><p>「保存方案」仅为个人记录，不会被提交到任何第三方。应用内「资讯会员」订阅对应资讯与高级数据访问（当前为模拟支付）。全部内容<strong>仅供参考</strong>。</p>
-  <h4>数据来源</h4><p>中国体育彩票官网公开数据，服务器约每 3 分钟更新；官方接口不可达时会明确标注「示例数据」。</p>
+  <h4>数据来源</h4><p>中国体育彩票官网公开数据，服务器约每 3 分钟更新；官方接口不可达时将保留上次成功刷新的场次并提示，若尚无缓存则显示暂无场次。</p>
   <p class="note">本应用面向年满18周岁用户。${DISCLAIMER}</p></div>` + foot();
 }
 const TPL = '<div class="tpl">【模板文本】以下内容为占位模板，请店主/运营方根据实际运营主体信息及适用法律法规修改、并经专业人士审核后再正式使用。</div>';
@@ -15790,7 +15874,7 @@ function syncViewWrapClass() {
 
 /** Quiet predict list team row — same ends-flush layout as 开奖 mc-teams (名+徽 … vs … 徽+名). */
 function prTeamsQuietRow(m) {
-  return `<div class="pr-teams pr-teams-row"><div class="t h"><span class="nm" title="${esc(m.home)}">${esc(m.home)}</span>${badge(m.home, 'sm', m.homeLogo)}</div><span class="vs">vs</span><div class="t">${badge(m.away, 'sm', m.awayLogo)}<span class="nm" title="${esc(m.away)}">${esc(m.away)}</span></div></div>`;
+  return `<div class="pr-teams pr-teams-row"><div class="t h"><span class="nm" title="${esc(m.home)}">${esc(m.home)}</span>${matchTeamBadge(m, 'home', 'sm')}</div><span class="vs">vs</span><div class="t">${matchTeamBadge(m, 'away', 'sm')}<span class="nm" title="${esc(m.away)}">${esc(m.away)}</span></div></div>`;
 }
 
 function render(opts) {
@@ -16048,7 +16132,15 @@ document.addEventListener('click', async e => {
     if (softPatchSchedule()) { syncTopChrome('schedule'); return; }
     return render({ force: true });
   }
-  if (d.rdate) { S.rsDate = d.rdate; if (softPatchResults()) return; return render({ force: true }); }
+  if (d.rdate) {
+    S.rsDate = d.rdate;
+    try {
+      const model = typeof resultsDayModel === 'function' ? resultsDayModel() : null;
+      if (model && model.list) { try { warmupMatchWeather(model.list); } catch (_) {} }
+    } catch (_) {}
+    if (softPatchResults()) return;
+    return render({ force: true });
+  }
   if (d.pf) { S.prFilter = d.pf; return render(); }
   if (d.av) { S.pendingAv = d.av; document.querySelectorAll('[data-av]').forEach(b => b.classList.toggle('on', b === el)); return; }
   if (d.go) {

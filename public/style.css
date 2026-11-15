@@ -540,6 +540,64 @@ body.me-drawer-on { overflow: hidden; }
 .hero .badge.lg.crest, .hero .tm .badge.crest {
   border: none !important; box-shadow: none !important; background: transparent !important;
 }
+/* 374: NT flags are compact 3:2 rectangles everywhere (list, hero, sticky), never 40px circles.
+   Size is slightly smaller than the fig-4 Latvia/Armenia hero (13.8vw × 9.2vw / max 72×48)
+   and is the same for every national flag. Club crests stay square. */
+.badge.crest.flag,
+.badge.flag {
+  width: 36px;
+  height: 24px;
+  min-width: 36px;
+  min-height: 24px;
+  max-width: 36px;
+  max-height: 24px;
+  aspect-ratio: 3 / 2;
+  border-radius: 2px !important;
+  overflow: hidden !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.badge.sm.crest.flag,
+.badge.sm.flag {
+  width: 30px;
+  height: 20px;
+  min-width: 30px;
+  min-height: 20px;
+  max-width: 30px;
+  max-height: 20px;
+}
+.badge.lg.crest.flag,
+.badge.lg.flag {
+  width: 12.6vw;
+  height: 8.4vw;
+  min-width: 44px;
+  min-height: 30px;
+  max-width: 66px;
+  max-height: 44px;
+}
+.badge.crest.flag img,
+.badge.flag img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  border-radius: 0;
+  /* Never let a soccer-ball placeholder spill over the team name. */
+  max-width: 100%;
+  max-height: 100%;
+}
+.mc-teams .badge.crest.flag,
+.mc-teams .badge.sm.flag,
+.ls-side .badge.crest.flag,
+.ls-side .badge.sm.flag,
+.ls-list .badge.crest.flag {
+  width: 30px;
+  height: 20px;
+  min-width: 30px;
+  min-height: 20px;
+  max-width: 30px;
+  max-height: 20px;
+}
 .src-pill b { font-weight: 600; }
 
 /* ---------- banner carousel ---------- */
@@ -8625,12 +8683,13 @@ html[data-theme="pitch"] .hero.hero--weather {
 .hero.hero--weather.hero--edge .tm .badge.lg.crest.flag,
 .hero.hero--weather .tm .badge.crest.flag,
 .hero.hero--weather .badge.crest.flag {
-  width: 13.8vw;
-  height: 9.2vw;
-  min-width: 48px;
-  min-height: 32px;
-  max-width: 72px;
-  max-height: 48px;
+  /* Slightly smaller than fig 4 (13.8vw × 9.2vw / max 72×48); identical for every NT flag. */
+  width: 12.6vw;
+  height: 8.4vw;
+  min-width: 44px;
+  min-height: 30px;
+  max-width: 66px;
+  max-height: 44px;
   aspect-ratio: 3 / 2;
   border-radius: 2px !important;
   overflow: hidden !important;
