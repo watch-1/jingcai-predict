@@ -106,6 +106,16 @@ async function main() {
     syncedAt: new Date().toISOString(),
   };
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  try {
+    const cfgPath = path.join(root, 'public/config.js');
+    const src = fs.readFileSync(cfgPath, 'utf8');
+    const mm = src.match(/window\.APP_CONFIG\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+    if (mm) {
+      const cfg = Function('return (' + mm[1] + ')')();
+      cfg.bundledCrestIds = manifest.teamIds.map(String);
+      fs.writeFileSync(cfgPath, 'window.APP_CONFIG=' + JSON.stringify(cfg) + ';\n');
+    }
+  } catch (e) { console.warn('config.js crest ids not updated', e.message); }
   console.log(JSON.stringify({ total: ids.length, inManifest: manifest.teamIds.length, downloaded: ok, skipped: skip, failed: fail }));
 }
 

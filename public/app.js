@@ -405,21 +405,23 @@ const BUNDLED_CREST_BASE = 'assets/crests/';
 let _crestDbP = null;
 const _crestMem = new Map();
 const _crestInflight = new Map();
-let _bundledCrestIds = null;
+let _bundledCrestIds = (CFG.bundledCrestIds && Array.isArray(CFG.bundledCrestIds))
+  ? new Set(CFG.bundledCrestIds.map((id) => String(id)))
+  : null;
 try {
   fetch(BUNDLED_CREST_BASE + 'manifest.json', { cache: 'force-cache' })
     .then((r) => (r && r.ok ? r.json() : null))
     .then((j) => {
-      _bundledCrestIds = new Set(
-        (j && Array.isArray(j.teamIds) ? j.teamIds : []).map((id) => String(id))
-      );
+      const fromMan = (j && Array.isArray(j.teamIds) ? j.teamIds : []).map((id) => String(id));
+      if (fromMan.length) _bundledCrestIds = new Set(fromMan);
+      else if (_bundledCrestIds === null) _bundledCrestIds = new Set();
       try {
         const rn = route().name;
         if (rn === 'data' || rn === 'tribe' || rn === 'tribe-club') render({ force: true });
       } catch (_) {}
     })
-    .catch(() => { _bundledCrestIds = new Set(); });
-} catch (_) { _bundledCrestIds = new Set(); }
+    .catch(() => { if (_bundledCrestIds === null) _bundledCrestIds = new Set(); });
+} catch (_) { if (_bundledCrestIds === null) _bundledCrestIds = new Set(); }
 
 /* ── Data-center player photos: APK-bundled assets (1.9.204+) ── */
 const BUNDLED_PLAYER_BASE = 'assets/players/';
@@ -741,7 +743,7 @@ function dcAvatarImgError(img) {
 function bundledCrestPath(teamId) {
   const tid = teamId != null && String(teamId) !== '' ? String(teamId) : '';
   if (!tid) return '';
-  // 1.9.203: before manifest loads, do not guess bundled path (avoids 404 → blank/hung remote)
+  // CFG.bundledCrestIds is available on first paint; manifest may later extend the set.
   if (_bundledCrestIds === null) return '';
   if (_bundledCrestIds.has(tid)) return BUNDLED_CREST_BASE + tid + '.png';
   return '';
@@ -886,11 +888,34 @@ function espnIdFromCrestLogo(logo) {
   const m = String(logo || '').match(/\/teamlogos\/soccer\/(?:500|50000)\/(\d+)\.(?:png|jpe?g)/i);
   return m ? m[1] : '';
 }
-function bundledCrestFor(logo, teamId) {
+function isJingcaiOrSportteryLogo(logo) {
+  return /sporttery\.cn|jingcai|zgzcw|okooo|cnlottery|tiicai/i.test(String(logo || ''));
+}
+/* Club badges from ESPN tables / TheSportsDB / API-Football — safe to pair with an ESPN teamId.
+   Not flags, not sporttery/jingcai ids (359 = 亚美尼亚 vs Arsenal). */
+function isEspnNamespaceClubLogo(logo) {
+  const s = String(logo || '');
+  if (!s || isNationalFlagLogo(s) || isJingcaiOrSportteryLogo(s)) return false;
+  if (/thesportsdb\.com\/.*\/team\/badge/i.test(s)) return true;
+  if (/media\.api-sports\.io\/football\/teams\/\d+/i.test(s)) return true;
+  if (espnIdFromCrestLogo(s)) return true;
+  if (/espncdn\.com\/i\/teamlogos\/soccer\//i.test(s)) return true;
+  return false;
+}
+function bundledCrestFor(logo, teamId, opts) {
   if (isNationalFlagLogo(logo)) return '';
-  const espnId = espnIdFromCrestLogo(logo);
-  if (espnId) return bundledCrestPath(espnId);
-  return '';
+  if (isJingcaiOrSportteryLogo(logo)) return '';
+  const espnFromLogo = espnIdFromCrestLogo(logo);
+  if (espnFromLogo) return bundledCrestPath(espnFromLogo);
+  opts = opts || {};
+  const explicit = opts.espnTeamId != null && String(opts.espnTeamId) !== '' ? String(opts.espnTeamId) : '';
+  const tid = explicit || (teamId != null && String(teamId) !== '' ? String(teamId) : '');
+  if (!tid) return '';
+  const nsOk = !!explicit || opts.idNs === 'espn';
+  const logoOk = isEspnNamespaceClubLogo(logo);
+  // Bare teamId is only trusted when the row is clearly ESPN-namespace.
+  if (!nsOk && !logoOk) return '';
+  return bundledCrestPath(tid);
 }
 
 function crestCacheKey(logo, teamId) {
@@ -1069,13 +1094,13 @@ function badge(name, cls = '', logo, opts) {
   if (logo && isCrestPlaceholderLogo(logo) && !isFlag) {
     return `<span class="badge ${cls}" style="background:${bg}">${letter}</span>`;
   }
-  const bundled = bundledCrestFor(logo, tid);
+  const bundled = bundledCrestFor(logo, tid, opts);
   const flagBundled = iso2 ? bundledFlagPath(iso2) : '';
   const flagRemote = iso2 ? flagcdnUrl(iso2) : '';
   const flagProxy = flagRemote ? (API + '/api/logo?url=' + encodeURIComponent(flagRemote)) : '';
   // National teams: bundled rectangular flag first, then flagcdn via /api/logo.
   // Never fall back to the original circular SM / sporttery / football-ball logo.
-  // Club crests unchanged (not forced to rectangles).
+  // Club crests: packed ESPN file first (CFG/manifest), then IDB, then /api/logo.
   let srcUrl = flagBundled || bundled || (_crestMem.has(ckey) ? _crestMem.get(ckey) : (isFlag ? (flagProxy || '') : apiUrl));
   if (!srcUrl) return `<span class="badge ${cls}" style="background:${bg}">${letter}</span>`;
   const src = esc(srcUrl);
@@ -1085,11 +1110,13 @@ function badge(name, cls = '', logo, opts) {
   } else if (flagProxy && srcUrl === flagProxy) {
     // no data-fb2 to the original SM/sporttery URL
   } else if (bundled && srcUrl === bundled) {
-    fbAttr = ` data-fb="${esc(apiUrl)}"`;
+    fbAttr = ` data-fb="${esc(apiUrl)}" data-bundled="${esc(bundled)}"`;
+  } else if (bundled) {
+    fbAttr = ` data-bundled="${esc(bundled)}"`;
   }
   const lazyAttr = (opts && opts.eager) ? '' : ' loading="lazy"';
   const dataAttrs = ` data-crest-key="${esc(ckey)}" data-crest-logo="${esc(logo)}"${tid ? ` data-team-id="${esc(tid)}"` : ''}${iso2 ? ` data-flag-iso="${esc(iso2)}"` : ''}`;
-  const onerr = "var img=this,p=img.parentNode;if(!p)return;var fb=img.getAttribute('data-fb');if(fb&&!img.dataset.triedFb){img.dataset.triedFb=1;img.src=fb;return;}var fb2=img.getAttribute('data-fb2');if(fb2&&!img.dataset.triedFb2){img.dataset.triedFb2=1;img.src=fb2;return;}if(p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter " + cls + "';p.style.background='" + bg + "';p.textContent=p.dataset.letter||'';img.remove()";
+  const onerr = "var img=this,p=img.parentNode;if(!p)return;var bundled=img.getAttribute('data-bundled')||'';var cur=img.getAttribute('src')||'';if(bundled&&cur.indexOf(bundled)<0&&!img.dataset.triedBundled){img.dataset.triedBundled=1;img.src=bundled;return;}var fb=img.getAttribute('data-fb');if(fb&&!img.dataset.triedFb){img.dataset.triedFb=1;img.src=fb;return;}var fb2=img.getAttribute('data-fb2');if(fb2&&!img.dataset.triedFb2){img.dataset.triedFb2=1;img.src=fb2;return;}if(bundled){if(cur.indexOf(bundled)<0){img.src=bundled;}return;}if(p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter " + cls + "';p.style.background='" + bg + "';p.textContent=p.dataset.letter||'';img.remove()";
   const corsAttr = /^https?:/i.test(srcUrl) ? ' crossorigin="anonymous"' : '';
   const flagCls = isFlag ? ' flag' : '';
   // 377: do not force a 3:2 HTML aspect on every flag (CH is square, SCT is 5:3).
@@ -1103,6 +1130,10 @@ function matchTeamBadge(m, side, cls, extra) {
   const logo = away ? m.awayLogo : m.homeLogo;
   const tid = away ? (m.awayTeamId || '') : (m.homeTeamId || '');
   const opts = Object.assign({ teamId: tid, league: m.league || m.leagueName || '' }, extra || {});
+  if (m.idNs && !opts.idNs) opts.idNs = m.idNs;
+  if ((m.espnTeamId || (away ? m.awayEspnTeamId : m.homeEspnTeamId)) && !opts.espnTeamId) {
+    opts.espnTeamId = String(m.espnTeamId || (away ? m.awayEspnTeamId : m.homeEspnTeamId));
+  }
   return badge(name, cls || '', logo, opts);
 }
 const shortRk = s => (String(s || '').length <= 5 ? esc(s) : ''); // long group ranks like [亚运男足1] only shown on the detail page
@@ -4468,7 +4499,7 @@ function tribeGridHtml(teams, title, opts) {
   }
   const head = title ? `<div class="tribe-sec-hd">${esc(title)}<small>${teams.length}个</small></div>` : '';
   const cells = teams.map(t => {
-    const crest = badge(t.nameZh, 'tribe', t.logo, { eager: true, teamId: t.teamId || '' });
+    const crest = badge(t.nameZh, 'tribe', t.logo, { eager: true, teamId: t.teamId || '', idNs: 'espn' });
     const heat = t.heat > 0 ? `<span class="tribe-heat num">🔥 ${t.heat}</span>` : '';
     const fol = isTribeFollow(t.tribeId) ? '<span class="tribe-fol-dot" aria-hidden="true"></span>' : '';
     return `<button type="button" class="tribe-cell" data-go="#/tribe-club/${encodeURIComponent(t.tribeId)}" aria-label="${esc(t.nameZh)}">
@@ -4499,15 +4530,40 @@ function hardenTribeCrestImgs(root) {
     const scope = root || document;
     scope.querySelectorAll('.tribe-crest-wrap .badge.crest img').forEach((img) => {
       if (img.complete && img.naturalWidth > 0) return;
+      const wrap = img.parentElement;
+      const logo = (wrap && wrap.getAttribute('data-crest-logo')) || '';
+      const tid = (wrap && wrap.getAttribute('data-team-id')) || '';
+      const packed = (typeof bundledCrestFor === 'function' ? bundledCrestFor(logo, tid, { teamId: tid, idNs: 'espn' }) : '') || img.getAttribute('data-bundled') || '';
+      const srcNow = img.getAttribute('src') || '';
+      const isLocal = /assets\/crests\/|assets\/flags\//.test(srcNow) || srcNow.startsWith('blob:') || srcNow.startsWith('data:');
+      if (packed && srcNow !== packed) {
+        try { img.src = packed; } catch (_) {}
+      }
+      if (packed || isLocal) {
+        const timer = setTimeout(() => {
+          if (img.complete && img.naturalWidth > 0) return;
+          if (packed && (img.getAttribute('src') || '') !== packed) {
+            try { img.src = packed; } catch (_) {}
+          }
+        }, 2800);
+        img.addEventListener('load', () => clearTimeout(timer), { once: true });
+        img.addEventListener('error', () => {
+          clearTimeout(timer);
+          if (packed && (img.getAttribute('src') || '').indexOf(packed) < 0) {
+            try { img.src = packed; } catch (_) {}
+          }
+        }, { once: true });
+        return;
+      }
       let done = false;
       const fall = () => {
         if (done) return;
         done = true;
         try { if (typeof img.onerror === 'function') img.onerror(); } catch (_) {}
       };
-      const t = setTimeout(fall, 2800);
-      img.addEventListener('load', () => { done = true; clearTimeout(t); }, { once: true });
-      img.addEventListener('error', () => { done = true; clearTimeout(t); }, { once: true });
+      const timer = setTimeout(fall, 2800);
+      img.addEventListener('load', () => { done = true; clearTimeout(timer); }, { once: true });
+      img.addEventListener('error', () => { done = true; clearTimeout(timer); }, { once: true });
     });
   } catch (_) {}
 }
@@ -4552,7 +4608,7 @@ function pageTribeClub(id) {
   const folOn = isTribeFollow(t.tribeId);
   const folBtn = tribeJoinBtnHtml(t, folOn);
   const accent = tribeHeroAccent(t.leagueKey);
-  const crest = badge(t.nameZh, 'lg tribe-club-crest', t.logo, { eager: true, teamId: t.teamId || (String(t.tribeId || '').includes('-') ? String(t.tribeId).split('-').slice(1).join('-') : '') });
+  const crest = badge(t.nameZh, 'lg tribe-club-crest', t.logo, { eager: true, idNs: 'espn', teamId: t.teamId || (String(t.tribeId || '').includes('-') ? String(t.tribeId).split('-').slice(1).join('-') : '') });
   const sub = [t.leagueZh, t.points > 0 ? `积分榜 ${t.points} 分` : ''].filter(Boolean).join(' · ');
   const logoRaw = t.logo ? String(t.logo) : '';
   const heroCls = 'tribe-club-hero hero hero--edge' + (logoRaw ? ' has-logo' : '');
@@ -6710,7 +6766,7 @@ function renderStandingsTable(payload) {
       <thead><tr><th class="rk">#</th><th class="tm">球队</th><th class="dc-st">赛</th><th class="dc-st">胜</th><th class="dc-st">平</th><th class="dc-st">负</th><th class="dc-st gfga">进/失</th><th class="pts">积分</th></tr></thead><tbody>`;
     for (const r of rows) {
       const logoUrl = r.logo || (r.teamId ? ('https://a.espncdn.com/i/teamlogos/soccer/500/' + r.teamId + '.png') : '');
-      const crestOpts = r.teamId ? { teamId: r.teamId, eager: Number(r.rank) <= 8 } : null;
+      const crestOpts = r.teamId ? { teamId: r.teamId, idNs: 'espn', eager: Number(r.rank) <= 8 } : null;
       const logo = logoUrl ? badge(r.teamZh || r.team, '', logoUrl, crestOpts) : badge(r.teamZh || r.team);
       const z = zoneForRank(lg, r.rank);
       const zoneCls = z ? z.cls : '';
@@ -6779,7 +6835,7 @@ function renderScorersList(payload, kind) {
     const photo = phSrc
       ? `<span class="dc-avatar" data-letter="${initial}" data-alt="${esc(altPhoto)}"${pidAttr}${tmAttr}><img alt="" width="88" height="88" decoding="async"${lazyAttr} src="${esc(phSrc)}" onerror="dcAvatarImgError(this)"></span>`
       : `<span class="dc-avatar letter"${pidAttr}${tmAttr} data-letter="${initial}">${initial}</span>`;
-    const teamCrestOpts = r.teamId ? { teamId: r.teamId, eager: i < 8 } : null;
+    const teamCrestOpts = r.teamId ? { teamId: r.teamId, idNs: 'espn', eager: i < 8 } : null;
     const teamLogo = r.teamLogo ? badge(r.teamZh || r.team, 'sm', r.teamLogo, teamCrestOpts) : badge(r.teamZh || r.team, 'sm');
     const primary = isMv
       ? (r.labelZh || r.text || '暂无')
@@ -6815,7 +6871,7 @@ function renderClubValuesTable(payload) {
     <thead><tr><th class="rk">#</th><th class="tm">球队</th><th class="mv">总身价</th><th class="sq">人数</th></tr></thead><tbody>`;
   for (const r of rows) {
     const logoUrl = r.logo || (r.teamId ? ('https://a.espncdn.com/i/teamlogos/soccer/500/' + r.teamId + '.png') : '');
-    const crestOpts = r.teamId ? { teamId: r.teamId, eager: Number(r.rank) <= 8 } : null;
+    const crestOpts = r.teamId ? { teamId: r.teamId, idNs: 'espn', eager: Number(r.rank) <= 8 } : null;
     const logo = logoUrl ? badge(r.teamZh || r.team, '', logoUrl, crestOpts) : badge(r.teamZh || r.team);
     const href = r.teamId ? `#/team/${encodeURIComponent(r.teamId)}?league=${encodeURIComponent(lg)}` : '';
     const rowCls = (href ? 'dc-row-link' : '') + (r.ok === false ? ' dc-mv-miss' : '');
@@ -7218,7 +7274,7 @@ function stashDetailHintFromEl(el, href) {
 
 function teamDetailFirstHtml(t, id, lg, { fromCache, fromHint } = {}) {
   if (!t || t.ok === false) return '';
-  const logo = t.logo ? badge(t.teamZh || t.team, 'lg', t.logo, t.teamId || id ? { teamId: t.teamId || id, eager: true } : null) : badge(t.teamZh || t.team, 'lg');
+  const logo = t.logo ? badge(t.teamZh || t.team, 'lg', t.logo, t.teamId || id ? { teamId: t.teamId || id, idNs: 'espn', eager: true } : null) : badge(t.teamZh || t.team, 'lg');
   let stats = '';
   if (t.rank != null || t.points != null || t.played != null) {
     stats = `<div class="det-stats">
@@ -7486,7 +7542,7 @@ function fxRowHtml(fx) {
 function paintTeamDetail(t, id, lg, { fromCache } = {}) {
   const box = document.getElementById('team-box');
   if (!box || !t || t.ok === false) return;
-  const logo = t.logo ? badge(t.teamZh || t.team, 'lg', t.logo) : badge(t.teamZh || t.team, 'lg');
+  const logo = t.logo ? badge(t.teamZh || t.team, 'lg', t.logo, t.teamId || id ? { teamId: t.teamId || id, idNs: 'espn', eager: true } : null) : badge(t.teamZh || t.team, 'lg');
   let stats = '';
   if (t.rank != null || t.points != null) {
     stats = `<div class="det-stats">
