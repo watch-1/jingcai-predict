@@ -9,9 +9,15 @@ assert.strictEqual(wx.mapDescription('broken clouds').type, 'cloudy');
 assert.strictEqual(wx.mapDescription('overcast clouds').type, 'cloudy');
 assert.strictEqual(wx.mapDescription('overcast clouds').labelZh, '阴');
 assert.strictEqual(wx.mapDescription('light rain').type, 'light-rain');
-assert.strictEqual(wx.mapDescription('moderate rain').type, 'storm');
-assert.strictEqual(wx.mapDescription('heavy intensity rain').type, 'storm');
+assert.strictEqual(wx.mapDescription('moderate rain').type, 'rain');
+assert.strictEqual(wx.mapDescription('moderate rain').labelZh, '中雨');
+assert.strictEqual(wx.mapDescription('heavy intensity rain').type, 'rain');
+assert.strictEqual(wx.mapDescription('heavy intensity rain').labelZh, '大雨');
 assert.strictEqual(wx.mapDescription('thunderstorm').type, 'storm');
+assert.strictEqual(wx.mapDescription('light rain').labelZh, '小雨');
+assert.strictEqual(wx.mapWmo(63).type, 'rain');
+assert.strictEqual(wx.mapWmo(61).type, 'light-rain');
+assert.strictEqual(wx.mapWmo(95).type, 'storm');
 assert.strictEqual(wx.parsePercent('79%'), 79);
 assert.strictEqual(wx.parsePercent(83), 83);
 assert.strictEqual(wx.pickDayPart(14), 'day');
@@ -27,7 +33,8 @@ const actual = wx.normalizeWeather({
 }, { name: 'SANKYO FRONTIER Kashiwa Stadium' }, { id: 19903098, starting_at: '2026-11-15 08:00:00' });
 assert.strictEqual(actual.ok, true);
 assert.strictEqual(actual.source, 'sportmonks');
-assert.strictEqual(actual.type, 'storm');
+assert.strictEqual(actual.type, 'rain');
+assert.strictEqual(actual.labelZh, '大雨');
 assert.strictEqual(actual.tempC, 11.84);
 assert.strictEqual(actual.humidity, 79);
 assert.strictEqual(actual.windMs, 2.89);
@@ -60,7 +67,7 @@ const eve = wx.normalizeWeather({
   type: 'forecast',
 }, { name: 'King Power at Den Dreef' }, { id: 19676655, starting_at: '2026-11-15 19:45:00' });
 assert.strictEqual(eve.tempC, 10.53);
-assert.strictEqual(eve.type, 'storm');
+assert.strictEqual(eve.type, 'rain');
 assert.strictEqual(eve.labelZh, '中雨');
 
 const empty = wx.normalizeWeather({}, { name: 'X' }, { id: 1 });

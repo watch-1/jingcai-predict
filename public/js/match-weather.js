@@ -18,8 +18,8 @@
     if (c === 45 || c === 48) return { type: 'cloudy', labelZh: '雾' };
     if (c === 51 || c === 53 || c === 55 || c === 56 || c === 57) return { type: 'light-rain', labelZh: '毛毛雨' };
     if (c === 61 || c === 80) return { type: 'light-rain', labelZh: '小雨' };
-    if (c === 63 || c === 81) return { type: 'light-rain', labelZh: '中雨' };
-    if (c === 65 || c === 82) return { type: 'light-rain', labelZh: '大雨' };
+    if (c === 63 || c === 81) return { type: 'rain', labelZh: '中雨' };
+    if (c === 65 || c === 82) return { type: 'rain', labelZh: '大雨' };
     if (c === 66 || c === 67) return { type: 'light-rain', labelZh: '冻雨' };
     if (c === 71 || c === 85) return { type: 'cloudy', labelZh: '小雪' };
     if (c === 73 || c === 86) return { type: 'cloudy', labelZh: '中雪' };

@@ -8464,41 +8464,128 @@ html[data-theme="pitch"] .hero.hero--weather {
   background-repeat: no-repeat;
   transition: opacity .35s ease;
 }
-.hero.hero--weather[data-weather="sunny"] .hero-wx-sky {
+.hero.hero--weather[data-weather="sunny"] .hero-wx-sky,
+.hero.hero--weather[data-weather="light-rain"] .hero-wx-sky,
+.hero.hero--weather[data-weather="rain"] .hero-wx-sky,
+.hero.hero--weather[data-weather="storm"] .hero-wx-sky {
   opacity: 1;
-  background-image: url("assets/weather/sunny.webp");
-  background-size: 118% 118%;
-  animation: wx-drift 48s linear infinite alternate;
+  background-size: 124% 124%;
+  background-repeat: no-repeat;
+  animation: wx-drift 14s linear infinite alternate;
 }
-.hero.hero--weather[data-weather="light-rain"] .hero-wx-sky {
-  opacity: 1;
+.hero.hero--weather[data-weather="sunny"] .hero-wx-sky {
+  background-image: url("assets/weather/sunny.webp");
+}
+.hero.hero--weather[data-weather="light-rain"] .hero-wx-sky,
+.hero.hero--weather[data-weather="rain"] .hero-wx-sky {
   background-image: url("assets/weather/light-rain.webp");
 }
 .hero.hero--weather[data-weather="storm"] .hero-wx-sky {
-  opacity: 1;
-  background-image: url("assets/weather/storm.webp");
+  /* Rain sky without the bolt baked into storm.webp; lightning is animated. */
+  background-image: url("assets/weather/light-rain.webp");
+  filter: brightness(0.68) saturate(0.78) contrast(1.12);
 }
+/* Nearly vertical streaks (~15° from vertical). 90deg would be vertical
+   stripes; 105deg adds a slight wind slant. -18deg was almost horizontal. */
 .hero-wx-rain {
   opacity: 0;
   background-image: repeating-linear-gradient(
-    -18deg,
-    transparent 0 10px,
-    rgba(255, 255, 255, .22) 10px 11px,
-    transparent 11px 18px
+    105deg,
+    transparent 0 17px,
+    rgba(220, 230, 245, .28) 18px 19px,
+    transparent 20px 36px
   );
-  background-size: 22px 36px;
-  animation: wx-rain .7s linear infinite;
+  background-size: 42px 90px;
+  animation: wx-rain .55s linear infinite;
 }
-.hero.hero--weather[data-weather="light-rain"] .hero-wx-rain { opacity: .45; }
-.hero.hero--weather[data-weather="storm"] .hero-wx-rain { opacity: .58; }
+.hero-wx-rain::before,
+.hero-wx-rain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.hero-wx-rain::before {
+  background-image: repeating-linear-gradient(
+    100deg,
+    transparent 0 26px,
+    rgba(210, 222, 240, .16) 27px 28px,
+    transparent 29px 58px
+  );
+  background-size: 64px 130px;
+  animation: wx-rain-far 1.05s linear infinite;
+}
+.hero-wx-rain::after {
+  background-image: repeating-linear-gradient(
+    108deg,
+    transparent 0 11px,
+    rgba(235, 242, 255, .38) 12px 12.7px,
+    transparent 13.5px 24px
+  );
+  background-size: 28px 64px;
+  animation: wx-rain-near .38s linear infinite;
+}
+.hero.hero--weather[data-weather="light-rain"] .hero-wx-rain,
+.hero-sticky[data-weather="light-rain"] .hero-wx-rain { opacity: .72; }
+.hero.hero--weather[data-weather="light-rain"] .hero-wx-rain::before,
+.hero-sticky[data-weather="light-rain"] .hero-wx-rain::before { opacity: .55; }
+.hero.hero--weather[data-weather="light-rain"] .hero-wx-rain::after,
+.hero-sticky[data-weather="light-rain"] .hero-wx-rain::after { opacity: .4; }
+.hero.hero--weather[data-weather="rain"] .hero-wx-rain,
+.hero-sticky[data-weather="rain"] .hero-wx-rain { opacity: .9; }
+.hero.hero--weather[data-weather="rain"] .hero-wx-rain::before,
+.hero-sticky[data-weather="rain"] .hero-wx-rain::before { opacity: .8; }
+.hero.hero--weather[data-weather="rain"] .hero-wx-rain::after,
+.hero-sticky[data-weather="rain"] .hero-wx-rain::after { opacity: .75; }
+.hero.hero--weather[data-weather="storm"] .hero-wx-rain,
+.hero-sticky[data-weather="storm"] .hero-wx-rain { opacity: .95; }
+.hero.hero--weather[data-weather="storm"] .hero-wx-rain::before,
+.hero-sticky[data-weather="storm"] .hero-wx-rain::before { opacity: .85; }
+.hero.hero--weather[data-weather="storm"] .hero-wx-rain::after,
+.hero-sticky[data-weather="storm"] .hero-wx-rain::after { opacity: .8; }
 .hero-wx-flash {
   opacity: 0;
   background:
-    radial-gradient(ellipse 50% 40% at 62% 18%, rgba(255, 255, 255, .42), transparent 58%),
-    linear-gradient(180deg, rgba(230, 236, 255, .16), transparent 46%);
+    radial-gradient(ellipse 55% 48% at 62% 18%, rgb(200 214 235) 0%, rgb(10 11 14) 62%),
+    linear-gradient(180deg, rgb(120 132 160) 0%, rgb(10 11 14) 50%);
+  mix-blend-mode: screen;
 }
-.hero.hero--weather[data-weather="storm"] .hero-wx-flash {
-  animation: wx-flash 7.2s ease-in-out infinite;
+.hero-wx-flash::before,
+.hero-wx-flash::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  filter: drop-shadow(0 0 6px #fff) drop-shadow(0 0 16px rgba(200, 220, 255, .85));
+}
+.hero-wx-flash::before {
+  top: -4%;
+  left: 46%;
+  width: 22%;
+  height: 78%;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 180' preserveAspectRatio='none'><path fill='%23f7fbff' d='M48 0 L30 62 L52 56 L18 180 L40 88 L20 94 Z'/><path fill='%23f7fbff' d='M34 70 L58 92 L44 96 L62 124 L48 100 L38 104 Z'/></svg>");
+}
+.hero-wx-flash::after {
+  top: 2%;
+  left: 18%;
+  width: 16%;
+  height: 62%;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 70 160' preserveAspectRatio='none'><path fill='%23eef4ff' d='M40 0 L26 54 L46 50 L14 160 L32 80 L16 84 Z'/><path fill='%23eef4ff' d='M28 58 L8 86 L22 82 L4 120 L24 90 L30 94 Z'/></svg>");
+}
+.hero.hero--weather[data-weather="storm"] .hero-wx-flash,
+.hero-sticky[data-weather="storm"] .hero-wx-flash {
+  animation: wx-flash 11.6s ease-in-out infinite;
+}
+.hero.hero--weather[data-weather="storm"] .hero-wx-flash::before,
+.hero-sticky[data-weather="storm"] .hero-wx-flash::before {
+  animation: wx-bolt 11.6s ease-in-out infinite;
+}
+.hero.hero--weather[data-weather="storm"] .hero-wx-flash::after,
+.hero-sticky[data-weather="storm"] .hero-wx-flash::after {
+  animation: wx-bolt-b 11.6s ease-in-out infinite;
 }
 .hero-wx-scrim {
   /* No alpha veil on the neutral hero — it dithered into grain on Android. */
@@ -8623,37 +8710,65 @@ html[data-theme="pitch"] .hero.hero--weather {
 }
 
 @keyframes wx-drift {
-  from { background-position: 18% 50%; }
-  to { background-position: 82% 48%; }
+  from { background-position: 16% 48%; }
+  to { background-position: 84% 52%; }
 }
 @keyframes wx-rain {
   from { background-position: 0 0; }
-  to { background-position: 22px 36px; }
+  to { background-position: 24px 90px; }
+}
+@keyframes wx-rain-far {
+  from { background-position: 0 0; }
+  to { background-position: 18px 130px; }
+}
+@keyframes wx-rain-near {
+  from { background-position: 0 0; }
+  to { background-position: 16px 64px; }
 }
 @keyframes wx-flash {
-  0%, 86%, 100% { opacity: 0; }
-  88% { opacity: .55; }
-  90% { opacity: .08; }
-  92% { opacity: .7; }
-  95% { opacity: 0; }
+  0%, 7%, 12%, 54%, 61%, 100% { opacity: 0; }
+  7.4% { opacity: .55; }
+  8% { opacity: .08; }
+  8.6% { opacity: .8; }
+  10% { opacity: 0; }
+  55.2% { opacity: .35; }
+  56% { opacity: 0; }
+  56.6% { opacity: .7; }
+  58% { opacity: 0; }
+}
+@keyframes wx-bolt {
+  0%, 7%, 11%, 100% { opacity: 0; }
+  7.3% { opacity: 1; }
+  7.7% { opacity: .15; }
+  8.2% { opacity: .95; }
+  8.8% { opacity: .2; }
+  9.3% { opacity: .7; }
+  10.2% { opacity: 0; }
+}
+@keyframes wx-bolt-b {
+  0%, 54%, 60%, 100% { opacity: 0; }
+  54.8% { opacity: .9; }
+  55.3% { opacity: 0; }
+  56.1% { opacity: 1; }
+  56.8% { opacity: .15; }
+  57.4% { opacity: .75; }
+  58.4% { opacity: 0; }
 }
 
+/* Only html.wx-paused (hidden tab / left match) stops motion.
+   Do not freeze hero weather on prefers-reduced-motion alone —
+   Android WebView often reports that even when the user wants motion. */
 html.wx-paused .hero-wx-sky,
 html.wx-paused .hero-wx-rain,
+html.wx-paused .hero-wx-rain::before,
+html.wx-paused .hero-wx-rain::after,
 html.wx-paused .hero-wx-flash,
+html.wx-paused .hero-wx-flash::before,
+html.wx-paused .hero-wx-flash::after,
 html.wx-paused .hero.hero--weather[data-weather] .hero-wx-sky,
 html.wx-paused .hero.hero--weather[data-weather] .hero-wx-rain,
 html.wx-paused .hero.hero--weather[data-weather] .hero-wx-flash {
   animation-play-state: paused !important;
-}
-@media (prefers-reduced-motion: reduce) {
-  .hero-wx-sky,
-  .hero-wx-rain,
-  .hero-wx-flash,
-  .hero.hero--weather[data-weather="sunny"] .hero-wx-sky,
-  .hero.hero--weather[data-weather="storm"] .hero-wx-flash {
-    animation: none !important;
-  }
 }
 
 /* Light match-detail content (luxury / default). Do not restyle home or other navy shells. */
@@ -9047,18 +9162,23 @@ html[data-theme="pitch"] .view.sub.md-wrap--review.is-hero-stuck .dtabs {
 .hero-sticky-fav svg { width: 18px; height: 18px; }
 .hero-sticky-fav.on { color: #f5c14a !important; }
 
-/* Cloudy / overcast atmosphere (CSS only, no extra image). */
+/* preview 368: cloudy uses opaque premultiplied stops mixed onto #0A0B0E.
+   Partial-alpha veils over the charcoal Neutral B glow dithered into 颗粒感
+   on Android WebView (same class of bug as the 361 glow). Cloud ellipses
+   stay in the upper sky so mid-side team glows remain visible. */
 .hero.hero--weather[data-weather="cloudy"] .hero-wx-sky,
 .hero-sticky[data-weather="cloudy"] .hero-wx-sky {
   opacity: 1;
   background:
-    radial-gradient(ellipse 70% 45% at 22% 18%, rgba(210, 218, 230, .28), transparent 62%),
-    radial-gradient(ellipse 60% 40% at 78% 8%, rgba(186, 196, 210, .22), transparent 60%),
-    linear-gradient(180deg, rgba(84, 98, 118, .42) 0%, rgba(28, 32, 42, .12) 62%, transparent 100%);
-  animation: wx-drift 56s linear infinite alternate;
+    radial-gradient(ellipse 62% 38% at 22% 12%, rgb(66 69 74) 0%, rgb(36 38 43) 46%, rgb(10 11 14) 74%),
+    radial-gradient(ellipse 54% 32% at 78% 8%, rgb(49 52 57) 0%, rgb(28 30 35) 50%, rgb(10 11 14) 76%),
+    radial-gradient(ellipse 48% 28% at 50% 0%, rgb(41 48 58) 0%, rgb(18 20 24) 58%, rgb(10 11 14) 80%);
+  background-size: 130% 130%;
+  animation: wx-drift 16s linear infinite alternate;
 }
-.hero.hero--weather[data-weather="cloudy"] .hero-wx-scrim {
-  background: linear-gradient(180deg, rgba(16, 18, 24, .08), transparent 40%);
+.hero.hero--weather[data-weather="cloudy"] .hero-wx-scrim,
+.hero-sticky[data-weather="cloudy"] .hero-wx-scrim {
+  background: none;
 }
 
 /* Distinctive 云足球 weather slip — not a clone of the blue reference card. */
@@ -9074,6 +9194,7 @@ html[data-theme="pitch"] .view.sub.md-wrap--review.is-hero-stuck .dtabs {
 .wx-slip[data-wx="sunny"] { background: linear-gradient(180deg, #f6efe2 0%, #f3f0e8 44%, #f7f5ef 100%); }
 .wx-slip[data-wx="cloudy"] { background: linear-gradient(180deg, #e7ebf1 0%, #f3f1eb 48%, #f6f4ef 100%); }
 .wx-slip[data-wx="light-rain"] { background: linear-gradient(180deg, #dfe8ef 0%, #eef1f3 46%, #f4f2ec 100%); }
+.wx-slip[data-wx="rain"] { background: linear-gradient(180deg, #d5e0ea 0%, #e8eef2 46%, #f4f2ec 100%); }
 .wx-slip[data-wx="storm"] { background: linear-gradient(180deg, #d8dde8 0%, #eceaf3 48%, #f4f2ec 100%); }
 .wx-slip-sky {
   position: relative;
@@ -9093,7 +9214,8 @@ html[data-theme="pitch"] .view.sub.md-wrap--review.is-hero-stuck .dtabs {
 .wx-slip[data-wx="cloudy"] .wx-slip-sky {
   background: linear-gradient(110deg, #4b5564 0%, #6a7482 100%);
 }
-.wx-slip[data-wx="light-rain"] .wx-slip-sky {
+.wx-slip[data-wx="light-rain"] .wx-slip-sky,
+.wx-slip[data-wx="rain"] .wx-slip-sky {
   background: linear-gradient(110deg, #3d5368 0%, #5a7388 100%);
 }
 .wx-slip[data-wx="storm"] .wx-slip-sky {
@@ -9111,8 +9233,9 @@ html[data-theme="pitch"] .view.sub.md-wrap--review.is-hero-stuck .dtabs {
     radial-gradient(ellipse 50% 36% at 18% 80%, rgba(255,255,255,.35), transparent 70%),
     radial-gradient(ellipse 40% 30% at 72% 100%, rgba(255,255,255,.22), transparent 70%);
 }
-.wx-slip[data-wx="light-rain"] .wx-slip-sky-fx {
-  background: repeating-linear-gradient(-18deg, transparent 0 9px, rgba(255,255,255,.22) 9px 10px, transparent 10px 16px);
+.wx-slip[data-wx="light-rain"] .wx-slip-sky-fx,
+.wx-slip[data-wx="rain"] .wx-slip-sky-fx {
+  background: repeating-linear-gradient(105deg, transparent 0 9px, rgba(255,255,255,.22) 9px 10px, transparent 10px 16px);
 }
 .wx-slip-kicker {
   position: relative;
@@ -9490,25 +9613,24 @@ html[data-theme="pitch"] .live-tl-card { background: #1a2336; }
 html[data-theme="pitch"] .live-c-meta { border-color: #243044; }
 html[data-theme="pitch"] .live-c-row { border-color: #243044; }
 
-/* Sticky bar reuses the same weather layers as the large hero. */
-.hero-sticky[data-weather="sunny"] .hero-wx-sky {
-  opacity: 1;
-  background-image: url("assets/weather/sunny.webp");
-  background-size: 118% 118%;
-  background-position: center 40%;
-}
-.hero-sticky[data-weather="light-rain"] .hero-wx-sky {
-  opacity: 1;
-  background-image: url("assets/weather/light-rain.webp");
-  background-size: cover;
-  background-position: center;
-}
+/* Sticky bar reuses the same weather layers as the large hero, scaled down. */
+.hero-sticky[data-weather="sunny"] .hero-wx-sky,
+.hero-sticky[data-weather="light-rain"] .hero-wx-sky,
+.hero-sticky[data-weather="rain"] .hero-wx-sky,
 .hero-sticky[data-weather="storm"] .hero-wx-sky {
   opacity: 1;
-  background-image: url("assets/weather/storm.webp");
-  background-size: cover;
-  background-position: center;
+  background-size: 124% 124%;
+  background-repeat: no-repeat;
+  animation: wx-drift 14s linear infinite alternate;
 }
-.hero-sticky[data-weather="light-rain"] .hero-wx-rain { opacity: .4; }
-.hero-sticky[data-weather="storm"] .hero-wx-rain { opacity: .52; }
-.hero-sticky[data-weather="storm"] .hero-wx-flash { animation: wx-flash 7.2s ease-in-out infinite; }
+.hero-sticky[data-weather="sunny"] .hero-wx-sky {
+  background-image: url("assets/weather/sunny.webp");
+}
+.hero-sticky[data-weather="light-rain"] .hero-wx-sky,
+.hero-sticky[data-weather="rain"] .hero-wx-sky {
+  background-image: url("assets/weather/light-rain.webp");
+}
+.hero-sticky[data-weather="storm"] .hero-wx-sky {
+  background-image: url("assets/weather/light-rain.webp");
+  filter: brightness(0.68) saturate(0.78) contrast(1.12);
+}

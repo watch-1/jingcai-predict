@@ -1704,6 +1704,8 @@ app.get('/api/match-weather', async (req, res) => {
     const payload = await require('./lib/match-weather').getMatchWeather({
       matchId, homeTeamId, awayTeamId, home, away, date, time, businessDate,
       kickoffMs: Number.isFinite(kickoffMs) ? kickoffMs : null,
+      venueName: String(req.query.venueName || req.query.venue || '').trim(),
+      venueCity: String(req.query.venueCity || '').trim(),
     });
     res.json(payload);
   } catch (e) {
@@ -2709,6 +2711,21 @@ async function slatePrefetchJob(reason) {
 }
 setTimeout(() => slatePrefetchJob('startup'), 40e3);
 setInterval(() => slatePrefetchJob('tick'), 10 * 60e3);
+
+// Persist SportMonks (or honest Open-Meteo fallback) weather for the
+// current selling slate + live/soon matches so /api/match-weather is a store hit.
+async function weatherPrefetchJob(reason) {
+  try {
+    const wx = require('./lib/match-weather');
+    const mat = await getData('matches').catch(() => ({ data: [] }));
+    const sch = await getData('schedule').catch(() => ({ data: [] }));
+    const list = wx.selectPrefetchMatches((mat && mat.data) || [], (sch && sch.data) || []);
+    const r = await wx.prefetchWeather(list, { reason, gapMs: 800 });
+    if (r && r.skippedRun) console.log('[weather-prefetch]', reason, 'already running');
+  } catch (e) { console.warn('[weather-prefetch]', reason, e.message); }
+}
+setTimeout(() => weatherPrefetchJob('startup'), 55e3);
+setInterval(() => weatherPrefetchJob('tick'), 20 * 60e3);
 
 
 // 1.9.53: auto-fill missing team badges (ESPN → API-Football) into crests.json + hot-reload maps

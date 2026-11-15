@@ -11685,11 +11685,12 @@ function liveTabHtml(x, live) {
 
 
 /** 365: match-detail weather/neutral hero. Unknown weather stays Neutral B; never invent a sky. */
-const MATCH_WEATHER_TYPES = ['neutral', 'sunny', 'cloudy', 'light-rain', 'storm'];
+const MATCH_WEATHER_TYPES = ['neutral', 'sunny', 'cloudy', 'light-rain', 'rain', 'storm'];
 function matchWeatherType(x) {
   const raw = (x && (x.weatherType || x.weather || x.wxType)) || (S.matchWeather && S.matchWeather[String(x && x.id || '')]) || 'neutral';
   let t = String(raw || 'neutral').toLowerCase().replace(/[\s_]+/g, '-');
-  if (t === 'rain' || t === 'lightrain' || t === 'drizzle' || t === 'showers') t = 'light-rain';
+  if (t === 'lightrain' || t === 'drizzle') t = 'light-rain';
+  if (t === 'showers' || t === 'moderate-rain' || t === 'heavy-rain' || t === 'heavyrain' || t === 'moderaterain') t = 'rain';
   if (t === 'thunder' || t === 'thunderstorm' || t === 'lightning') t = 'storm';
   if (t === 'overcast' || t === 'clouds' || t === 'cloud' || t === 'fog' || t === 'mist') t = 'cloudy';
   if (t === 'clear' || t === 'fair') t = 'sunny';
