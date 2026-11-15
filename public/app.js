@@ -1092,7 +1092,8 @@ function badge(name, cls = '', logo, opts) {
   const onerr = "var img=this,p=img.parentNode;if(!p)return;var fb=img.getAttribute('data-fb');if(fb&&!img.dataset.triedFb){img.dataset.triedFb=1;img.src=fb;return;}var fb2=img.getAttribute('data-fb2');if(fb2&&!img.dataset.triedFb2){img.dataset.triedFb2=1;img.src=fb2;return;}if(p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter " + cls + "';p.style.background='" + bg + "';p.textContent=p.dataset.letter||'';img.remove()";
   const corsAttr = /^https?:/i.test(srcUrl) ? ' crossorigin="anonymous"' : '';
   const flagCls = isFlag ? ' flag' : '';
-  const wh = isFlag ? 'width="160" height="107"' : 'width="160" height="160"';
+  // 377: do not force a 3:2 HTML aspect on every flag (CH is square, SCT is 5:3).
+  const wh = isFlag ? 'width="160"' : 'width="160" height="160"';
   return `<span class="badge crest${flagCls} ${cls}" data-letter="${letter}"${dataAttrs}><img alt="" ${wh} decoding="async"${lazyAttr}${fbAttr}${corsAttr} src="${src}" onerror="${onerr}"></span>`;
 }
 function matchTeamBadge(m, side, cls, extra) {
