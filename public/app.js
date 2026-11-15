@@ -2455,14 +2455,21 @@ function openSmPlayerDetail(raw) {
     </div>`;
   const g = p.goals != null ? p.goals : '—';
   const a = p.assists != null ? p.assists : '—';
+  const xgDisp = (p.xg != null && Number.isFinite(Number(p.xg)))
+    ? (Math.round(Number(p.xg) * 10) / 10).toFixed(1)
+    : '—';
   const shots = p.shots != null ? Number(p.shots).toFixed(1).replace(/\.0$/, '') : '—';
   const shotsOnDisp = p.shotsOn != null ? String(Math.round(p.shotsOn)) : '—';
   const passesDisp = p.totalPasses != null ? String(Math.round(p.totalPasses)) : '—';
   const accDisp = p.totalAccurate != null ? String(Math.round(p.totalAccurate)) : '—';
   const tkAvg = p.tackles != null ? Number(p.tackles).toFixed(1).replace(/\.0$/, '') : '—';
+  const xgFoot = (Number.isFinite(Number(p.xgN)) && Number(p.xgN) > 0 && Number.isFinite(Number(p.apps)) && Number(p.xgN) < Number(p.apps))
+    ? ` 预期进球来自其中 ${Number(p.xgN)} 场有数据。`
+    : '';
   const grid = `
     <div class="sm-pd-grid">
       ${smStatCell(g, '进球')}
+      ${smStatCell(xgDisp, '预期进球')}
       ${smStatCell(a, '助攻')}
       ${smStatCell(shots, '射门')}
       ${smStatCell(shotsOnDisp, '射正')}
@@ -2475,7 +2482,7 @@ function openSmPlayerDetail(raw) {
       ${smStatCell('—', '过人')}
       ${smStatCell(p.minutes != null ? String(p.minutes) : '—', '分钟')}
     </div>
-    <p class="note sm-pd-foot">射正/抢断成功率等由 SM  lineup 明细汇总；缺失项显示为「—」，不猜测。</p>`;
+    <p class="note sm-pd-foot">射正/抢断成功率等由 SM  lineup 明细汇总；缺失项显示为「—」，不猜测。${xgFoot}</p>`;
   openSheetHtml(`<div class="sheet sm-player-sheet" role="dialog" aria-label="球员数据">
     <div class="sm-pd-head"><button type="button" class="x" data-act="closeSheet">✕</button>
       ${headImg}
@@ -2529,6 +2536,7 @@ function navNote(h) {
   else if (NAV[NAV.length - 1] !== h) { NAV.push(h); if (NAV.length > 50) NAV.shift(); }
 }
 function back() {
+  if (S.radarExpand) { closeRadarExpand(); return; }
   const reopenMe = S.meBackToDrawer && isMeDrawerChildRoute(route().name);
   if (NAV.length >= 2) {
     NAV.pop(); const prev = NAV.pop();
@@ -2539,7 +2547,7 @@ function back() {
     }
   } else { NAV.length = 0; go('#/home', true); navNote('#/home'); }
 }
-window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); if (route().name !== 'home') { stopHomeFocusRotate(); stopHomeLiveScorePoll(); } render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeRadarExpand(); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); if (route().name !== 'home') { stopHomeFocusRotate(); stopHomeLiveScorePoll(); } render(); window.scrollTo(0, 0); });
 // Android back button hook (MainActivity calls this): returns 1 if handled in-page, 0 to exit the app
 window.__appBack = () => {
   if (!$('#dialog').classList.contains('hidden')) { $('#dialog').querySelector('[data-r="0"]').click(); return 1; }
@@ -2547,6 +2555,7 @@ window.__appBack = () => {
     if ($('#sheet').classList.contains('bonus-opt-mask')) { closeBonusOptSheet(); openCalcSubmitSheet(); return 1; }
     closeSheet(); return 1;
   }
+  if (S.radarExpand) { closeRadarExpand(); return 1; }
   if (meDrawerOpen()) { closeMeDrawer(); return 1; }
   const r = route();
   if (r.name === 'login' && !S.guest && !loggedIn()) return 0;
@@ -7291,7 +7300,7 @@ function playerCard(pl) {
   const enSub = (pl.nameZh && pl.name && pl.nameZh !== pl.name)
     ? '<div class="pl-meta dim">' + esc(pl.name) + '</div>'
     : '';
-  return '<button type="button" class="pl-card" data-go="#/player/' + encodeURIComponent(pl.id) + '">' + img +
+  return '<button type="button" class="pl-card" data-go="' + playerHref(pl.id) + '">' + img +
     '<div class="pl-body"><div class="pl-name">' +
     (pl.number ? '<span class="pl-no">' + esc(pl.number) + '</span>' : '') + esc(disp) + yiMark(pl.nameZhSrc === 'auto') + '</div>' +
     enSub +
@@ -7448,12 +7457,181 @@ function smListCol(label, side, dir) {
   const bench = (side.bench || []).length ? `<div class="sml-h">替补</div><ul class="sml-list">${smListRows(side.bench, dir)}</ul>` : '';
   return `<div class="sml-col ${dir}"><div class="sml-h">${esc(label)}</div><ul class="sml-list">${xi}</ul>${bench}</div>`;
 }
+
+function luTeamOf(x) {
+  const id = x && x.id;
+  const v = S.luTeam && id != null ? S.luTeam[id] : '';
+  return v === 'away' ? 'away' : 'home';
+}
+function luTeamSeg(x) {
+  const team = luTeamOf(x);
+  return `<div class="lu-teamseg">
+    <button type="button" class="${team === 'home' ? 'on' : ''}" data-act="luTeam" data-id="${esc(x.id)}" data-team="home">${esc(x.home || '主队')}</button>
+    <button type="button" class="${team === 'away' ? 'on' : ''}" data-act="luTeam" data-id="${esc(x.id)}" data-team="away">${esc(x.away || '客队')}</button>
+  </div>`;
+}
 function luScrub(x) {
   const live = S.liveStatsCache && S.liveStatsCache[String(x.id)];
   const n = live && live.status ? Number(live.status.elapsed) : NaN;
   if (!Number.isFinite(n)) return '';
   const pct = Math.max(4, Math.min(100, (n / 90) * 100));
   return `<div class="sml-scrub" title="${esc(n)}'"><i style="width:${pct.toFixed(0)}%"></i></div>`;
+}
+function luLayout() {
+  return (typeof LineupLayout !== 'undefined' && LineupLayout) || {};
+}
+function luCrestUrl(x, side) {
+  const raw = side === 'home' ? (x.homeLogo || '') : (x.awayLogo || '');
+  return raw ? logoProxy(raw) : '';
+}
+function luPitchLinesSvg() {
+  return `<svg class="lu-lines" viewBox="0 0 68 105" preserveAspectRatio="none" aria-hidden="true">
+    <defs>
+      <linearGradient id="luEdgeFade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#071F18" stop-opacity=".28"/>
+        <stop offset=".08" stop-color="#071F18" stop-opacity="0"/>
+        <stop offset=".92" stop-color="#071F18" stop-opacity="0"/>
+        <stop offset="1" stop-color="#071F18" stop-opacity=".28"/>
+      </linearGradient>
+    </defs>
+    <rect width="68" height="105" fill="#0A2E24"/>
+    <rect y="0" width="68" height="11.667" fill="#0C3A2C"/>
+    <rect y="11.667" width="68" height="11.667" fill="#0A3327"/>
+    <rect y="23.333" width="68" height="11.667" fill="#0C3A2C"/>
+    <rect y="35" width="68" height="11.667" fill="#0A3327"/>
+    <rect y="46.667" width="68" height="11.667" fill="#0C3A2C"/>
+    <rect y="58.333" width="68" height="11.667" fill="#0A3327"/>
+    <rect y="70" width="68" height="11.667" fill="#0C3A2C"/>
+    <rect y="81.667" width="68" height="11.667" fill="#0A3327"/>
+    <rect y="93.333" width="68" height="11.667" fill="#0C3A2C"/>
+    <rect width="68" height="105" fill="url(#luEdgeFade)"/>
+    <rect x="0.4" y="0.4" width="67.2" height="104.2" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <line x1="0" y1="52.5" x2="68" y2="52.5" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <circle cx="34" cy="52.5" r="9.15" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <circle cx="34" cy="52.5" r=".45" fill="rgba(213,224,208,.55)"/>
+    <rect x="13.84" y="0.4" width="40.32" height="16.5" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <rect x="24.84" y="0.4" width="18.32" height="5.5" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <rect x="13.84" y="88.1" width="40.32" height="16.5" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <rect x="24.84" y="99.1" width="18.32" height="5.5" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <path d="M 26.69 16.9 A 9.15 9.15 0 0 0 41.31 16.9" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <path d="M 26.69 88.1 A 9.15 9.15 0 0 1 41.31 88.1" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <path d="M 0.4 1.4 A 1 1 0 0 1 1.4 0.4" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <path d="M 66.6 0.4 A 1 1 0 0 1 67.6 1.4" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <path d="M 67.6 103.6 A 1 1 0 0 1 66.6 104.6" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+    <path d="M 1.4 104.6 A 1 1 0 0 1 0.4 103.6" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+  </svg>`;
+}
+function luFace(p) {
+  const disp = p.nameZh || p.name || '?';
+  const ini = esc([...disp][0] || '?');
+  const url = luPhotoUrl(p);
+  const img = url
+    ? `<img src="${logoProxy(url)}" alt="" onerror="this.remove();this.parentNode.textContent='${ini}'"/>`
+    : ini;
+  return `<div class="lu-ph">${img}</div>`;
+}
+function luPlayerHtml(pl) {
+  const p = pl.p;
+  const cls = 'lu-pl' + (pl.dir === 'away' ? ' bot' : '');
+  const cap = p.captain ? '<i class="lu-cap">C</i>' : '';
+  const marks = luMarkHtml(p).replace('sml-mks', 'lu-mks');
+  return `<div class="${cls}" style="left:${pl.left}%;top:${pl.top}%"><div class="lu-phw">${luFace(p)}${cap}${marks}</div><div class="lu-nm"><span class="no">${esc(p.number || '')}</span>${esc(luShort(p))}</div></div>`;
+}
+function luBoardHtml(x, homeSide, awaySide) {
+  const lay = luLayout();
+  const place = typeof lay.placeSide === 'function' ? lay.placeSide : function () { return []; };
+  const linkFn = typeof lay.linkPaths === 'function' ? lay.linkPaths : function () { return []; };
+  const homePl = place(homeSide, 'home');
+  const awayPl = place(awaySide, 'away');
+  const pathD = linkFn(homePl, awayPl).map((d) => `<path d="${d}"/>`).join('');
+  const homeCrest = luCrestUrl(x, 'home');
+  const awayCrest = luCrestUrl(x, 'away');
+  const homeForm = (homeSide && homeSide.formation) ? homeSide.formation : '';
+  const awayForm = (awaySide && awaySide.formation) ? awaySide.formation : '';
+  const lineFn = typeof lay.linesFromFormation === 'function' ? lay.linesFromFormation : null;
+  const nLines = (side) => (side && lineFn) ? lineFn(side.starters || [], side.formation).length : 0;
+  const dense = Math.max(nLines(homeSide), nLines(awaySide)) >= 5;
+  return `<div class="lu-board${dense ? ' dense' : ''}">
+    ${awayCrest ? `<img class="lu-wm away" src="${esc(awayCrest)}" alt="">` : ''}
+    ${homeCrest ? `<img class="lu-wm home" src="${esc(homeCrest)}" alt="">` : ''}
+    <div class="lu-grain"></div>
+    <div class="lu-mid"></div>
+    <div class="lu-tlab away">客 · ${esc(x.away)}${awayForm ? ' ' + esc(awayForm) : ''}</div>
+    <div class="lu-tlab home">主 · ${esc(x.home)}${homeForm ? ' ' + esc(homeForm) : ''}</div>
+    <div class="lu-form">
+      <svg class="lu-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><g fill="none" stroke="#c0b4ea" stroke-width="0.38" stroke-opacity="0.4">${pathD}</g></svg>
+      ${awayPl.map(luPlayerHtml).join('')}
+      ${homePl.map(luPlayerHtml).join('')}
+    </div>
+  </div>`;
+}
+function luBenchCol(label, side) {
+  if (!side) return `<div><h4>${esc(label)}</h4><p class="note">暂无</p></div>`;
+  const people = side.bench || [];
+  if (!people.length) return `<div><h4>${esc(label)}</h4><p class="note">暂无替补名单</p></div>`;
+  const rows = people.map((p) => `<li><span class="no">${esc(p.number || '')}</span>${luFace(p)}<span class="nm">${esc(p.nameZh || p.name || '')}${yiMark(p.nameZhSrc === 'auto')}</span>${luMarkHtml(p)}</li>`).join('');
+  return `<div><h4>${esc(label)} · 替补 ${people.length}</h4><ul>${rows}</ul></div>`;
+}
+function luBenchHtml(x, homeSide, awaySide) {
+  const team = luTeamOf(x);
+  const side = team === 'away' ? awaySide : homeSide;
+  const label = team === 'away' ? x.away : x.home;
+  return `<div class="lu-bench one">${luTeamSeg(x)}${luBenchCol(label, side)}</div>`;
+}
+function luMapReportInjuries(items, x) {
+  const out = [];
+  for (const it of items || []) {
+    let side = '';
+    const tid = it.teamId != null ? String(it.teamId) : '';
+    if (tid && String(x.homeTeamId || '') && tid === String(x.homeTeamId)) side = 'home';
+    else if (tid && String(x.awayTeamId || '') && tid === String(x.awayTeamId)) side = 'away';
+    else {
+      const hints = String(it.teamZh || it.team || '');
+      if (hints && x.home && (hints === x.home || hints.includes(x.home) || x.home.includes(hints))) side = 'home';
+      else if (hints && x.away && (hints === x.away || hints.includes(x.away) || x.away.includes(hints))) side = 'away';
+    }
+    if (!side) continue;
+    out.push({
+      side,
+      name: it.playerZh || it.player || '',
+      nameZh: it.playerZh || '',
+      image: it.photo || '',
+      photo: it.photo || '',
+      reason: it.reasonZh || it.reason || '',
+      type: it.reason || it.type || '',
+    });
+  }
+  return out;
+}
+function luSidelinedOf(x, L) {
+  if (L && Array.isArray(L.sidelined)) return L.sidelined;
+  const rep = S.predictCache && S.predictCache[x.id];
+  const inj = rep && rep.sections && rep.sections.injuries;
+  if (inj && Array.isArray(inj.items) && inj.items.length) return luMapReportInjuries(inj.items, x);
+  if (inj && (inj.hasData === false || (Array.isArray(inj.items) && !inj.items.length && inj.available !== false))) return [];
+  return null;
+}
+function luInjChip(s) {
+  const name = s.nameZh || s.name || '球员';
+  const ini = esc([...name][0] || '?');
+  const url = s.image || s.photo || '';
+  const img = url
+    ? `<img src="${logoProxy(url)}" alt="" onerror="this.remove();this.parentNode.textContent='${ini}'"/>`
+    : ini;
+  const reason = s.reason || s.reasonZh || '伤病';
+  const ban = /停赛|红牌|黄牌|suspen/i.test(String(reason) + ' ' + (s.type || ''));
+  return `<div class="lu-ic"><div class="ph">${img}</div><div class="nm">${esc(name)}</div><div class="tag ${ban ? 'ban' : 'hurt'}">${esc(reason)}</div></div>`;
+}
+function luInjHtml(x, L) {
+  const list = luSidelinedOf(x, L);
+  const home = (list || []).filter((s) => s.side === 'home');
+  const away = (list || []).filter((s) => s.side === 'away');
+  const homeBody = list == null ? '<div class="empty">伤停名单加载中</div>' : (home.length ? home.map(luInjChip).join('') : '<div class="empty">暂无公开伤停</div>');
+  const awayBody = list == null ? '<div class="empty">伤停名单加载中</div>' : (away.length ? away.map(luInjChip).join('') : '<div class="empty">暂无公开伤停</div>');
+  return `<div class="lu-inj"><h3>伤停</h3>
+    <div class="row"><div class="side">主队</div><div class="ppl">${homeBody}</div></div>
+    <div class="row"><div class="side">客队</div><div class="ppl">${awayBody}</div></div>
+  </div>`;
 }
 function lineupHtml(x, L) {
   if (!L) return '<div class="spinner"></div>';
@@ -7465,27 +7643,39 @@ function lineupHtml(x, L) {
   stampLuMarks(x, awaySide, 'away');
   const both = !!(homeSide && (homeSide.starters || []).length && awaySide && (awaySide.starters || []).length);
   const view = (S.luView && S.luView[x.id]) || (both ? 'pitch' : 'list');
-  const pitchOn = view !== 'list';
   const stateLab = real
     ? ({ final: '本场实际阵容', live: '本场首发', announced: '本场首发' }[L.state] || '本场阵容')
     : '参考上一场首发';
-  const coachBit = (side, dir) => (side && side.coachZh) ? `<small class="${dir}">${esc(side.coachZh)}</small>` : '';
-  const formBit = side => (side && side.formation) ? `<small>${esc(side.formation)}</small>` : '';
-  const head = `<div class="smd-hd"><div class="home"><b>${esc(x.home)}</b>${formBit(homeSide)}${coachBit(homeSide, 'home')}</div><div class="mid">阵容</div><div class="away">${coachBit(awaySide, 'away')}${formBit(awaySide)}<b>${esc(x.away)}</b></div></div>`;
-  const tog = `<div class="sm-switch"><button type="button" class="${pitchOn ? 'on' : ''}" data-act="luView" data-id="${esc(x.id)}" data-view="pitch">阵型</button><button type="button" class="${pitchOn ? '' : 'on'}" data-act="luView" data-id="${esc(x.id)}" data-view="list">名单</button></div>`;
-  const pitch = `<div class="smd-view" ${pitchOn ? '' : 'hidden'}><div class="smd-pitch">${smPitchHalf(homeSide, 'home')}${smPitchHalf(awaySide, 'away')}</div></div>`;
-  const list = `<div class="smd-view" ${pitchOn ? 'hidden' : ''}><div class="sml-cols">${smListCol(x.home, homeSide, 'home')}${smListCol(x.away, awaySide, 'away')}</div></div>`;
+  const officialKind = (homeSide && homeSide.kind) || (awaySide && awaySide.kind) || '';
+  const footLab = officialKind === 'official' || real
+    ? '线上以最新官方首发 / 上阵为准'
+    : (real ? stateLab : '下方为上一场实际首发，不是本场');
+  const seg = `<div class="lu-seg">
+    <button type="button" class="${view === 'pitch' ? 'on' : ''}" data-act="luView" data-id="${esc(x.id)}" data-view="pitch">阵型</button>
+    <button type="button" class="${view === 'bench' ? 'on' : ''}" data-act="luView" data-id="${esc(x.id)}" data-view="bench">替补</button>
+    <button type="button" class="${view === 'list' ? 'on' : ''}" data-act="luView" data-id="${esc(x.id)}" data-view="list">名单</button>
+  </div>`;
   let h = '';
   if (!real) {
     const pend = L.state === 'pending' ? '首发未公布（通常赛前约1小时）' : L.state === 'no-event' ? '未收录本场，无法获取本场首发' : '暂无本场阵容数据';
     h += `<div class="warn-bar">${esc(pend)}</div>`;
-    if (!homeSide && !awaySide) return h;
+    if (!homeSide && !awaySide) return h + luInjHtml(x, L);
     h += `<p class="note">下面是上一场实际首发，不是本场。</p>`;
   }
-  h += `<section class="smd-card sm-kit">${head}<div class="smd-sub">${esc(stateLab)}</div>${tog}${pitch}${list}${luScrub(x)}</section>`;
+  h += `<div class="lu-toolbar"><div class="h">首发阵型</div>${seg}</div>`;
+  h += `<p class="lu-hint">半场对半场 · 点「替补」查看双方替补</p>`;
+  const body = view === 'list'
+    ? `<div class="smd-card smd-one" style="margin:8px 12px 0;padding:8px 10px 12px">${luTeamSeg(x)}<div class="sml-one">${smListCol(luTeamOf(x) === 'away' ? x.away : x.home, luTeamOf(x) === 'away' ? awaySide : homeSide, 'home')}</div>${luScrub(x)}</div>`
+    : `<div class="lu-fm">${view === 'bench' ? luBenchHtml(x, homeSide, awaySide) : luBoardHtml(x, homeSide, awaySide)}
+        <div class="lu-foot"><div class="st">${esc(footLab)}</div>${view === 'bench' ? `<button type="button" class="lu-btn" data-act="luView" data-id="${esc(x.id)}" data-view="pitch">返回阵型</button>` : `<button type="button" class="lu-btn" data-act="luView" data-id="${esc(x.id)}" data-view="bench">查看替补</button>`}</div>
+      </div>`;
+  h += body;
+  h += luInjHtml(x, L);
   if (L.noteZh) h += `<p class="note" style="margin:8px 12px 0">${esc(L.noteZh)}</p>`;
   return h;
 }
+
+
 function squadSectionHtml(x) {
   const L = S.lineupCache && S.lineupCache[x.id];
   return '<div class="dsec lineup-sec"><div id="lineup-box-' + esc(x.id) + '">' + lineupHtml(x, L) + '</div></div>';
@@ -7549,14 +7739,18 @@ async function ensureSmSurface(x) {
 function paintSmSurface(id, pack) {
   const form = document.getElementById('sm-form-' + id);
   const bars = document.getElementById('sm-bars-' + id);
+  const pos = document.getElementById('sm-pos-' + id);
   const growth = document.getElementById('sm-growth-' + id);
+  const xgBox = document.getElementById('sm-xg-' + id);
   const liveBox = document.getElementById('sm-live-' + id);
   paintComponentLogic(id);
   if (pack && pack._loading) {
     const loadNote = '<p class="note sm-loading-note">正在拉取第三方近况与统计（球队名解析或冷启动可能需数十秒，并非卡住）…</p>';
     if (form) form.innerHTML = loadNote;
     if (bars) bars.innerHTML = loadNote;
+    if (pos) pos.innerHTML = loadNote;
     if (growth) growth.innerHTML = '';
+    if (xgBox) xgBox.innerHTML = '';
     return;
   }
   if (!pack || pack.ok === false) {
@@ -7570,13 +7764,17 @@ function paintSmSurface(id, pack) {
     const note = `<p class="note">${esc(msg)}</p><p class="note"><button type="button" class="btn ghost sm" data-act="refreshSmSurface" data-id="${esc(id)}">重试</button></p>`;
     if (form) form.innerHTML = note;
     if (bars) bars.innerHTML = note;
+    if (pos) pos.innerHTML = note;
     if (growth) growth.innerHTML = note;
+    if (xgBox) xgBox.innerHTML = note;
     if (liveBox) liveBox.innerHTML = note;
     return;
   }
   if (form && pack.formHtml) form.innerHTML = rewritePredictLogoHtml(pack.formHtml);
   if (bars && pack.barsHtml) bars.innerHTML = rewritePredictLogoHtml(pack.barsHtml);
+  if (pos && pack.posHtml) pos.innerHTML = rewritePredictLogoHtml(pack.posHtml);
   if (growth && pack.growthHtml) growth.innerHTML = rewritePredictLogoHtml(pack.growthHtml);
+  if (xgBox && pack.xgHtml) xgBox.innerHTML = rewritePredictLogoHtml(pack.xgHtml);
   if (liveBox && pack.liveHtml) liveBox.innerHTML = rewritePredictLogoHtml(pack.liveHtml);
   const lu = document.getElementById('lineup-box-' + id);
   const L = S.lineupCache && S.lineupCache[id];
@@ -7604,45 +7802,98 @@ async function enrichSquadZh(x, key, teamId, teamName) {
   } catch (_) {}
 }
 
+function playerHref(id) {
+  const pid = String(id || '').trim();
+  return pid ? ('#/player?pid=' + encodeURIComponent(pid)) : '#/player';
+}
+function normalizePlayerId(id) {
+  const r = route();
+  let pid = String(id || '').trim() || (r.query && (r.query.pid || r.query.id)) || r.arg || '';
+  pid = String(pid || '').trim();
+  // WebView used to truncate "#/player/espn:123" to "espn". Also accept espn/123.
+  if (/^(espn|af|sm)\/[^/]+$/i.test(pid)) pid = pid.replace('/', ':');
+  return pid;
+}
+function findSquadPlayerHint(pid) {
+  const want = String(pid || '');
+  if (!want || !S.matchSquadValue) return null;
+  for (const pack of Object.values(S.matchSquadValue)) {
+    if (!pack) continue;
+    for (const side of ['home', 'away']) {
+      const hit = ((pack[side] || {}).players || []).find((p) => String(p.id) === want);
+      if (hit) {
+        const mvOk = Number(hit.eur) > 0;
+        return {
+          ok: true,
+          id: hit.id,
+          name: hit.name || '',
+          nameZh: hit.nameZh || '',
+          team: hit.club || hit.team || '',
+          position: hit.pos || hit.position || '',
+          positionZh: hit.posLabel || hit.posZh || hit.positionZh || '',
+          photo: hit.photo || '',
+          marketValue: mvOk
+            ? { ok: true, eur: hit.eur, text: hit.text, labelZh: hit.text, asOf: hit.asOf || pack.asOf || '' }
+            : { ok: false, text: '暂无身价' },
+          _fromHint: true,
+        };
+      }
+    }
+  }
+  return null;
+}
+function paintPlayerDetail(p) {
+  const box = document.getElementById('player-box');
+  if (!box || !p) return;
+  const photo = p.cutout || p.photo || p.thumb || p.render || '';
+  const img = photo
+    ? '<img class="player-hero-ph" src="' + logoProxy(photo) + '" alt="" onerror="this.style.display=\'none\'"/>'
+    : '<div class="player-hero-ph fallback">' + esc((p.nameZh || p.name || '?').slice(0, 1)) + '</div>';
+  box.innerHTML = '<div class="player-hero">' + img + '<div><h2>' + esc(p.nameZh || p.name || '') + yiMark(p.nameZhSrc === 'auto') + '</h2>' +
+    (p.nameZh && p.name && p.nameZh !== p.name ? '<div class="note">原文 ' + esc(p.name) + (p.nameZhSrc === 'auto' ? '（中文为程序自动音译）' : '') + '</div>' : (p.nameAlt ? '<div class="note">' + esc(p.nameAlt) + '</div>' : '')) +
+    '<div class="player-tags"><span>' + esc(p.positionZh || p.position || '') + '</span>' +
+    (p.number ? '<span>号码 ' + esc(p.number) + '</span>' : '') +
+    (p.nationalityZh || p.nationality ? '<span>' + esc(p.nationalityZh || p.nationality) + '</span>' : '') +
+    (p.marketValue && p.marketValue.text && p.marketValue.ok !== false ? '<span class="mv-tag">身价 ' + esc(p.marketValue.labelZh || p.marketValue.text) + '</span>' : '') +
+    '</div></div></div>' +
+    '<dl class="kv">' +
+    '<dt>俱乐部</dt><dd>' + esc(p.team || '-') + '</dd>' +
+    '<dt>身价</dt><dd>' + ((p.marketValue && p.marketValue.text) ? esc(p.marketValue.text) : '暂无身价') + ((p.marketValue && p.marketValue.asOf) ? '<span class="note"> · 约 ' + esc(p.marketValue.asOf) + '</span>' : '') + '</dd>' +
+    '<dt>位置</dt><dd>' + esc(p.positionZh || p.position || '-') + '</dd>' +
+    '<dt>国籍</dt><dd>' + esc(p.nationalityZh || p.nationality || '-') + '</dd>' +
+    '<dt>身高</dt><dd>' + esc(p.height || p.heightRaw || '-') + '</dd>' +
+    '<dt>出生日期</dt><dd>' + esc(p.born || '-') + '</dd>' +
+    '<dt>出生地</dt><dd>' + esc(p.birthLocation || '-') + '</dd>' +
+    '<dt>状态</dt><dd>' + esc(p.statusZh || p.status || '-') + '</dd>' +
+    '</dl>' +
+    (p.description ? ('<div class="player-bio"><h3>简介</h3><p>' + esc(p.description).replace(/\n/g, '<br>') + '</p>' +
+      (p.descriptionLang === 'en' ? '<p class="note">暂无中文简介，以上为英文原文。</p>' : '') + '</div>') : (p._fromHint ? '' : '<p class="note">暂无简介。</p>')) +
+    '<p class="note">' + esc(p.noteZh || '') + '</p>';
+}
 function pagePlayer(id) {
+  const pid = normalizePlayerId(id);
   let h = hdr('球员详情');
   h += '<div id="player-box" class="dsec"><div class="spinner"></div></div>';
-  setTimeout(() => fillPlayer(id), 0);
+  setTimeout(() => fillPlayer(pid), 0);
   return h + foot();
 }
 async function fillPlayer(id) {
   const box = document.getElementById('player-box');
   if (!box) return;
+  id = normalizePlayerId(id);
+  const hint = (S.playerHint && String(S.playerHint.id) === String(id))
+    ? S.playerHint
+    : findSquadPlayerHint(id);
+  if (hint) paintPlayerDetail(hint);
   try {
     const p = await api('/player?id=' + encodeURIComponent(id), { timeout: 15000 });
     if (!p || !p.ok) {
-      box.innerHTML = empty(esc((p && p.error) || '未找到球员'));
+      if (!hint) box.innerHTML = empty(esc((p && p.error) || '未找到球员'));
       return;
     }
-    const photo = p.cutout || p.photo || p.thumb || p.render || '';
-    const img = photo
-      ? '<img class="player-hero-ph" src="' + logoProxy(photo) + '" alt="" onerror="this.style.display=\'none\'"/>'
-      : '<div class="player-hero-ph fallback">' + esc((p.name || '?').slice(0, 1)) + '</div>';
-    box.innerHTML = '<div class="player-hero">' + img + '<div><h2>' + esc(p.nameZh || p.name) + yiMark(p.nameZhSrc === 'auto') + '</h2>' +
-      (p.nameZh ? '<div class="note">原文 ' + esc(p.name) + (p.nameZhSrc === 'auto' ? '（中文为程序自动音译）' : '') + '</div>' : (p.nameAlt ? '<div class="note">' + esc(p.nameAlt) + '</div>' : '')) +
-      '<div class="player-tags"><span>' + esc(p.positionZh || p.position || '') + '</span>' +
-      (p.number ? '<span>号码 ' + esc(p.number) + '</span>' : '') +
-      (p.nationalityZh || p.nationality ? '<span>' + esc(p.nationalityZh || p.nationality) + '</span>' : '') +
-      '</div></div></div>' +
-      '<dl class="kv">' +
-      '<dt>俱乐部</dt><dd>' + esc(p.team || '-') + '</dd>' +
-      '<dt>位置</dt><dd>' + esc(p.positionZh || p.position || '-') + '</dd>' +
-      '<dt>国籍</dt><dd>' + esc(p.nationalityZh || p.nationality || '-') + '</dd>' +
-      '<dt>身高</dt><dd>' + esc(p.height || p.heightRaw || '-') + '</dd>' +
-      '<dt>出生日期</dt><dd>' + esc(p.born || '-') + '</dd>' +
-      '<dt>出生地</dt><dd>' + esc(p.birthLocation || '-') + '</dd>' +
-      '<dt>状态</dt><dd>' + esc(p.statusZh || p.status || '-') + '</dd>' +
-      '</dl>' +
-      (p.description ? ('<div class="player-bio"><h3>简介</h3><p>' + esc(p.description).replace(/\n/g, '<br>') + '</p>' +
-        (p.descriptionLang === 'en' ? '<p class="note">暂无中文简介，以上为英文原文。</p>' : '') + '</div>') : '<p class="note">暂无简介。</p>') +
-      '<p class="note">' + esc(p.noteZh || '') + '</p>';
+    paintPlayerDetail(p);
   } catch (e) {
-    box.innerHTML = empty('加载失败：' + esc(e.message || ''));
+    if (!hint) box.innerHTML = empty('加载失败：' + esc(e.message || ''));
   }
 }
 
@@ -9935,10 +10186,1270 @@ function paintComponentLogic(id) {
   if (rep && rep.componentsSmHtml) box.innerHTML = rewritePredictLogoHtml(rep.componentsSmHtml);
   else box.innerHTML = '<section class="sm-kit sm-logic"><h3>推导组件</h3><p class="sm-empty">和预测页用的是同一套。预测简报出来后，卡片会出现在这里。</p></section>';
 }
+
+function mvAvatar(p, cls) {
+  // Only a real photo URL (prefer SM image_path). Do not fall back to
+  // synthesized ESPN headshots — national roster IDs often 404.
+  return luAvatar({
+    name: p.name,
+    nameZh: p.nameZh,
+    photo: p.photo,
+    image: p.photo || p.image,
+  }, cls || 'av sm');
+}
+function paintTeamMv(id, pack) {
+  const key = String(id || '');
+  const hEl = document.getElementById('tm-mv-h-' + key);
+  const aEl = document.getElementById('tm-mv-a-' + key);
+  const set = (el, side) => {
+    if (!el) return;
+    if (!pack || pack._loading) { el.hidden = true; el.textContent = ''; return; }
+    const s = (pack && pack[side]) || {};
+    const ok = Number(s.totalEur) > 0 && s.totalZh && s.totalZh !== '暂无';
+    el.hidden = false;
+    el.textContent = ok ? s.totalZh : '暂无身价';
+    el.classList.toggle('na', !ok);
+  };
+  set(hEl, 'home');
+  set(aEl, 'away');
+}
+function mvBarRow(label, hText, aText, hEur, aEur, extraClass) {
+  const ht = Number(hEur) || 0, at = Number(aEur) || 0;
+  const max = Math.max(ht, at, 0.01);
+  const hp = ht ? Math.round(100 * ht / max) : 0;
+  const ap = at ? Math.round(100 * at / max) : 0;
+  return `<div class="stat-row${extraClass ? ' ' + extraClass : ''}"><div class="num left">${esc(hText)}</div><div class="stat-mid"><div class="label">${esc(label)}</div><div class="bars"><div class="h"><i style="width:${hp}%"></i></div><div class="a"><i style="width:${ap}%"></i></div></div></div><div class="num right">${esc(aText)}</div></div>`;
+}
+function mvTopThree(side) {
+  return ((side && side.players) || []).filter((p) => Number(p.eur) > 0).slice(0, 3);
+}
+function mvValueCardHtml(pack, id) {
+  const h = pack.home || {}, a = pack.away || {};
+  const hCov = h.coverage && h.coverage.noteZh ? h.coverage.noteZh : '';
+  const aCov = a.coverage && a.coverage.noteZh ? a.coverage.noteZh : '';
+  const asOf = pack.asOf ? ('数据约至 ' + pack.asOf) : '';
+  const note = [pack.sourceNoteZh, asOf, pack.noteZh].filter(Boolean).join(' ');
+  const posLabs = { GK: '门将', DF: '后卫', MF: '中场', FW: '前锋' };
+  const hasPos = (h.byPos && Object.keys(h.byPos).some((k) => h.byPos[k] && h.byPos[k].hit))
+    || (a.byPos && Object.keys(a.byPos).some((k) => a.byPos[k] && a.byPos[k].hit));
+  let posRows = '';
+  if (hasPos) {
+    posRows = ['GK', 'DF', 'MF', 'FW'].map((k) => {
+      const hb = (h.byPos && h.byPos[k]) || {};
+      const ab = (a.byPos && a.byPos[k]) || {};
+      return mvBarRow(posLabs[k], hb.text || '暂无', ab.text || '暂无', hb.eur, ab.eur);
+    }).join('');
+  }
+  const hTop = mvTopThree(h), aTop = mvTopThree(a);
+  let duel = '';
+  if (hTop.length || aTop.length) {
+    const n = Math.max(hTop.length, aTop.length);
+    const rows = [];
+    for (let i = 0; i < n; i++) {
+      const hp = hTop[i], ap = aTop[i];
+      rows.push(`<div class="duel">
+        <div class="h">${hp ? `${mvAvatar(hp, 'av sm')}<div class="who"><div class="nm2">${esc(hp.nameZh || hp.name)}</div><div class="val">${esc(hp.text)}</div></div>` : '<span></span>'}</div>
+        <div class="rk">${i + 1}</div>
+        <div class="a">${ap ? `<div class="who"><div class="nm2">${esc(ap.nameZh || ap.name)}</div><div class="val">${esc(ap.text)}</div></div>${mvAvatar(ap, 'av sm')}` : '<span></span>'}</div>
+      </div>`);
+    }
+    duel = `<button type="button" class="mv-top" data-act="openMvSheet" data-id="${esc(String(id))}">
+      <div class="mv-top-hd"><b>身价最高</b><span>查看全部 ›</span></div>
+      ${rows.join('')}
+    </button>`;
+  }
+  const covBits = [hCov && ('主队' + hCov), aCov && ('客队' + aCov)].filter(Boolean);
+  const covLine = covBits.length ? `<p class="note">${esc(covBits.join('；'))}</p>` : '';
+  return `<section class="sm-kit sm-value"><div class="sm-kit-hd"><h3>阵容身价</h3><small>${esc(asOf || '参考市值')}</small></div>
+    <div class="sm-legend"><i class="h"></i><span>${esc(h.nameZh || '主队')}</span><i class="a"></i><span>${esc(a.nameZh || '客队')}</span></div>
+    ${mvBarRow('总身价', h.totalZh || '暂无', a.totalZh || '暂无', h.totalEur, a.totalEur, 'total')}
+    ${posRows}
+    ${duel}
+    ${covLine}
+    <p class="note">${esc(note)}</p>
+  </section>`;
+}
+function paintMatchSquadValue(id) {
+  const key = String(id || '');
+  const pack = S.matchSquadValue && S.matchSquadValue[key];
+  const card = document.getElementById('sm-value-' + key);
+  paintTeamMv(key, pack);
+  if (pack && pack._loading) {
+    if (card) card.innerHTML = '<section class="sm-kit sm-value"><h3>阵容身价</h3><p class="sm-empty">正在按公开名单加总…</p></section>';
+    return;
+  }
+  if (!pack || pack.ok === false) {
+    const msg = (pack && (pack.error || pack.noteZh)) || '暂无身价';
+    if (card) card.innerHTML = `<section class="sm-kit sm-value"><h3>阵容身价</h3><p class="sm-empty">${esc(msg)}</p></section>`;
+    return;
+  }
+  if (card) card.innerHTML = mvValueCardHtml(pack, key);
+}
+function mvSheetPlayerRow(p, maxEur, side) {
+  const ok = Number(p.eur) > 0;
+  const pct = ok && maxEur ? Math.max(4, Math.round(100 * p.eur / maxEur)) : 0;
+  const barColor = side === 'away' ? '#ff4d7a' : '#5b7cfa';
+  const pid = p.id ? String(p.id) : '';
+  const act = pid ? ` type="button" data-act="mvOpenPlayer" data-pid="${esc(pid)}"` : '';
+  const tag = ok ? '' : ' unmatched';
+  const rk = p.unmatched ? '—' : esc(String(p.rank || ''));
+  const rkCls = !p.unmatched && Number(p.rank) <= 3 ? 'n t3' : 'n';
+  const tagName = pid ? 'button' : 'div';
+  return `<${tagName} class="mv-rank${tag}"${act}>
+    <div class="${rkCls}">${rk}</div>
+    ${mvAvatar(p, 'av')}
+    <div class="who"><div class="nm">${esc(p.nameZh || p.name)}</div><div class="sub">${esc([p.posLabel || p.posZh, p.club].filter(Boolean).join(' · '))}</div></div>
+    <div class="right"><div class="euro">${esc(p.text || '暂无')}</div>${ok ? `<div class="bar"><i style="width:${pct}%;background:${barColor}"></i></div>` : ''}</div>
+  </${tagName}>`;
+}
+function openMvSheet(id, side) {
+  const pack = S.matchSquadValue && S.matchSquadValue[String(id)];
+  if (!pack || pack._loading) { toast('身价还在整理'); return; }
+  side = side === 'away' ? 'away' : 'home';
+  const h = pack.home || {}, a = pack.away || {};
+  const cur = side === 'away' ? a : h;
+  const players = cur.players || [];
+  const maxEur = Math.max(0, ...players.map((p) => Number(p.eur) || 0));
+  const asOf = pack.asOf ? `数据约至 ${pack.asOf}。` : '';
+  const bits = [pack.sourceNoteZh || '', asOf, cur.coverage && cur.coverage.noteZh ? cur.coverage.noteZh : ''].filter(Boolean).join(' ');
+  const html = `<div class="sheet mv-sheet" role="dialog" aria-label="身价最高球员">
+    <h3><span>身价最高球员</span><button type="button" class="x" data-act="closeSheet">✕</button></h3>
+    <p class="note">${esc(bits)}</p>
+    <div class="sm-switch">
+      <button type="button" class="${side === 'home' ? 'on' : ''}" data-act="mvSheetSide" data-id="${esc(String(id))}" data-side="home">${esc(h.nameZh || '主队')}</button>
+      <button type="button" class="${side === 'away' ? 'on' : ''}" data-act="mvSheetSide" data-id="${esc(String(id))}" data-side="away">${esc(a.nameZh || '客队')}</button>
+    </div>
+    <div class="mv-rank-list">${players.length ? players.map((p) => mvSheetPlayerRow(p, maxEur, side)).join('') : '<p class="note">暂无逐人名单</p>'}</div>
+  </div>`;
+  openSheetHtml(html);
+}
+async function ensureMatchSquadValue(x) {
+  if (!x || !x.id) return;
+  S.matchSquadValue = S.matchSquadValue || {};
+  const key = String(x.id);
+  const hit = S.matchSquadValue[key];
+  const age = hit && hit._at ? Date.now() - hit._at : Infinity;
+  if (hit && !hit._loading && age < 15 * 60 * 1000) {
+    paintMatchSquadValue(key);
+    return;
+  }
+  if (hit && hit._loading) return;
+  const q = [
+    'matchId=' + encodeURIComponent(key),
+    'date=' + encodeURIComponent(x.date || ''),
+    'time=' + encodeURIComponent(x.time || ''),
+    'homeTeamId=' + encodeURIComponent(x.homeTeamId || ''),
+    'awayTeamId=' + encodeURIComponent(x.awayTeamId || ''),
+    'home=' + encodeURIComponent(x.home || ''),
+    'away=' + encodeURIComponent(x.away || ''),
+    'homeEn=' + encodeURIComponent(x.homeEn || ''),
+    'awayEn=' + encodeURIComponent(x.awayEn || ''),
+    'league=' + encodeURIComponent(x.league || ''),
+  ];
+  S.matchSquadValue[key] = { ok: true, _loading: true, _at: Date.now() };
+  paintMatchSquadValue(key);
+  let pack;
+  try { pack = await api('/match-squad-value?' + q.join('&'), { timeout: 60000 }); }
+  catch (e) { pack = { ok: false, error: e.message || '加载失败' }; }
+  pack._at = Date.now();
+  S.matchSquadValue[key] = pack;
+  paintMatchSquadValue(key);
+}
+
+const RADAR_SHORT = {
+  '抢断拦截次数': '抢断拦截',
+  '高空处理次数': '高空处理',
+  '出击次数': '出击次数',
+  '成功传球率': '传球成功率',
+};
+/* 2-char labels so compact tiles (≈126) keep axis text inside the viewBox. */
+const RADAR_TINY = {
+  '进攻终结': '终结',
+  '机会创造': '创造',
+  '机会转化': '转化',
+  '身体支点': '支点',
+  '持球参与': '持球',
+  '回追压迫': '回追',
+  '传球推进': '推进',
+  '拿球抗压': '抗压',
+  '前插威胁': '前插',
+  '控球参与': '控球',
+  '控球推进': '推进',
+  '防守贡献': '防守',
+  '抢断拦截次数': '抢断',
+  '位置容错': '容错',
+  '身体对抗': '对抗',
+  '出球组织': '出球',
+  '传球组织': '组织',
+  '防守稳健': '稳健',
+  '纪律控场': '纪律',
+  '扑救效率': '扑救',
+  '出球参与': '参与',
+  '高空处理次数': '高空',
+  '出击次数': '出击',
+  '纪律': '纪律',
+};
+function radarAxisName(d, tiny) {
+  const raw = (d && d.name) || '';
+  if (tiny && RADAR_TINY[raw]) return RADAR_TINY[raw];
+  return RADAR_SHORT[raw] || raw;
+}
+const RADAR_HOME = '#5b7cfa';
+const RADAR_AWAY = '#ff4d7a';
+const RADAR_POOL = '#8b92a8';
+
+function radarTheme() {
+  const dark = typeof document !== 'undefined'
+    && document.documentElement
+    && document.documentElement.getAttribute('data-theme') === 'pitch';
+  return dark
+    ? { dark: true, grid: '#2a3548', label: '#c5cbe0', muted: '#6b7a92' }
+    : { dark: false, grid: '#e2e5ee', label: '#3d4660', muted: '#7b8499' };
+}
+function radarFmt(key, v) {
+  if (v == null || Number.isNaN(Number(v))) return '—';
+  const n = Number(v);
+  const pct = /pct|conv|duel_win|save_pct|long_pct|sib_share|aerial_win|possession|percentage|pass_pct/.test(String(key || ''))
+    || /%$/.test(String(key || '')) || /成功率|转化率|控球率|扑救率/.test(String(key || ''));
+  if (pct) return (Math.abs(n) >= 10 ? n.toFixed(0) : n.toFixed(1)) + '%';
+  if (Math.abs(n) >= 100) return n.toFixed(0);
+  if (Math.abs(n) >= 10) return n.toFixed(1);
+  return n.toFixed(2);
+}
+function radarPoly(scores, cx, cy, rMax, n) {
+  n = n || 6;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / n;
+    const r = rMax * Math.max(0, Math.min(100, Number(scores[i]) || 0)) / 100;
+    pts.push((cx + r * Math.cos(a)).toFixed(1) + ',' + (cy + r * Math.sin(a)).toFixed(1));
+  }
+  return pts.join(' ');
+}
+function radarHex(level, cx, cy, rMax, n) {
+  n = n || 6;
+  const r = rMax * level / 100;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / n;
+    pts.push((cx + r * Math.cos(a)).toFixed(1) + ',' + (cy + r * Math.sin(a)).toFixed(1));
+  }
+  return pts.join(' ');
+}
+function radarSvgHtml(dims, series, opts) {
+  opts = opts || {};
+  const th = opts.theme || radarTheme();
+  const size = opts.size || 320;
+  const pad = opts.compact ? 25 : (opts.hideLabels ? 22 : (opts.large ? 56 : 44));
+  const cx = size / 2, cy = size / 2, rMax = size / 2 - pad;
+  const n = (dims && dims.length) || 6;
+  const mid = String(opts.matchId || '');
+  const which = opts.which || 'team';
+  const who = opts.who || '';
+  const grid = th.grid;
+  const tiny = !!opts.compact || !!opts.tinyLabels;
+  let rings = '';
+  for (const lv of [20, 40, 60, 80, 100]) {
+    rings += `<polygon points="${radarHex(lv, cx, cy, rMax, n)}" fill="none" stroke="${grid}" stroke-width="${lv === 100 ? 1.15 : 0.65}"/>`;
+  }
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / n;
+    const x = (cx + rMax * Math.cos(a)).toFixed(1);
+    const y = (cy + rMax * Math.sin(a)).toFixed(1);
+    rings += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${grid}" stroke-width="0.65"/>`;
+  }
+  let shapes = '';
+  (series || []).forEach((s) => {
+    const pts = radarPoly(s.scores, cx, cy, rMax, n);
+    shapes += `<polygon points="${pts}" fill="${s.fill}" stroke="${s.color}" stroke-width="${opts.compact ? 1.5 : 2.1}" stroke-linejoin="round"/>`;
+  });
+  let labels = '';
+  const fs = opts.compact ? 7.5 : (opts.large ? 10.5 : 10);
+  for (let i = 0; i < n; i++) {
+    const d = dims[i] || {};
+    const name = radarAxisName(d, tiny);
+    const a = -Math.PI / 2 + i * 2 * Math.PI / n;
+    const extra = opts.compact ? 9 : (opts.large ? 14 : 16);
+    const lx = cx + (rMax + extra) * Math.cos(a);
+    const ly = cy + (rMax + extra) * Math.sin(a);
+    const anchor = Math.abs(Math.cos(a)) < 0.2 ? 'middle' : (Math.cos(a) > 0 ? 'start' : 'end');
+    const baseline = Math.sin(a) > 0.5 ? 'hanging' : (Math.sin(a) < -0.5 ? 'alphabetic' : 'middle');
+    const cls = d.style_volume ? 'radar-axis style' : 'radar-axis';
+    const fill = d.style_volume ? '#c4851a' : th.label;
+    const act = opts.interactive
+      ? ` data-act="${opts.jump ? 'radarAxisJump' : 'radarAxis'}" data-id="${esc(mid)}" data-which="${esc(which)}" data-who="${esc(String(who))}" data-axis="${i}"`
+      : '';
+    if (!opts.hideLabels) {
+      const axisText = `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="${baseline}" font-size="${fs}" fill="${fill}">${esc(name)}</text>`;
+      labels += `<g class="${cls}"${act}>${axisText}</g>`;
+    }
+    const showVals = opts.showValues != null ? opts.showValues : !!opts.large;
+    if (showVals) {
+      const list = series || [];
+      list.forEach((s, si) => {
+        if (opts.compact && si > 0) return;
+        const sc = s.scores[i];
+        if (sc == null || !Number.isFinite(Number(sc))) return;
+        const rr = rMax * Math.max(0, Math.min(100, Number(sc))) / 100;
+        const out = Number(sc) >= 92 ? -10 : 12;
+        const tang = (list.length > 1 && !opts.compact) ? (si === 0 ? -8 : 8) : 0;
+        const vx = cx + (rr + out) * Math.cos(a) + tang * Math.sin(a);
+        const vy = cy + (rr + out) * Math.sin(a) - tang * Math.cos(a);
+        const halo = th.dark ? '#0B1220' : '#F5F7FB';
+        labels += `<text class="radar-val" x="${vx.toFixed(1)}" y="${vy.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" fill="${s.color}" stroke="${halo}" stroke-width="3.2" paint-order="stroke" font-size="${opts.large ? 10.5 : 9.5}" font-weight="800">${Math.round(Number(sc))}</text>`;
+      });
+    }
+  }
+  const cls = 'radar-svg' + (opts.large ? ' lg' : '') + (opts.compact ? ' sm' : '');
+  return `<svg class="${cls}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${esc(opts.aria || '六围图')}">${rings}${shapes}${labels}</svg>`;
+}
+function radarDrawable(pack) {
+  const d = pack && pack.drawable;
+  if (d && (d.home || d.away)) {
+    return {
+      home: d.home || [],
+      away: d.away || [],
+    };
+  }
+  const players = (pack && pack.players) || [];
+  return {
+    home: players.filter((p) => p.side === 'home'),
+    away: players.filter((p) => p.side === 'away'),
+  };
+}
+function radarFindPlayer(pack, smId) {
+  const listed = pack && pack.listed;
+  const nt = pack && pack.ntPlayers;
+  const all = [
+    ...(((pack && pack.players) || [])),
+    ...radarDrawable(pack).home,
+    ...radarDrawable(pack).away,
+    ...((listed && listed.home) || []),
+    ...((listed && listed.away) || []),
+    ...((nt && nt.home) || []),
+    ...((nt && nt.away) || []),
+  ];
+  return all.find((x) => x && String(x.smId) === String(smId)) || null;
+}
+function radarMatchOf(id) {
+  return findMatch(id) || (S.results || []).find((z) => String(z.id) === String(id)) || {};
+}
+function radarPhotoUrl(photo) {
+  if (!photo) return '';
+  try {
+    if (typeof smPlayerPhotoUrl === 'function') return smPlayerPhotoUrl(photo) || '';
+  } catch (_) {}
+  if (typeof isSmPlaceholderPhoto === 'function' && isSmPlaceholderPhoto(photo)) return '';
+  const s = String(photo);
+  if (s.startsWith('/api/logo?')) return (typeof API !== 'undefined' ? (API || '') : '') + s;
+  return '';
+}
+function radarClipName(s, max) {
+  max = max || 5;
+  const chars = [...String(s || '')];
+  if (!chars.length) return '';
+  if (chars.length <= max) return chars.join('');
+  return chars.slice(0, max).join('') + '…';
+}
+function radarAvatarHtml(p, size) {
+  const cls = 'rk-av' + (size === 'lg' ? ' lg' : (size === 'xs' ? ' xs' : ''));
+  const letter = esc(([...String((p && (p.nameZh || p.short || p.name)) || '?')][0] || '?'));
+  const src = radarPhotoUrl(p && p.photo);
+  if (src) {
+    return `<span class="${cls}" data-letter="${letter}"><img src="${esc(src)}" alt="" decoding="async" onerror="var s=this.parentNode;s.classList.add('letter');s.textContent=s.getAttribute('data-letter');"></span>`;
+  }
+  return `<span class="${cls} letter">${letter}</span>`;
+}
+function radarContribOf(c) {
+  if (!c) return null;
+  const short = radarClipName(c.short || c.nameZh || c.name || '', 4);
+  if (!short) return null;
+  return { short, nameZh: c.nameZh || c.short || '', name: c.name || '', photo: c.photo || '', smId: c.smId || '' };
+}
+function radarContribChipHtml(c, side, size, opts) {
+  if (!c) return '';
+  const av = radarAvatarHtml(c, size || 'xs');
+  const lowMark = c.lowValue
+    ? `<span class="rk-chip low xs" title="${esc(c.lowValueNote || '参考价值偏低')}">偏低</span>`
+    : '';
+  const inner = `${av}<span class="nm">${esc(c.short)}</span>${lowMark}`;
+  const cls = 'rk-contrib-chip ' + (side || '');
+  const sm = c.smId != null && c.smId !== '' ? String(c.smId) : '';
+  if (!sm) return `<span class="${cls}">${inner}</span>`;
+  opts = opts || {};
+  const mid = opts.matchId != null ? String(opts.matchId) : '';
+  const axis = opts.axis != null && opts.axis !== '' ? String(opts.axis) : '';
+  const peer = opts.peerSm != null && opts.peerSm !== '' ? String(opts.peerSm) : '';
+  const which = side === 'a' ? 'away' : 'home';
+  const label = c.short || c.nameZh || c.name || '球员对照';
+  return `<button type="button" class="${cls} tap" data-act="radarContrib" data-id="${esc(mid)}" data-sm="${esc(sm)}" data-side="${which}" data-axis="${esc(axis)}" data-peer="${esc(peer)}" aria-label="${esc(label)}">${inner}</button>`;
+}
+function radarAxisCellHtml(dims, contrib, i, pos, mid) {
+  const d = (dims && dims[i]) || {};
+  const title = radarAxisName(d, false);
+  const style = d.style_volume ? ' style' : '';
+  const list = contrib || [];
+  const homeC = list[i] && list[i].home;
+  const awayC = list[i] && list[i].away;
+  const h = radarContribChipHtml(homeC, 'h', 'xs', { matchId: mid, axis: i, peerSm: awayC && awayC.smId });
+  const a = radarContribChipHtml(awayC, 'a', 'xs', { matchId: mid, axis: i, peerSm: homeC && homeC.smId });
+  const act = mid != null && mid !== ''
+    ? ` data-act="radarAxisJump" data-id="${esc(String(mid))}" data-which="team" data-axis="${i}"`
+    : '';
+  return `<div class="rk-axis-cell ${pos}${style}"${act}>
+    <div class="rk-axis-title">${esc(title)}</div>
+    <div class="rk-axis-chips">${h}${a}</div>
+  </div>`;
+}
+/* In-flow 3×3 board: side chips live in grid columns, never absolutely around the hex. */
+function radarTeamBoardHtml(dims, contrib, svg, id) {
+  return `<div class="rk-radar-board">
+    ${radarAxisCellHtml(dims, contrib, 0, 'top', id)}
+    <div class="rk-axis-col left">
+      ${radarAxisCellHtml(dims, contrib, 5, 'lu', id)}
+      ${radarAxisCellHtml(dims, contrib, 4, 'll', id)}
+    </div>
+    <div class="rk-hex"><div class="radar-wrap lg">${svg}</div></div>
+    <div class="rk-axis-col right">
+      ${radarAxisCellHtml(dims, contrib, 1, 'ru', id)}
+      ${radarAxisCellHtml(dims, contrib, 2, 'rl', id)}
+    </div>
+    ${radarAxisCellHtml(dims, contrib, 3, 'bot', id)}
+  </div>`;
+}
+let _rkBoardRO = null;
+function unbindRadarBoardFit() {
+  if (_rkBoardRO) {
+    try { _rkBoardRO.disconnect(); } catch (_) {}
+    _rkBoardRO = null;
+  }
+}
+function bindRadarBoardFit(root) {
+  unbindRadarBoardFit();
+  const hex = root && root.querySelector('.rk-radar-board .rk-hex');
+  const svg = hex && hex.querySelector('svg.radar-svg');
+  if (!hex || !svg) return;
+  const fit = () => {
+    const w = hex.clientWidth | 0;
+    if (w > 0) svg.style.maxWidth = Math.min(280, Math.max(140, w)) + 'px';
+  };
+  fit();
+  if (typeof ResizeObserver !== 'undefined') {
+    try {
+      _rkBoardRO = new ResizeObserver(fit);
+      _rkBoardRO.observe(hex);
+    } catch (_) {}
+  }
+}
+function radarCrestHtml(name, logo, teamId) {
+  try { return badge(name || '', 'lg', logo, { teamId: teamId || '', eager: true }); }
+  catch (_) { return `<span class="badge lg">${esc(([...String(name || '?')][0] || '?'))}</span>`; }
+}
+
+function radarPillWidth(val, other) {
+  if (val == null || !Number.isFinite(Number(val))) return 36;
+  const a = Math.abs(Number(val));
+  const b = (other == null || !Number.isFinite(Number(other))) ? a : Math.abs(Number(other));
+  const max = Math.max(a, b, 1e-9);
+  return Math.round(36 + 64 * (a / max));
+}
+function radarLeader(left, right, invert, isStyle, key) {
+  if (left == null || right == null || !Number.isFinite(Number(left)) || !Number.isFinite(Number(right))) return 'na';
+  const l = Number(left), r = Number(right);
+  if (l === r || radarFmt(key, left) === radarFmt(key, right)) return 'eq';
+  if (isStyle) return l > r ? 'l' : 'r';
+  if (invert) return l < r ? 'l' : 'r';
+  return l > r ? 'l' : 'r';
+}
+function radarLegendHtml(items) {
+  const bits = (items || []).filter((x) => x && x.name).map((x) =>
+    `<span class="rk-leg"><i style="background:${esc(x.color)}"></i>${esc(x.name)}</span>`
+  ).join('');
+  return bits ? `<div class="rk-legend">${bits}</div>` : '';
+}
+function radarCompareHeadHtml(leftName, rightName, leftColor, rightColor) {
+  return `<div class="rk-cols">
+    <div class="rk-col l"><i style="background:${leftColor}"></i><span>${esc(leftName || '')}</span></div>
+    <div class="rk-col mid">对照</div>
+    <div class="rk-col r"><span>${esc(rightName || '')}</span><i style="background:${rightColor}"></i></div>
+  </div>`;
+}
+function radarCompareBlockHtml(groups, leftColor, rightColor, leftName, rightName) {
+  return `<div class="rk-compare">
+    ${radarCompareHeadHtml(leftName, rightName, leftColor, rightColor)}
+    ${radarCompareGroupsHtml(groups, leftColor, rightColor)}
+  </div>`;
+}
+function radarCompareRowHtml(row, leftColor, rightColor) {
+  const lTxt = radarFmt(row.key, row.left);
+  const rTxt = radarFmt(row.key, row.right);
+  const who = radarLeader(row.left, row.right, row.invert, row.style, row.key);
+  const lw = radarPillWidth(row.left, row.right);
+  const rw = radarPillWidth(row.right, row.left);
+  const lMiss = row.left == null || !Number.isFinite(Number(row.left));
+  const rMiss = row.right == null || !Number.isFinite(Number(row.right));
+  const lCls = 'rk-pill' + (lMiss ? ' muted miss' : (who === 'l' || who === 'eq' ? ' win' : ' muted'));
+  const rCls = 'rk-pill' + (rMiss ? ' muted miss' : (who === 'r' || who === 'eq' ? ' win' : ' muted'));
+  const lStyle = (!lMiss && (who === 'l' || who === 'eq'))
+    ? `width:${lw}%;background:${leftColor}`
+    : `width:${lw}%`;
+  const rStyle = (!rMiss && (who === 'r' || who === 'eq'))
+    ? `width:${rw}%;background:${rightColor}`
+    : `width:${rw}%`;
+  return `<div class="rk-row">
+    <div class="rk-side l"><span class="${lCls}" style="${lStyle}">${esc(lTxt)}</span></div>
+    <div class="rk-lab">${esc(row.label)}${row.invert && !row.style ? '<i>越少越好</i>' : ''}</div>
+    <div class="rk-side r"><span class="${rCls}" style="${rStyle}">${esc(rTxt)}</span></div>
+  </div>`;
+}
+function radarCompareGroupsHtml(groups, leftColor, rightColor) {
+  if (!groups || !groups.length) return '<p class="rk-empty">暂无可以对照的分项。</p>';
+  return groups.map((g, gi) => {
+    const style = g.style;
+    const note = style
+      ? '<p class="rk-sec-note">这是次数 / 风格轴，受打法影响，次数少不等于能力差。</p>'
+      : '';
+    const rows = (g.rows || []).map((r) => radarCompareRowHtml(Object.assign({ style }, r), leftColor, rightColor)).join('');
+    const who = g.who ? `<div class="rk-sec-who">${g.whoHtml ? g.who : esc(g.who)}</div>` : '';
+    return `<section class="rk-sec" id="rk-dim-${gi}">
+      <h3 class="rk-sec-hd${style ? ' style' : ''}">${esc(g.name)}</h3>
+      ${who}${note}${rows}
+    </section>`;
+  }).join('');
+}
+function radarTeamGroups(home, away, opts) {
+  const hDims = (home && home.dims) || [];
+  const aDims = (away && away.dims) || [];
+  return hDims.map((hd, i) => {
+    const ad = aDims[i] || { parts: [] };
+    const aMap = new Map((ad.parts || []).map((p) => [p.key, p]));
+    const rows = (hd.parts || []).map((p) => {
+      const q = aMap.get(p.key);
+      return {
+        key: p.key,
+        label: p.label,
+        left: p.value,
+        right: q ? q.value : null,
+        invert: p.invert,
+      };
+    });
+    const hWho = radarContribOf(hd.contributor);
+    const aWho = radarContribOf(ad.contributor);
+    const mid = opts && opts.matchId;
+    const who = [
+      radarContribChipHtml(hWho, 'h', 'xs', { matchId: mid, axis: i, peerSm: aWho && aWho.smId }),
+      radarContribChipHtml(aWho, 'a', 'xs', { matchId: mid, axis: i, peerSm: hWho && hWho.smId }),
+    ].filter(Boolean).join('');
+    return { name: hd.name, style: hd.style_volume, rows, who, whoHtml: true };
+  }).filter((g) => g.rows.length);
+}
+function radarPoolGroups(p) {
+  return (p.dims || []).map((d) => ({
+    name: d.name,
+    style: d.style_volume,
+    rows: (d.parts || []).map((part) => ({
+      key: part.key,
+      label: part.label,
+      left: part.value,
+      right: part.avg,
+      invert: part.invert,
+    })),
+  })).filter((g) => g.rows.length);
+}
+function radarSharedGroups(a, b) {
+  const bMap = new Map();
+  (b.dims || []).forEach((d) => (d.parts || []).forEach((p) => bMap.set(p.key, p)));
+  return (a.dims || []).map((d) => ({
+    name: d.name,
+    style: d.style_volume,
+    rows: (d.parts || []).filter((p) => bMap.has(p.key)).map((p) => ({
+      key: p.key,
+      label: p.label,
+      left: p.value,
+      right: bMap.get(p.key).value,
+      invert: p.invert,
+    })),
+  })).filter((g) => g.rows.length);
+}
+function radarSameTemplate(a, b) {
+  // Same axis set can overlay even when roles differ (winger vs striker
+  // both use the forward axes; poolKey ATT vs CF must not split them).
+  if (!a || !b) return false;
+  const ka = (a.dims || []).map((d) => d.name).join(',');
+  const kb = (b.dims || []).map((d) => d.name).join(',');
+  return !!ka && ka === kb;
+}
+function radarAxisFamily(p) {
+  const names = (p && p.dims || []).map((d) => d.name);
+  if (names[0] === '进攻终结') return '前锋轴';
+  if (names[0] === '机会创造' && names.includes('传球推进')) return '中场轴';
+  if (names[0] === '抢断拦截次数') return '中后卫轴';
+  if (names[0] === '扑救效率') return '门将轴';
+  return '位置轴';
+}
+function radarSeries(scores, color, fill) {
+  return { scores: scores || [], color, fill };
+}
+
+function radarTeamContributors(team) {
+  const dims = (team && team.home && team.home.dims) || [];
+  const awayDims = (team && team.away && team.away.dims) || [];
+  return dims.map((d, i) => ({
+    home: radarContribOf(d && d.contributor),
+    away: radarContribOf(awayDims[i] && awayDims[i].contributor),
+  }));
+}
+function radarTeamCaption(pack, team, forExpand) {
+  const bits = [];
+  if (team && team.kind === 'best-xi') {
+    if (team.poolLabel) bits.push(String(team.poolLabel).replace(/。?$/, '。'));
+    else if (team.noteZh) bits.push(String(team.noteZh).replace(/。?$/, '。'));
+    if (team.scale === 'fixed-club') {
+      bits.push(team.scaleNoteZh || team.scaleNote || '0–100 是同一把俱乐部联赛尺子上的分位，不是两边互相压成 100。');
+    } else if (forExpand) {
+      bits.push('各轴旁边是该队该项的主要贡献者（头像 + 简称）。0–100 是两边相对：该项更高的一边为 100。');
+    } else {
+      bits.push('0–100 是两边相对：该项更高的一边为 100。点「详细对照」可看各轴主要贡献球员。');
+    }
+    return bits.join(' ') + ' <span class="style">「抢断拦截次数」是风格次数，次数少不等于能力差。</span>';
+  }
+  if (team && team.noteZh) bits.push(String(team.noteZh).replace(/。?$/, '。'));
+  else if (team && team.poolLabel) bits.push(String(team.poolLabel).replace(/。?$/, '。'));
+  else if (pack && pack.teamNote) bits.push(String(pack.teamNote).replace(/。?$/, '。'));
+  if (team && team.kind === 'unl-midrank') {
+    bits.push('0–100 为欧国联 54 队 midrank，短期窗口，不是俱乐部稳定水平。');
+  } else {
+    bits.push('0–100 为同赛事对照群中的分位。');
+  }
+  return bits.join(' ') + ' <span class="style">「抢断拦截次数」是场均次数，不是能力差。</span>';
+}
+function teamRadarCardHtml(pack, id) {
+  const team = pack && pack.team;
+  const hName = (pack.coverage && pack.coverage.home && pack.coverage.home.nameZh) || '主队';
+  const aName = (pack.coverage && pack.coverage.away && pack.coverage.away.nameZh) || '客队';
+  const more = (team && team.ok)
+    ? `<button type="button" class="rk-more" data-act="radarTeamExpand" data-id="${esc(String(id))}">详细对照</button>`
+    : '';
+  if (!team || !team.ok || !team.home || !team.home.ok || !team.away || !team.away.ok) {
+    const msg = (team && (team.noteZh || team.reason)) || '暂无';
+    return `<section class="sm-kit sm-radar">
+      <div class="sm-kit-hd"><h3>球队六围</h3>${more}</div>
+      <p class="sm-empty">暂无。${esc(msg)}</p>
+    </section>`;
+  }
+  const dims = (team.home.dims || []).map((d) => ({ name: d.name, style_volume: d.style_volume }));
+  const svg = radarSvgHtml(dims, [
+    radarSeries(team.home.scores, RADAR_HOME, 'rgba(91,124,250,.28)'),
+    radarSeries(team.away.scores, RADAR_AWAY, 'rgba(255,77,122,.20)'),
+  ], { matchId: id, which: 'team', interactive: true, aria: '双方球队六围', size: 280, tinyLabels: true });
+  return `<section class="sm-kit sm-radar">
+    <div class="sm-kit-hd"><h3>球队六围</h3>${more}</div>
+    <div class="sm-legend"><i class="h"></i><span>${esc(hName)}</span><i class="a"></i><span>${esc(aName)}</span></div>
+    <div class="radar-wrap">${svg}</div>
+    <p class="radar-cap">${radarTeamCaption(pack, team)}</p>
+  </section>`;
+}
+function radarCoverageOf(pack, side) {
+  return (pack && pack.coverage && pack.coverage[side]) || {};
+}
+function radarListed(pack, side) {
+  const listed = pack && pack.listed && pack.listed[side];
+  if (Array.isArray(listed) && listed.length) return listed;
+  return ((pack && pack.drawable && pack.drawable[side]) || []).map((p) => Object.assign({}, p, { drawable: true }));
+}
+function radarSideEmpty(pack, side) {
+  const c = radarCoverageOf(pack, side);
+  const note = c.noteZh ? '。' + c.noteZh : '';
+  return `<p class="sm-empty">此边暂无可以画出的球员${esc(note)}</p>`;
+}
+function radarLowChips(p, detailed) {
+  if (!p) return '';
+  let out = '';
+  if (p.lowValue) {
+    const txt = detailed && p.lowValueNote ? p.lowValueNote : (p.lowValueChip || '参考价值偏低');
+    out += `<span class="rk-chip low">${esc(txt)}</span>`;
+  }
+  if (p.thinPool) {
+    const txt = detailed
+      ? (p.thinPoolNote || (`对照仅 ${p.poolN || ''} 人，样本偏少`))
+      : '样本偏少';
+    out += `<span class="rk-chip low">${esc(txt)}</span>`;
+  }
+  return out;
+}
+function playerRadarMeta(p) {
+  if (p && (p.chartKind === 'nt-form' || p.windowLabel)) {
+    return [p.windowLabel || '', p.noteZh || '国家队短期状态，暂无'].filter(Boolean).join(' · ');
+  }
+  let pool = (p && p.poolLabelShort) || '';
+  if (!pool) {
+    pool = String((p && p.poolLabel) || '').replace(/。.*$/, '');
+    // Compact: 「意甲中场 ≥450 分钟，对照 170 人」→「意甲中场≥450′ · 对照170」
+    pool = pool.replace(/\s*≥\s*(\d+)\s*分钟，对照\s*(\d+)\s*人?/, '≥$1′ · 对照$2');
+    pool = pool.replace(/\s+/g, ' ').trim();
+  }
+  const wing = (p && p.wingerOverride) || '';
+  if (wing) {
+    pool = pool.split('（' + wing + '）').join('').split(wing).join('').trim();
+  }
+  return pool;
+}
+function shootingCompareHtml(p) {
+  const s = p && p.shooting;
+  if (!s) return '';
+  const bits = [];
+  if (s.xg90 != null) bits.push('xG/90 ' + Number(s.xg90).toFixed(2));
+  if (s.xgot90 != null) bits.push('xGoT/90 ' + Number(s.xgot90).toFixed(2));
+  if (s.goals90 != null) bits.push('进球/90 ' + Number(s.goals90).toFixed(2));
+  if (!bits.length) return '';
+  return `<p class="rk-cap">${esc(s.noteZh || 'xG / xGoT 仅作对照数字，不单独占六围轴')}：${esc(bits.join(' · '))}</p>`;
+}
+function playerRadarPreview(p, id) {
+  const dims = (p.dims || []).map((d) => ({ name: d.name, style_volume: d.style_volume }));
+  const color = p.side === 'away' ? RADAR_AWAY : RADAR_HOME;
+  const fill = p.side === 'away' ? 'rgba(255,77,122,.28)' : 'rgba(91,124,250,.28)';
+  const svg = radarSvgHtml(dims, [radarSeries(p.scores, color, fill)], {
+    matchId: id, which: 'player', who: p.smId, interactive: false, compact: true, size: 126, aria: (p.nameZh || p.name) + '六围',
+  });
+  const pool = playerRadarMeta(p);
+  const wing = p.wingerOverride ? `<span class="rk-chip">${esc(p.wingerOverride)}</span>` : '';
+  const low = radarLowChips(p, false);
+  const shoot = p.shooting ? `<span class="rk-chip">射术对照</span>` : '';
+  const tile = (p.drawable === false)
+    ? `<div class="tile-radar vacant">暂无</div>`
+    : `<div class="tile-radar">${svg}</div>`;
+  return `<button type="button" class="sm-radar-card" data-act="radarPlayer" data-id="${esc(String(id))}" data-sm="${esc(String(p.smId || ''))}">
+    <div class="who">${radarAvatarHtml(p)}<div class="nm">${esc(p.nameZh || p.name)}</div></div>
+    <div class="meta"><span class="sub">${esc(pool)}</span>${wing}${low}${shoot}</div>
+    ${tile}
+  </button>`;
+}
+function playerRadarCardHtml(pack, id) {
+  const draw = radarDrawable(pack);
+  const home = ((pack && pack.players) || []).filter((p) => p.side === 'home');
+  const away = ((pack && pack.players) || []).filter((p) => p.side === 'away');
+  const hName = (pack.coverage && pack.coverage.home && pack.coverage.home.nameZh) || '主队';
+  const aName = (pack.coverage && pack.coverage.away && pack.coverage.away.nameZh) || '客队';
+  const canExpand = home.length + away.length + draw.home.length + draw.away.length > 0;
+  const more = canExpand
+    ? `<button type="button" class="rk-more" data-act="radarPlayerAll" data-id="${esc(String(id))}">展开全部</button>`
+    : '';
+  if (!home.length && !away.length) {
+    const ntNote = (pack && pack.national)
+      ? ((pack.ntPlayers && pack.ntPlayers.noteZh) || '国家队球员六围是近 4–5 场竞技赛事的短期状态（不含友谊赛凑场）。当前暂无，不拿俱乐部稳定水平冒充国家队真水平。')
+      : '双方暂没有能画完整六围的球员（需俱乐部联赛满 450 分钟、对照群足够，且能对应到统计）。';
+    return `<section class="sm-kit sm-radar">
+      <div class="sm-kit-hd"><h3>球员六围</h3>${more}</div>
+      <p class="sm-empty">暂无。${esc(ntNote)}</p>
+    </section>`;
+  }
+  const col = (list, name, side) => `<div class="sm-radar-side">
+    <h4><i class="${side === 'away' ? 'a' : 'h'}"></i>${esc(name)}</h4>
+    ${list.length ? list.map((p) => playerRadarPreview(p, id)).join('') : radarSideEmpty(pack, side)}
+  </div>`;
+  return `<section class="sm-kit sm-radar">
+    <div class="sm-kit-hd"><h3>球员六围</h3>${more}</div>
+    <div class="sm-radar-players">${col(home, hName, 'home')}${col(away, aName, 'away')}</div>
+    <p class="radar-cap">点开球员看与对照群的详细对照；展开全部可双方球员互相比。</p>
+  </section>`;
+}
+function paintMatchRadar(id) {
+  const key = String(id || '');
+  const pack = S.matchRadar && S.matchRadar[key];
+  const teamEl = document.getElementById('sm-team-radar-' + key);
+  const playerEl = document.getElementById('sm-player-radar-' + key);
+  if (pack && pack._loading) {
+    if (teamEl) teamEl.innerHTML = '<section class="sm-kit sm-radar"><h3>球队六围</h3><p class="sm-empty">正在整理六围…</p></section>';
+    if (playerEl) playerEl.innerHTML = '<section class="sm-kit sm-radar"><h3>球员六围</h3><p class="sm-empty">正在整理六围…</p></section>';
+    return;
+  }
+  if (!pack || pack.ok === false) {
+    const msg = (pack && (pack.error || pack.noteZh)) || '暂无';
+    if (teamEl) teamEl.innerHTML = `<section class="sm-kit sm-radar"><h3>球队六围</h3><p class="sm-empty">${esc(msg)}</p></section>`;
+    if (playerEl) playerEl.innerHTML = `<section class="sm-kit sm-radar"><h3>球员六围</h3><p class="sm-empty">${esc(msg)}</p></section>`;
+    return;
+  }
+  if (teamEl) teamEl.innerHTML = rewritePredictLogoHtml(teamRadarCardHtml(pack, key));
+  if (playerEl) playerEl.innerHTML = rewritePredictLogoHtml(playerRadarCardHtml(pack, key));
+}
+async function ensureMatchRadar(x) {
+  if (!x || !x.id) return;
+  S.matchRadar = S.matchRadar || {};
+  const key = String(x.id);
+  const hit = S.matchRadar[key];
+  const age = hit && hit._at ? Date.now() - hit._at : Infinity;
+  if (hit && !hit._loading && age < 15 * 60 * 1000) {
+    paintMatchRadar(key);
+    return;
+  }
+  if (hit && hit._loading) return;
+  const q = [
+    'matchId=' + encodeURIComponent(key),
+    'date=' + encodeURIComponent(x.date || ''),
+    'time=' + encodeURIComponent(x.time || ''),
+    'homeTeamId=' + encodeURIComponent(x.homeTeamId || ''),
+    'awayTeamId=' + encodeURIComponent(x.awayTeamId || ''),
+    'home=' + encodeURIComponent(x.home || ''),
+    'away=' + encodeURIComponent(x.away || ''),
+    'homeEn=' + encodeURIComponent(x.homeEn || ''),
+    'awayEn=' + encodeURIComponent(x.awayEn || ''),
+    'league=' + encodeURIComponent(x.league || ''),
+  ];
+  S.matchRadar[key] = { ok: true, _loading: true, _at: Date.now() };
+  paintMatchRadar(key);
+  let pack;
+  try { pack = await api('/match-radar?' + q.join('&'), { timeout: 60000 }); }
+  catch (e) { pack = { ok: false, error: e.message || '加载失败' }; }
+  pack._at = Date.now();
+  S.matchRadar[key] = pack;
+  paintMatchRadar(key);
+  if (S.radarExpand && String(S.radarExpand.id) === key) renderRadarExpand();
+}
+
+function radarExpandRoot() {
+  let el = document.getElementById('radar-expand');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'radar-expand';
+    el.className = 'rk-page hidden';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    document.body.appendChild(el);
+  } else if (el.parentElement && el.parentElement !== document.body) {
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function closeRadarExpand() {
+  S.radarExpand = null;
+  unbindRadarBoardFit();
+  const el = document.getElementById('radar-expand');
+  if (el) {
+    const body = el.querySelector('.rk-body');
+    if (body) body.scrollTop = 0;
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    el.scrollTop = 0;
+  }
+  document.body.classList.remove('rk-lock');
+}
+function radarPlayerIsDrawable(pack, smId) {
+  if (!smId || !pack) return false;
+  const p = radarFindPlayer(pack, smId);
+  if (!p) return false;
+  if (p.drawable === false) return false;
+  const d = radarDrawable(pack);
+  if ([...(d.home || []), ...(d.away || [])].some((x) => String(x.smId) === String(smId))) return true;
+  const scores = p.scores;
+  return Array.isArray(scores) && scores.some((x) => x != null && Number.isFinite(Number(x)));
+}
+/** Build the player-expand state for a tapped contributor / XI name. Pure: no DOM. */
+function radarContribOpenState(pack, id, sm, side, peerSm, from) {
+  if (!sm) return null;
+  const state = { kind: 'player', id, sm: String(sm) };
+  if (from) state.from = from;
+  if (radarPlayerIsDrawable(pack, sm) && peerSm && radarPlayerIsDrawable(pack, peerSm)) {
+    state.mode = 'h2h';
+    if (side === 'away') {
+      state.homeSm = String(peerSm);
+      state.awaySm = String(sm);
+    } else {
+      state.homeSm = String(sm);
+      state.awaySm = String(peerSm);
+    }
+  } else {
+    state.mode = 'pool';
+  }
+  return state;
+}
+function radarExpandSnapshot() {
+  const st = S.radarExpand;
+  if (!st || !st.id) return null;
+  const el = document.getElementById('radar-expand');
+  const body = el && el.querySelector('.rk-body');
+  return { kind: st.kind || 'team', id: st.id, scroll: body ? body.scrollTop : 0 };
+}
+function openRadarContribJump(el) {
+  const id = el && el.dataset && el.dataset.id;
+  const sm = el && el.dataset && el.dataset.sm;
+  if (!id || !sm) return;
+  const pack = S.matchRadar && S.matchRadar[String(id)];
+  const fromTeam = S.radarExpand && S.radarExpand.kind === 'team';
+  const from = fromTeam ? radarExpandSnapshot() : ((S.radarExpand && S.radarExpand.from) || null);
+  const state = radarContribOpenState(pack, id, sm, el.dataset.side, el.dataset.peer, from);
+  if (!state) return;
+  openRadarExpand(state);
+}
+function openRadarExpand(state) {
+  if (!state || !state.id) return;
+  const pack = S.matchRadar && S.matchRadar[String(state.id)];
+  if (!pack || pack._loading) { toast('六围还在整理'); return; }
+  if (!pack.ok) { toast((pack.error || pack.noteZh || '暂无六围')); return; }
+  const draw = radarDrawable(pack);
+  if (state.kind === 'player' && !state.sm) {
+    const first = (state.mode === 'h2h')
+      ? (draw.home[0] || draw.away[0] || ((pack.players || [])[0]))
+      : ((pack.players || [])[0] || draw.home[0] || draw.away[0]);
+    if (first) state.sm = first.smId;
+  }
+  if (state.kind === 'player' && state.mode !== 'h2h') state.mode = 'pool';
+  if (state.kind === 'player' && state.mode === 'h2h') {
+    if (!state.homeSm && draw.home[0]) state.homeSm = draw.home[0].smId;
+    if (!state.awaySm && draw.away[0]) state.awaySm = draw.away[0].smId;
+    if (state.sm) {
+      const p = radarFindPlayer(pack, state.sm);
+      if (p && p.side === 'home') state.homeSm = p.smId;
+      if (p && p.side === 'away') state.awaySm = p.smId;
+    }
+  }
+  S.radarExpand = state;
+  renderRadarExpand();
+}
+function renderRadarExpand() {
+  const st = S.radarExpand;
+  const el = radarExpandRoot();
+  if (!st) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  const pack = S.matchRadar && S.matchRadar[String(st.id)];
+  const html = st.kind === 'team'
+    ? radarTeamExpandHtml(pack, st.id)
+    : radarPlayerExpandHtml(pack, st.id, st);
+  el.innerHTML = (typeof rewritePredictLogoHtml === 'function') ? rewritePredictLogoHtml(html) : html;
+  el.classList.remove('hidden');
+  el.setAttribute('aria-label', st.kind === 'team' ? '球队对照' : '球员对照');
+  document.body.classList.add('rk-lock');
+  el.scrollTop = 0;
+  const body = el.querySelector('.rk-body');
+  if (body) body.scrollTop = 0;
+  bindRadarBoardFit(el);
+  if (st.axis != null && st.axis !== '') {
+    const target = el.querySelector('#rk-dim-' + Number(st.axis));
+    const scroller = body || el;
+    if (target) setTimeout(() => {
+      try {
+        const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 8;
+        scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      } catch (_) {
+        try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (__) {}
+      }
+    }, 40);
+        st.axis = null;
+  } else if (st.scroll != null && Number.isFinite(Number(st.scroll))) {
+    const y = Math.max(0, Number(st.scroll));
+    st.scroll = null;
+    if (body) {
+      body.scrollTop = y;
+      try { requestAnimationFrame(() => { try { body.scrollTop = y; } catch (_) {} }); } catch (_) {}
+    }
+  }
+}
+
+function radarPageHdr(title, right) {
+  return `<header class="rk-hdr">
+    <button type="button" class="ic-btn rk-back" data-act="radarExpandBack" aria-label="返回">${I.back}</button>
+    <h1>${esc(title)}</h1>
+    <div class="rk-hdr-r">${right || ''}</div>
+  </header>`;
+}
+function radarTeamExpandHtml(pack, id) {
+  const x = radarMatchOf(id);
+  const team = pack && pack.team;
+  const hName = (pack && pack.coverage && pack.coverage.home && pack.coverage.home.nameZh) || x.home || '主队';
+  const aName = (pack && pack.coverage && pack.coverage.away && pack.coverage.away.nameZh) || x.away || '客队';
+  const hCrest = radarCrestHtml(hName, x.homeLogo, x.homeTeamId);
+  const aCrest = radarCrestHtml(aName, x.awayLogo, x.awayTeamId);
+  const xiSub = (side) => {
+    const t = team && team[side];
+    if (t && t.kind === 'best-xi') {
+      const n = t.nWithStats, tot = t.nXi || 11;
+      return `理论最强 11 人 · ${n}/${tot} 人有数据`;
+    }
+    if (t && t.ok && t.matches) return `${esc(t.competition || '')} · ${t.matches} 场`;
+    return esc(x.league || '');
+  };
+  const hSub = xiSub('home');
+  const aSub = xiSub('away');
+  const clubs = `<div class="rk-clubs">
+    <div class="rk-club h">${hCrest}<div class="rk-club-tx"><b>${esc(hName)}</b><small>${hSub}</small></div></div>
+    <div class="rk-vs">VS</div>
+    <div class="rk-club a"><div class="rk-club-tx r"><b>${esc(aName)}</b><small>${aSub}</small></div>${aCrest}</div>
+  </div>`;
+  if (!team || !team.ok || !team.home || !team.home.ok || !team.away || !team.away.ok) {
+    const msg = (team && (team.noteZh || team.reason)) || '本场尚无球队对照所需的赛事统计';
+    return radarPageHdr('球队对照') + `<div class="rk-body">${clubs}
+      <div class="rk-vacant"><p>暂无球队六围</p><p class="rk-vacant-sub">${esc(msg)}</p></div>
+    </div>`;
+  }
+  const dims = (team.home.dims || []).map((d) => ({ name: d.name, style_volume: d.style_volume }));
+  const contrib = radarTeamContributors(team);
+  const svg = radarSvgHtml(dims, [
+    radarSeries(team.home.scores, RADAR_HOME, 'rgba(91,124,250,.30)'),
+    radarSeries(team.away.scores, RADAR_AWAY, 'rgba(255,77,122,.22)'),
+  ], { matchId: id, which: 'team', jump: true, large: true, size: 280, showValues: true, hideLabels: true, aria: '双方球队六围' });
+  const groups = radarTeamGroups(team.home, team.away, { matchId: id });
+  const xiList = (side, color) => {
+    const t = team[side] || {};
+    const list = t.xi || [];
+    if (!list.length) return '';
+    const items = list.map((p) => {
+      const miss = p.hasStats ? '' : ' dim';
+      const lab = [p.short || p.nameZh || p.name, p.line, p.hasStats ? '' : '暂无窗口数据', p.lowValue ? '参考价值偏低' : ''].filter(Boolean).join(' · ');
+      const sm = p.smId != null && p.smId !== '' ? String(p.smId) : '';
+      if (sm) {
+        const label = p.short || p.nameZh || p.name || '球员对照';
+        return `<li class="${miss}"><button type="button" class="rk-xi-name tap" data-act="radarContrib" data-id="${esc(String(id))}" data-sm="${esc(sm)}" data-side="${esc(side)}" aria-label="${esc(label)}">${esc(lab)}</button></li>`;
+      }
+      return `<li class="${miss}">${esc(lab)}</li>`;
+    }).join('');
+    const title = side === 'away' ? aName : hName;
+    return `<div class="rk-xi"><h4><i style="background:${color}"></i>${esc(title)} 理论最强 11 人</h4><ul>${items}</ul></div>`;
+  };
+  return radarPageHdr('球队对照') + `<div class="rk-body">
+    ${clubs}
+    ${radarLegendHtml([{ color: RADAR_HOME, name: hName }, { color: RADAR_AWAY, name: aName }])}
+    ${radarTeamBoardHtml(dims, contrib, svg, id)}
+    <p class="rk-cap">${radarTeamCaption(pack, team, true)}</p>
+    ${radarCompareBlockHtml(groups, RADAR_HOME, RADAR_AWAY, hName, aName)}
+    <div class="rk-xi-row">${xiList('home', RADAR_HOME)}${xiList('away', RADAR_AWAY)}</div>
+  </div>`;
+}
+function radarModeSwitch(st, id) {
+  const poolOn = st.mode !== 'h2h';
+  return `<div class="rk-modes" role="tablist">
+    <button type="button" role="tab" class="${poolOn ? 'on' : ''}" data-act="radarMode" data-id="${esc(String(id))}" data-mode="pool" aria-selected="${poolOn}">对照群</button>
+    <button type="button" role="tab" class="${poolOn ? '' : 'on'}" data-act="radarMode" data-id="${esc(String(id))}" data-mode="h2h" aria-selected="${!poolOn}">双方球员对照</button>
+  </div>`;
+}
+function radarPickCard(p, id, side, label) {
+  const color = side === 'away' ? RADAR_AWAY : RADAR_HOME;
+  if (!p) {
+    return `<button type="button" class="rk-pick empty" data-act="radarPickOpen" data-id="${esc(String(id))}" data-side="${esc(side)}">
+      <span class="rk-av letter">?</span>
+      <div class="rk-pick-tx"><b>选择${esc(label)}</b><small>点此更换</small></div>
+    </button>`;
+  }
+  const sub = [p.roleZh, p.club, p.minutes ? (Math.round(p.minutes) + ' 分钟') : ''].filter(Boolean).join(' · ');
+  const low = radarLowChips(p, false);
+  return `<button type="button" class="rk-pick" data-act="radarPickOpen" data-id="${esc(String(id))}" data-side="${esc(side)}" style="--rk:${color}">
+    ${radarAvatarHtml(p, 'lg')}
+    <div class="rk-pick-tx"><b>${esc(p.nameZh || p.name)}</b><small>${esc(sub)}</small>${low}</div>
+    <span class="rk-swap">更换</span>
+  </button>`;
+}
+function radarPlayerExpandHtml(pack, id, st) {
+  const draw = radarDrawable(pack);
+  const hasH2h = draw.home.length && draw.away.length;
+  const switcher = hasH2h ? radarModeSwitch(st, id) : '';
+  if (st.mode === 'h2h' && hasH2h) return radarPlayerH2hHtml(pack, id, st, switcher, draw);
+  return radarPlayerPoolHtml(pack, id, st, switcher);
+}
+function radarPlayerPoolHtml(pack, id, st, switcher) {
+  const p = radarFindPlayer(pack, st.sm);
+  if (!p) {
+    return radarPageHdr('球员对照') + `<div class="rk-body">${switcher}<div class="rk-vacant"><p>未找到该球员</p></div></div>`;
+  }
+  if (p.drawable === false) {
+    const mins = p.windowLabel || (p.minutes ? `${Math.round(p.minutes)} 分钟 / ${p.apps || '—'} 场` : '');
+    return radarPageHdr('球员对照') + `<div class="rk-body">${switcher}
+      <div class="rk-hero">${radarAvatarHtml(p, 'lg')}<div class="rk-hero-tx"><b>${esc(p.nameZh || p.name || '')}</b>
+      <small>${esc([p.roleZh, mins].filter(Boolean).join(' · '))}</small></div></div>
+      <div class="rk-vacant"><p>暂无</p><p class="rk-vacant-sub">${esc(p.noteZh || '暂无法画图')}</p></div>
+      ${shootingCompareHtml(p)}
+    </div>`;
+  }
+  const color = p.side === 'away' ? RADAR_AWAY : RADAR_HOME;
+  const fill = p.side === 'away' ? 'rgba(255,77,122,.28)' : 'rgba(91,124,250,.28)';
+  const dims = (p.dims || []).map((d) => ({ name: d.name, style_volume: d.style_volume }));
+  const poolSeries = (p.poolScores && p.poolScores.length)
+    ? [radarSeries(p.poolScores, RADAR_POOL, 'rgba(139,146,168,.22)'), radarSeries(p.scores, color, fill)]
+    : [radarSeries(p.scores, color, fill)];
+  const svg = radarSvgHtml(dims, poolSeries, {
+    matchId: id, which: 'player', who: p.smId, interactive: true, jump: true, large: true, size: 320,
+    aria: (p.nameZh || p.name) + '对照群六围',
+  });
+  const mins = p.minutes ? `${Math.round(p.minutes)} 分钟 / ${p.apps || '—'} 场` : '';
+  const pid = p.pid || p.id || '';
+  const goBtn = pid
+    ? `<button type="button" class="rk-link" data-act="radarOpenPlayer" data-pid="${esc(pid)}">打开球员页</button>`
+    : '';
+  const swap = `<button type="button" class="rk-swap-btn" data-act="radarPickOpen" data-id="${esc(String(id))}" data-side="pool">更换</button>`;
+  const nm = p.nameZh || p.name || '';
+  const hero = `<div class="rk-hero">
+    ${radarAvatarHtml(p, 'lg')}
+    <div class="rk-hero-tx">
+      <b>${esc(nm)}</b>
+      <small>${esc([p.roleZh, p.club].filter(Boolean).join(' · '))}${mins ? '<br>' + esc(mins) : ''}</small>
+    </div>
+    <div class="rk-hero-acts">${swap}${goBtn}</div>
+  </div>`;
+  const lab = String(p.poolLabel || '').replace(/。?$/, '。');
+  const wingRaw = String(p.wingerOverride || '');
+  const wing = (wingRaw && !lab.includes(wingRaw)) ? `（${esc(wingRaw)}）` : '';
+  const lowCap = [
+    p.lowValue ? (p.lowValueNote || '参考价值偏低') : '',
+    p.thinPool ? (p.thinPoolNote || (`对照仅 ${p.poolN || ''} 人，样本偏少`)) : '',
+  ].filter(Boolean);
+  const cap = `<p class="rk-cap">${esc(lab)}${wing} 图上数字是 0–100 分位；灰色是对照群各指标均值再计分，不是画在 50。<span class="style">次数轴是风格次数，不是能力差。</span></p>`
+    + (lowCap.length ? `<p class="rk-cap warn">${esc(lowCap.join('。'))}</p>` : '')
+    + shootingCompareHtml(p);
+  const legend = radarLegendHtml([
+    { color, name: nm },
+    { color: RADAR_POOL, name: '对照群平均' },
+  ]);
+  const groups = radarPoolGroups(p);
+  return radarPageHdr('球员对照') + `<div class="rk-body">
+    ${hero}${switcher}${legend}
+    <div class="radar-wrap lg">${svg}</div>
+    ${cap}
+    ${radarCompareBlockHtml(groups, color, RADAR_POOL, nm, '对照群平均')}
+  </div>`;
+}
+function radarH2hAxisNote(a, b) {
+  const family = radarAxisFamily(a);
+  const ra = a.roleZh || '主';
+  const rb = b.roleZh || '客';
+  const wing = (a.wingerOverride || b.wingerOverride) ? '，边锋暂按前锋对照' : '';
+  if (ra === rb) return `两边使用同一套${esc(family)}（${esc(ra)}）${esc(wing)}。`;
+  return `两边位置标签不同（${esc(ra)} / ${esc(rb)}），但轴相同，按同一套${esc(family)}合图${esc(wing)}。`;
+}
+function radarPlayerH2hHtml(pack, id, st, switcher, draw) {
+  const a = radarFindPlayer(pack, st.homeSm) || draw.home[0];
+  const b = radarFindPlayer(pack, st.awaySm) || draw.away[0];
+  const picks = `<div class="rk-picks">${radarPickCard(a, id, 'home', '主队球员')}${radarPickCard(b, id, 'away', '客队球员')}</div>`;
+  if (!a || !b) {
+    return radarPageHdr('球员对照') + `<div class="rk-body">${switcher}${picks}<div class="rk-vacant"><p>请选择双方各一名可画出的球员</p></div></div>`;
+  }
+  const same = radarSameTemplate(a, b);
+  let charts;
+  if (same) {
+    const dims = (a.dims || []).map((d) => ({ name: d.name, style_volume: d.style_volume }));
+    const svg = radarSvgHtml(dims, [
+      radarSeries(a.scores, RADAR_HOME, 'rgba(91,124,250,.28)'),
+      radarSeries(b.scores, RADAR_AWAY, 'rgba(255,77,122,.20)'),
+    ], { matchId: id, which: 'h2h', interactive: true, jump: true, large: true, size: 320, aria: '双方球员六围' });
+    charts = `${radarLegendHtml([{ color: RADAR_HOME, name: a.nameZh || a.name }, { color: RADAR_AWAY, name: b.nameZh || b.name }])}
+      <div class="radar-wrap lg">${svg}</div>
+      <p class="rk-cap">蓝是${esc(a.nameZh || a.name)}，粉是${esc(b.nameZh || b.name)}。${radarH2hAxisNote(a, b)}图上数字是各自俱乐部联赛同位置对照群中的分位，不是直接把原始值画在同一把尺子上。<span class="style">次数轴是风格次数，不是能力差。</span></p>`;
+  } else {
+    const da = (a.dims || []).map((d) => ({ name: d.name, style_volume: d.style_volume }));
+    const db = (b.dims || []).map((d) => ({ name: d.name, style_volume: d.style_volume }));
+    const sa = radarSvgHtml(da, [radarSeries(a.scores, RADAR_HOME, 'rgba(91,124,250,.28)')], {
+      matchId: id, large: true, size: 320, aria: (a.nameZh || a.name) + '六围',
+    });
+    const sb = radarSvgHtml(db, [radarSeries(b.scores, RADAR_AWAY, 'rgba(255,77,122,.22)')], {
+      matchId: id, large: true, size: 320, aria: (b.nameZh || b.name) + '六围',
+    });
+    const note = `两位球员的位置轴不同（${esc(a.roleZh || '主')} vs ${esc(b.roleZh || '客')}），不画在同一张六边形上。下面只对照两边都有的分项。`;
+    charts = `<p class="rk-cap warn">${note}</p>
+      <div class="rk-stack">
+        <div class="rk-stack-item">${radarLegendHtml([{ color: RADAR_HOME, name: (a.nameZh || a.name) + ' · ' + (a.roleZh || '') }])}<div class="radar-wrap">${sa}</div></div>
+        <div class="rk-stack-item">${radarLegendHtml([{ color: RADAR_AWAY, name: (b.nameZh || b.name) + ' · ' + (b.roleZh || '') }])}<div class="radar-wrap">${sb}</div></div>
+      </div>`;
+  }
+  const groups = same ? radarSharedGroups(a, b) : radarSharedGroups(a, b);
+  // radarSharedGroups works for same template too (all parts shared). Fine.
+  const goA = (a.pid || a.id) ? `<button type="button" class="rk-link" data-act="radarOpenPlayer" data-pid="${esc(a.pid || a.id)}">${esc(a.nameZh || a.name)} 球员页</button>` : '';
+  const goB = (b.pid || b.id) ? `<button type="button" class="rk-link" data-act="radarOpenPlayer" data-pid="${esc(b.pid || b.id)}">${esc(b.nameZh || b.name)} 球员页</button>` : '';
+  return radarPageHdr('球员对照') + `<div class="rk-body">
+    ${switcher}${picks}${charts}
+    ${radarCompareBlockHtml(groups, RADAR_HOME, RADAR_AWAY, a.nameZh || a.name, b.nameZh || b.name)}
+    <div class="rk-links">${goA}${goB}</div>
+  </div>`;
+}
+function openRadarPlayerPicker(id, side, tab) {
+  const pack = S.matchRadar && S.matchRadar[String(id)];
+  if (!pack) return;
+  const draw = radarDrawable(pack);
+  const st = S.radarExpand || {};
+  const x = radarMatchOf(id);
+  const hName = (pack.coverage && pack.coverage.home && pack.coverage.home.nameZh) || x.home || '主队';
+  const aName = (pack.coverage && pack.coverage.away && pack.coverage.away.nameZh) || x.away || '客队';
+  const opt = (p, itemSide, cur) => {
+    const can = p.drawable !== false && p.smId;
+    const on = can && String(p.smId) === String(cur) ? ' on' : '';
+    let pool = p.poolLabel ? String(p.poolLabel).replace(/。.*$/, '') : '';
+    if (p.wingerOverride) {
+      const wrapped = '（' + p.wingerOverride + '）';
+      if (pool.includes(wrapped)) pool = pool.split(wrapped).join('').trim();
+    }
+    const sub = can
+      ? [p.roleZh, pool, p.minutes ? (Math.round(p.minutes) + ' 分钟') : ''].filter(Boolean).join(' · ')
+      : [p.roleZh, p.noteZh || '暂无法画图'].filter(Boolean).join(' · ');
+    const act = can
+      ? `data-act="radarPickPlayer" data-id="${esc(String(id))}" data-side="${esc(itemSide)}" data-sm="${esc(String(p.smId))}"`
+      : 'disabled aria-disabled="true"';
+    const low = radarLowChips(p, false);
+    return `<button type="button" class="rk-opt${on}${can ? '' : ' dim'}" ${act}>
+      ${radarAvatarHtml(p)}<div><b>${esc(p.nameZh || p.name)}</b><small>${esc(sub)}</small>${low}</div>
+    </button>`;
+  };
+  const blockNote = (list, name) => {
+    const n = list.filter((p) => p.drawable !== false && p.smId).length;
+    const miss = list.length - n;
+    if (!miss || !list.length) return esc(name);
+    return `${esc(name)} · ${n} 人可对照，${miss} 人暂无法画图`;
+  };
+  let title, items;
+  if (side === 'pool') {
+    title = '更换球员';
+    const homeL = radarListed(pack, 'home');
+    const awayL = radarListed(pack, 'away');
+    let which = tab || S.radarPickSide;
+    if (which !== 'home' && which !== 'away') {
+      const cur = radarFindPlayer(pack, st.sm);
+      which = cur && cur.side === 'away' ? 'away' : 'home';
+    }
+    if (which === 'away' && !awayL.length && homeL.length) which = 'home';
+    if (which === 'home' && !homeL.length && awayL.length) which = 'away';
+    S.radarPickSide = which;
+    const list = which === 'away' ? awayL : homeL;
+    const n = list.filter((p) => p.drawable !== false && p.smId).length;
+    const miss = list.length - n;
+    const cov = list.length
+      ? (miss ? `${n} 人可对照，${miss} 人暂无法画图` : `${n} 人可对照`)
+      : '此边暂无可以画出的球员';
+    const tabBtn = (tabSide, name) => {
+      const on = which === tabSide ? ' on' : '';
+      return `<button type="button" role="tab" class="${on}" data-act="radarPickTab" data-id="${esc(String(id))}" data-tab="${tabSide}" aria-selected="${which === tabSide}">${esc(name)}</button>`;
+    };
+    items = `<div class="rk-pick-tabs" role="tablist">${tabBtn('home', hName)}${tabBtn('away', aName)}</div>`
+      + `<p class="rk-pick-cov">${esc(cov)}</p>`
+      + (list.length
+        ? list.map((p) => opt(p, 'pool', st.sm)).join('')
+        : '<p class="rk-empty">此边暂无可以画出的球员</p>');
+  } else {
+    const list = radarListed(pack, side);
+    const cur = side === 'away' ? st.awaySm : st.homeSm;
+    const base = side === 'away' ? aName : hName;
+    title = '选择' + base + '球员';
+    items = list.length
+      ? `<h4 class="rk-opt-hd">${blockNote(list, base)}</h4>` + list.map((p) => opt(p, side, cur)).join('')
+      : '<p class="rk-empty">此边暂无可以画出的球员</p>';
+  }
+  openSheetHtml(`<div class="sheet rk-pick-sheet" role="dialog" aria-label="${esc(title)}">
+    <h3><span>${esc(title)}</span><button type="button" class="x" data-act="closeSheet">✕</button></h3>
+    <div class="rk-opts">${items}</div>
+  </div>`);
+}
+
+function openRadarAxisSheet(id, which, who, axisIdx) {
+  // Axis tap on the compact tab opens the spacious expand page, not a cramped note sheet.
+  if (which === 'team') return openRadarExpand({ kind: 'team', id, axis: axisIdx });
+  return openRadarExpand({ kind: 'player', id, sm: who, mode: 'pool', axis: axisIdx });
+}
+function openRadarPlayerSheet(id, smId) {
+  openRadarExpand({ kind: 'player', id, sm: smId, mode: 'pool' });
+}
+
+
+
 function dataTabHtml(x) {
   const key = esc(String(x.id || ''));
-  return `<div id="sm-logic-${key}" class="sm-slot"></div>`
+  return `<div id="sm-value-${key}" class="sm-slot"><p class="note">正在整理双方身价…</p></div>`
+    + `<div id="sm-team-radar-${key}" class="sm-slot"></div>`
+    + `<div id="sm-pos-${key}" class="sm-slot"></div>`
     + `<div id="sm-form-${key}" class="sm-slot"><p class="note">正在整理球员近况…</p></div>`
+    + `<div id="sm-player-radar-${key}" class="sm-slot"></div>`
+    + `<div id="sm-xg-${key}" class="sm-slot"></div>`
     + `<div id="sm-bars-${key}" class="sm-slot"><p class="note">正在整理球队统计…</p></div>`
     + `<div id="sm-growth-${key}" class="sm-slot"></div>`;
 }
@@ -9984,9 +11495,9 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
     : `<div class="vs">VS</div><small>${started ? (finished ? '完场' : '已开赛 · 待开奖') : esc(x.time) + ' 开赛'}</small>`;
   const nav = matchEdgeNavBar(favBtn);
   let h = `<div class="hero hero--edge" id="match-hero-${esc(id)}">${nav}<div class="meta">${lgTag(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
-    <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo)}<span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small></div>
+    <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo)}<em class="tm-mv" id="tm-mv-h-${esc(id)}" hidden></em><span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small></div>
     <div class="mid">${mid}</div>
-    <div class="tm">${badge(x.away, 'lg', x.awayLogo)}<span>${esc(x.away)}</span><small>客队 ${esc(x.awayRank || '')}</small></div></div></div>`;
+    <div class="tm">${badge(x.away, 'lg', x.awayLogo)}<em class="tm-mv" id="tm-mv-a-${esc(id)}" hidden></em><span>${esc(x.away)}</span><small>客队 ${esc(x.awayRank || '')}</small></div></div></div>`;
   return h;
 }
 
@@ -10012,22 +11523,39 @@ async function loadOddsSnapshot(matchId, date, x) {
   const cache = oddsSnapCache();
   const ko = x ? matchKickoffMs(x) : NaN;
   const started = Number.isFinite(ko) && Date.now() >= ko;
-  if (cache[key] && Date.now() - (cache[key]._at || 0) < (started ? 120e3 : 45e3)) return cache[key];
-  try {
+  // Only reuse a successful payload. A failed/timeout result must not be
+  // treated as fresh — otherwise the 赔率 tab stays on「网络超时」until the
+  // 60s poll, even though the server is already fine.
+  if (cache[key] && cache[key].ok !== false && cache[key].pools
+      && Date.now() - (cache[key]._at || 0) < (started ? 120e3 : 45e3)) return cache[key];
+  const fetchOnce = async () => {
     if (!started) {
       const live = await api('/odds-live?matchId=' + encodeURIComponent(id), { timeout: 12000 });
       if (live && live.ok && live.pools) {
-        cache[key] = Object.assign({ _at: Date.now(), _mode: 'live' }, live);
-        return cache[key];
+        return Object.assign({ _at: Date.now(), _mode: 'live' }, live);
       }
     }
     let q = '/odds-snapshot?matchId=' + encodeURIComponent(id);
     if (date) q += '&date=' + encodeURIComponent(date);
     const j = await api(q, { timeout: 12000 });
-    cache[key] = Object.assign({ _at: Date.now(), _mode: 'snap' }, j || {});
-    return cache[key];
+    return Object.assign({ _at: Date.now(), _mode: 'snap' }, j || {});
+  };
+  try {
+    let payload;
+    try {
+      payload = await fetchOnce();
+    } catch (e1) {
+      // One quick retry: first open often lands on a busy tick and trips the
+      // 12s client timeout, then a second try (the server cache is warm) succeeds.
+      const msg = (e1 && e1.message) || '';
+      if (!/超时|timeout|Abort/i.test(msg)) throw e1;
+      await new Promise((r) => setTimeout(r, 400));
+      payload = await fetchOnce();
+    }
+    if (payload && payload.ok !== false && payload.pools) cache[key] = payload;
+    return payload;
   } catch (e) {
-    return { ok: false, reason: 'error', error: e.message || '加载失败', _at: Date.now() };
+    return { ok: false, reason: 'error', error: e.message || '加载失败' };
   }
 }
 function fmtOdd(v) {
@@ -10117,7 +11645,40 @@ function oddsTabHtml(x, snap) {
   return h;
 }
 function stopOddsLivePoll() {
-  if (S.oddsLivePoll) { clearInterval(S.oddsLivePoll); S.oddsLivePoll = null; }
+  if (S.oddsLivePoll) { clearInterval(S.oddsLivePoll); clearTimeout(S.oddsLivePoll); S.oddsLivePoll = null; }
+}
+async function refreshOddsPane(x) {
+  if (!x) return null;
+  if (document.hidden) return null;
+  if (route().name !== 'match' || String(route().arg) !== String(x.id) || detailTabOf(x.id) !== 'odds') {
+    stopOddsLivePoll();
+    return null;
+  }
+  if (Date.now() >= matchKickoffMs(x)) { stopOddsLivePoll(); return null; }
+  const cache = oddsSnapCache();
+  const key = String(x.id) + '|' + (x.date || '');
+  if (cache[key]) cache[key]._at = 0;
+  const snap = await loadOddsSnapshot(x.id, x.date, x);
+  if (route().name === 'match' && String(route().arg) === String(x.id) && detailTabOf(x.id) === 'odds') {
+    const pane = document.getElementById('detail-pane-' + x.id);
+    if (pane) pane.innerHTML = oddsTabHtml(x, snap);
+  }
+  return snap;
+}
+function scheduleOddsRetry(x, delayMs) {
+  stopOddsLivePoll();
+  S.oddsLivePoll = setTimeout(() => {
+    S.oddsLivePoll = null;
+    ensureOddsLivePoll(x);
+    refreshOddsPane(x).then((snap) => {
+      if (snap && snap.ok === false) {
+        const n = (S.oddsRetryN = (S.oddsRetryN || 0) + 1);
+        if (n <= 8) scheduleOddsRetry(x, 3000);
+      } else {
+        S.oddsRetryN = 0;
+      }
+    }).catch(() => {});
+  }, delayMs == null ? 3000 : delayMs);
 }
 /** Stale-while-revalidate while 赔率 tab open and match still pre-kickoff (~60s). */
 function ensureOddsLivePoll(x) {
@@ -10125,20 +11686,15 @@ function ensureOddsLivePoll(x) {
   if (!x) return;
   const ko = matchKickoffMs(x);
   if (!Number.isFinite(ko) || Date.now() >= ko) return;
-  S.oddsLivePoll = setInterval(async () => {
-    if (document.hidden) return;
-    if (route().name !== 'match' || String(route().arg) !== String(x.id) || detailTabOf(x.id) !== 'odds') {
-      return stopOddsLivePoll();
-    }
-    if (Date.now() >= matchKickoffMs(x)) return stopOddsLivePoll();
-    const cache = oddsSnapCache();
-    const key = String(x.id) + '|' + (x.date || '');
-    if (cache[key]) cache[key]._at = 0;
-    const snap = await loadOddsSnapshot(x.id, x.date, x);
-    if (route().name === 'match' && String(route().arg) === String(x.id) && detailTabOf(x.id) === 'odds') {
-      const pane = document.getElementById('detail-pane-' + x.id);
-      if (pane) pane.innerHTML = oddsTabHtml(x, snap);
-    }
+  S.oddsLivePoll = setInterval(() => {
+    refreshOddsPane(x).then((snap) => {
+      if (snap && snap.ok === false) {
+        const n = (S.oddsRetryN = (S.oddsRetryN || 0) + 1);
+        if (n <= 8) scheduleOddsRetry(x, 3000);
+      } else {
+        S.oddsRetryN = 0;
+      }
+    }).catch(() => {});
   }, 60e3);
 }
 
@@ -10244,6 +11800,7 @@ function refreshDetailTabs(x) {
     wrap.innerHTML = matchHero(x, m, r, { favBtn: matchFavBtn(x) });
     const next = wrap.firstElementChild;
     if (next) hero.replaceWith(next);
+    paintMatchSquadValue(x.id);
   }
 }
 
@@ -10292,6 +11849,8 @@ async function enrichMatchDetail(x) {
   // 1.9.107: prefetch lineup when match detail opens so squad tab paints from cache
   try { ensureLineup(x); } catch (_) {}
   try { ensureSmSurface(x); } catch (_) {}
+  try { ensureMatchSquadValue(x); } catch (_) {}
+  try { ensureMatchRadar(x); } catch (_) {}
 
   // Bug 2: after kickoff, always warm live-stats so FT → 赛后复盘 tab without switching tabs
   const ko = matchKickoffMs(x);
@@ -10315,7 +11874,13 @@ async function enrichMatchDetail(x) {
   if (tab === 'attitude') {
     await loadMatchAttitude(x);
   }
-  if (tab === 'squad') await ensureSquad(x);
+  if (tab === 'squad') {
+    await ensureSquad(x);
+    try { await loadPredictReport(findMatch(x.id) || x); } catch (_) {}
+    const box = document.getElementById('lineup-box-' + x.id);
+    const L = S.lineupCache && S.lineupCache[x.id];
+    if (box && L) box.innerHTML = lineupHtml(findMatch(x.id) || x, L);
+  }
   if (tab === 'odds') {
     stopOddsLivePoll();
     const snap = await loadOddsSnapshot(x.id, x.date, x);
@@ -10324,6 +11889,7 @@ async function enrichMatchDetail(x) {
       if (pane) pane.innerHTML = oddsTabHtml(x, snap);
     }
     ensureOddsLivePoll(x);
+    if (snap && snap.ok === false) scheduleOddsRetry(x, 3000);
   } else {
     stopOddsLivePoll();
   }
@@ -10358,6 +11924,7 @@ async function enrichMatchDetail(x) {
     if (tab === 'intel') tasks.push(ensureSmBracket(x));
     if (tab === 'data' || tab === 'live') tasks.push(ensureSmSurface(x));
     if (tab === 'data') tasks.push(loadPredictReport(findMatch(x.id) || x));
+    if (tab === 'data') tasks.push(ensureMatchRadar(x));
     if (tab === 'live') tasks.push(loadLiveStats(x, { force: true }));
     if (tab === 'live') {
       tasks.push(loadChat(String(x.id)));
@@ -10377,6 +11944,8 @@ async function enrichMatchDetail(x) {
           pane.innerHTML = dataTabHtml(x);
           const sm = S.smSurface && S.smSurface[String(x.id)];
           if (sm) paintSmSurface(String(x.id), sm);
+          paintMatchSquadValue(String(x.id));
+          paintMatchRadar(String(x.id));
         }
         else if (tab === 'live') {
           const live = (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null;
@@ -13480,6 +15049,98 @@ document.addEventListener('click', async e => {
       box.querySelectorAll('.sm-form-list').forEach(n => { n.hidden = n.getAttribute('data-for') !== side; });
       return;
     }
+    case 'openMvSheet':
+      return openMvSheet(el.dataset.id, el.dataset.side || 'home');
+    case 'mvSheetSide':
+      return openMvSheet(el.dataset.id, el.dataset.side);
+    case 'mvOpenPlayer': {
+      const pid = el.dataset.pid || '';
+      closeSheet();
+      if (!pid) return;
+      S.playerHint = findSquadPlayerHint(pid);
+      go(playerHref(pid));
+      return;
+    }
+    case 'radarAxis':
+      return openRadarAxisSheet(el.dataset.id, el.dataset.which, el.dataset.who, el.dataset.axis);
+    case 'radarAxisJump': {
+      const root = document.getElementById('radar-expand');
+      const scroller = (root && root.querySelector('.rk-body')) || root;
+      const t = root && root.querySelector('#rk-dim-' + el.dataset.axis);
+      if (t && scroller) {
+        try {
+          const top = t.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 8;
+          scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+        } catch (_) {
+          try { t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (__) {}
+        }
+      }
+      return;
+    }
+    case 'radarPlayer':
+      return openRadarPlayerSheet(el.dataset.id, el.dataset.sm);
+    case 'radarTeamExpand':
+      return openRadarExpand({ kind: 'team', id: el.dataset.id });
+    case 'radarPlayerAll':
+      return openRadarExpand({ kind: 'player', id: el.dataset.id, mode: 'h2h' });
+    case 'radarContrib': {
+      try { e.stopPropagation(); } catch (_) {}
+      openRadarContribJump(el);
+      return;
+    }
+    case 'radarExpandBack':
+      if (S.radarExpand && S.radarExpand.from && S.radarExpand.from.kind === 'team' && S.radarExpand.from.id) {
+        const prev = S.radarExpand.from;
+        openRadarExpand({ kind: 'team', id: prev.id, scroll: prev.scroll });
+        return;
+      }
+      closeRadarExpand();
+      return;
+    case 'radarMode': {
+      if (!S.radarExpand) return;
+      S.radarExpand.mode = el.dataset.mode === 'h2h' ? 'h2h' : 'pool';
+      if (S.radarExpand.mode === 'h2h') {
+        const pack = S.matchRadar && S.matchRadar[String(S.radarExpand.id)];
+        const draw = radarDrawable(pack || {});
+        if (!S.radarExpand.homeSm && draw.home[0]) S.radarExpand.homeSm = draw.home[0].smId;
+        if (!S.radarExpand.awaySm && draw.away[0]) S.radarExpand.awaySm = draw.away[0].smId;
+        const cur = radarFindPlayer(pack, S.radarExpand.sm);
+        if (cur && cur.side === 'home') S.radarExpand.homeSm = cur.smId;
+        if (cur && cur.side === 'away') S.radarExpand.awaySm = cur.smId;
+      }
+      renderRadarExpand();
+      return;
+    }
+    case 'radarPickOpen':
+      return openRadarPlayerPicker(el.dataset.id, el.dataset.side);
+    case 'radarPickTab':
+      return openRadarPlayerPicker(el.dataset.id, 'pool', el.dataset.tab);
+    case 'radarPickPlayer': {
+      if (!S.radarExpand) return;
+      if (el.dataset.side === 'pool') {
+        S.radarExpand.sm = el.dataset.sm;
+        const pack = S.matchRadar && S.matchRadar[String(S.radarExpand.id)];
+        const cur = radarFindPlayer(pack, el.dataset.sm);
+        if (cur && cur.side === 'home') S.radarExpand.homeSm = cur.smId;
+        if (cur && cur.side === 'away') S.radarExpand.awaySm = cur.smId;
+      } else if (el.dataset.side === 'away') {
+        S.radarExpand.awaySm = el.dataset.sm;
+      } else {
+        S.radarExpand.homeSm = el.dataset.sm;
+      }
+      closeSheet();
+      renderRadarExpand();
+      return;
+    }
+    case 'radarOpenPlayer': {
+      const pid = el.dataset.pid || '';
+      closeSheet();
+      closeRadarExpand();
+      if (!pid) return;
+      S.playerHint = findSquadPlayerHint(pid);
+      go(playerHref(pid));
+      return;
+    }
     case 'smPlayerDetail': {
       const raw = el.dataset.player;
       if (raw) openSmPlayerDetail(raw);
@@ -13535,7 +15196,17 @@ document.addEventListener('click', async e => {
     case 'luView': {
       const id = el.dataset.id;
       S.luView = S.luView || {};
-      S.luView[id] = el.dataset.view === 'list' ? 'list' : 'pitch';
+      S.luView[id] = el.dataset.view === 'list' ? 'list' : (el.dataset.view === 'bench' ? 'bench' : 'pitch');
+      const x = findMatch(id) || (S.results || []).find(z => z.id === String(id));
+      const box = document.getElementById('lineup-box-' + id);
+      const L = S.lineupCache && S.lineupCache[id];
+      if (box && x) box.innerHTML = lineupHtml(x, L);
+      return;
+    }
+    case 'luTeam': {
+      const id = el.dataset.id;
+      S.luTeam = S.luTeam || {};
+      S.luTeam[id] = el.dataset.team === 'away' ? 'away' : 'home';
       const x = findMatch(id) || (S.results || []).find(z => z.id === String(id));
       const box = document.getElementById('lineup-box-' + id);
       const L = S.lineupCache && S.lineupCache[id];

@@ -749,6 +749,8 @@ async function completeSchedule(list) {
   return { data, metaExtra: { backfill: { revived, fromResults, timeFilled }, gaps, listOnly: (list || []).length } };
 }
 
+const _getDataInflight = Object.create(null);
+
 async function getData(kind) {
   const c = cache[kind];
   let ttl = CACHE_MS;
@@ -762,6 +764,22 @@ async function getData(kind) {
     } catch { /* keep CACHE_MS */ }
   }
   if (c && Date.now() - c.at < ttl) return c.payload;
+  // Coalesce concurrent misses (seen: 6 identical schedule backfills in 1s).
+  // If we already have a live payload, serve it stale while one refresh runs
+  // so cheap routes like /api/odds-live are not piled behind stampedes.
+  if (_getDataInflight[kind]) {
+    if (c && c.payload && c.payload.source === 'live') return c.payload;
+    return _getDataInflight[kind];
+  }
+  const pending = refreshData(kind).finally(() => {
+    if (_getDataInflight[kind] === pending) delete _getDataInflight[kind];
+  });
+  _getDataInflight[kind] = pending;
+  if (c && c.payload && c.payload.source === 'live') return c.payload;
+  return pending;
+}
+
+async function refreshData(kind) {
   const errors = [];
   for (const e0 of ENDPOINTS[kind]) {
     const ep = typeof e0 === 'function' ? e0() : e0;
@@ -1417,12 +1435,94 @@ app.get('/api/lineup', async (req, res) => {
       m = { id, date: String(q.date), time: String(q.time || ''), homeTeamId: String(q.homeTeamId || ''), awayTeamId: String(q.awayTeamId || ''), home: String(q.home || ''), away: String(q.away || '') };
     }
     const force = String(req.query.refresh || '') === '1';
-    const out = await require('./lib/espn-lineup').getLineup(m, { force, waitFresh: force });
+    let out = await require('./lib/espn-lineup').getLineup(m, { force, waitFresh: force });
+    try { out = require('./lib/lineup-attach').attachToLineup(out, m); } catch (e) { console.warn('[lineup-attach]', e.message); }
     if (out && out._cache) res.setHeader('X-Lineup-Cache', String(out._cache));
     if (out && out._ageMs != null) res.setHeader('X-Lineup-Age-Ms', String(Math.round(out._ageMs)));
     res.json(out);
   } catch (e) {
     res.status(502).json({ ok: false, error: '阵容数据暂时不可用', detail: e.message });
+  }
+});
+
+app.get('/api/match-squad-value', async (req, res) => {
+  try {
+    const q = req.query || {};
+    const id = String(q.matchId || '').trim();
+    let m = null;
+    if (id) {
+      for (const k of ['schedule', 'results']) {
+        try { const p = await getData(k); m = (p.data || []).find(x => String(x.id) === id); } catch {}
+        if (m) break;
+      }
+    }
+    if (!m) {
+      if (!q.home && !q.away && !q.homeTeamId && !q.awayTeamId && !id) {
+        return res.status(400).json({ ok: false, error: '缺少比赛信息' });
+      }
+      m = {
+        id,
+        date: String(q.date || ''),
+        time: String(q.time || ''),
+        homeTeamId: String(q.homeTeamId || ''),
+        awayTeamId: String(q.awayTeamId || ''),
+        home: String(q.home || ''),
+        away: String(q.away || ''),
+        homeEn: String(q.homeEn || ''),
+        awayEn: String(q.awayEn || ''),
+        league: String(q.league || ''),
+      };
+    } else {
+      if (q.homeEn && !m.homeEn) m.homeEn = String(q.homeEn);
+      if (q.awayEn && !m.awayEn) m.awayEn = String(q.awayEn);
+      if (q.league && !m.league) m.league = String(q.league);
+    }
+    const force = String(q.refresh || '') === '1';
+    const out = await require('./lib/match-squad-value').forMatch(m, { force });
+    res.json(out);
+  } catch (e) {
+    res.status(502).json({ ok: false, error: '身价数据暂时不可用', detail: e.message });
+  }
+});
+
+app.get('/api/match-radar', async (req, res) => {
+  try {
+    const q = req.query || {};
+    const id = String(q.matchId || '').trim();
+    let m = null;
+    if (id) {
+      for (const k of ['schedule', 'results']) {
+        try { const p = await getData(k); m = (p.data || []).find(x => String(x.id) === id); } catch {}
+        if (m) break;
+      }
+    }
+    if (!m) {
+      if (!q.home && !q.away && !q.homeTeamId && !q.awayTeamId && !id) {
+        return res.status(400).json({ ok: false, error: '缺少比赛信息' });
+      }
+      m = {
+        id,
+        date: String(q.date || ''),
+        time: String(q.time || ''),
+        homeTeamId: String(q.homeTeamId || ''),
+        awayTeamId: String(q.awayTeamId || ''),
+        home: String(q.home || ''),
+        away: String(q.away || ''),
+        homeEn: String(q.homeEn || ''),
+        awayEn: String(q.awayEn || ''),
+        league: String(q.league || ''),
+      };
+    } else {
+      if (q.homeEn && !m.homeEn) m.homeEn = String(q.homeEn);
+      if (q.awayEn && !m.awayEn) m.awayEn = String(q.awayEn);
+      if (q.league && !m.league) m.league = String(q.league);
+      if (q.date && !m.date) m.date = String(q.date);
+    }
+    const force = String(q.refresh || '') === '1';
+    const out = await require('./lib/match-radar').forMatch(m, { force });
+    res.json(out);
+  } catch (e) {
+    res.status(502).json({ ok: false, error: '六围数据暂时不可用', detail: e.message });
   }
 });
 
@@ -1467,13 +1567,15 @@ app.get('/api/sm-surface', async (req, res) => {
       ok: true,
       formHtml: surface.renderFormHtml(pack),
       barsHtml: surface.renderBarsHtml(pack),
+      posHtml: surface.renderPosCompareHtml(pack),
       growthHtml: surface.renderGrowthHtml(pack),
       liveHtml: surface.renderLiveHtml(pack),
+      xgHtml: surface.renderXgCardHtml(pack),
       photos: surface.photoList(pack),
       reason: pack.reason || '',
       smReason: pack.reason || '',
     };
-    require('./lib/logo-proxy').rewriteFields(body, req, ['formHtml', 'barsHtml', 'growthHtml', 'liveHtml']);
+    require('./lib/logo-proxy').rewriteFields(body, req, ['formHtml', 'barsHtml', 'posHtml', 'growthHtml', 'liveHtml', 'xgHtml']);
     res.json(body);
   } catch (e) {
     res.status(502).json({ ok: false, error: '近况数据暂时不可用' });
@@ -2497,7 +2599,7 @@ scheduleDataCenterPrefetch();
       const sch = await getData('schedule').catch(() => ({ data: [] }));
       const mat = await getData('matches').catch(() => ({ data: [] }));
       const r = await snap.tick({ schedule: sch.data || [], matches: mat.data || [] });
-      if (r.saved || r.pre || reason === 'startup') {
+      if (r.saved || r.pre || r.skipped || r.near || r.due || reason === 'startup') {
         console.log('[odds-snapshot]', reason, JSON.stringify(r));
       }
     } catch (e) { console.warn('[odds-snapshot]', reason, e.message); }
@@ -2542,6 +2644,21 @@ async function lineupWarmJob(reason) {
 }
 setTimeout(() => lineupWarmJob('startup'), 90e3);
 setInterval(() => lineupWarmJob('tick'), 12 * 60e3);
+
+// Current selling-slate 数据页 packs (身价 / 六围 / 赛前近况), so the first
+// open is a cache hit. Only /api/matches (the live window), not the full schedule.
+async function slatePrefetchJob(reason) {
+  try {
+    const pref = require('./lib/slate-prefetch');
+    const mat = await getData('matches').catch(() => ({ data: [] }));
+    const list = (mat && mat.data) || [];
+    const r = await pref.warmSlate(list, { reason, gapMs: 800 });
+    if (r && r.skippedRun) console.log('[slate-prefetch]', reason, 'already running');
+  } catch (e) { console.warn('[slate-prefetch]', reason, e.message); }
+}
+setTimeout(() => slatePrefetchJob('startup'), 40e3);
+setInterval(() => slatePrefetchJob('tick'), 10 * 60e3);
+
 
 // 1.9.53: auto-fill missing team badges (ESPN → API-Football) into crests.json + hot-reload maps
 try {

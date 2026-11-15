@@ -18,3 +18,18 @@ android/.gradle/
 android/libs/*.aar
 android/libs/*.aar.part
 data/market-value/
+
+# Local-only credentials, warehouse data and build/preview output
+*.keystore
+*.jks
+*.pem
+*.key
+*.sqlite
+*.sqlite-*
+android/build.log
+data/logos/
+data/radar/
+data/sm-lineups/
+public/_preview-mv/
+__pycache__/
+*.pyc
