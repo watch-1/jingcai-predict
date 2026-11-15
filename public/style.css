@@ -8403,9 +8403,10 @@ html[data-theme="pitch"] .lu-teamseg button.on{background:#eef1f8;color:#121826}
     radial-gradient(ellipse 66% 120% at 87% 52%, rgb(37 47 51) 0%, rgb(32 40 44) 18%, rgb(26 33 37) 33%, rgb(20 24 27) 50%, rgb(14 16 19) 67%, rgb(11 13 16) 82%, rgb(10 11 14) 100%),
     #0A0B0E !important;
   color: #fff;
-  padding: 0 16px 26px;
+  padding: 0 16px 20px;
   position: relative;
-  overflow: hidden;
+  /* Clip weather layers on .hero-wx only — hidden here was cutting crest corners. */
+  overflow: visible;
 }
 .hero.hero--weather::before,
 .hero.hero--weather::after {
@@ -8525,17 +8526,37 @@ html[data-theme="pitch"] .hero.hero--weather {
 }
 .hero.hero--weather.hero--edge .badge.lg,
 .hero.hero--weather.hero--edge .tm .badge.lg.crest {
-  width: 84px;
-  height: 84px;
+  /* Fig2/mock: crest is 176/1920 ≈ 9.2% of header width, not a large phone tile. */
+  width: 9.2vw;
+  height: 9.2vw;
+  min-width: 36px;
+  min-height: 36px;
+  max-width: 48px;
+  max-height: 48px;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+.hero.hero--weather .badge.crest,
+.hero.hero--weather .tm .badge.crest {
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+.hero.hero--weather .badge.crest img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  overflow: visible;
+  border-radius: 0;
 }
 .hero.hero--weather .teams {
-  margin-top: 16px;
+  margin-top: 10px;
   column-gap: 8px;
 }
 .hero.hero--weather .tm {
-  gap: 8px;
-  font-size: 16px;
+  gap: 6px;
+  font-size: 15px;
   font-weight: 700;
+  overflow: visible;
 }
 .hero.hero--weather .tm span { line-height: 1.25; }
 .hero.hero--weather .tm small { font-size: 11px; opacity: .78; font-weight: 400; }
