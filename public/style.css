@@ -8395,8 +8395,12 @@ html[data-theme="pitch"] .lu-teamseg button.on{background:#eef1f8;color:#121826}
 
 /* ---------- preview/ui-weather-header-356: match-detail weather hero + light pane ---------- */
 .hero.hero--weather {
-  /* Scheme B base: exact #0A0B0E / rgb(10 11 14). Washes are not a lifted field. */
-  background: #0A0B0E !important;
+  /* Scheme B washes live on the hero itself so they still show if child layers fail.
+     Beats the older .hero { background: ... var(--pri-g) !important } navy fill. */
+  background:
+    radial-gradient(ellipse 66% 120% at 13% 52%, rgb(51 47 37) 0%, rgb(51 47 37 / .61) 33%, rgb(51 47 37 / .14) 67%, transparent 100%),
+    radial-gradient(ellipse 66% 120% at 87% 52%, rgb(37 47 51) 0%, rgb(37 47 51 / .61) 33%, rgb(37 47 51 / .14) 67%, transparent 100%),
+    #0A0B0E !important;
   color: #fff;
   padding: 0 10px 16px;
   position: relative;
@@ -8409,12 +8413,30 @@ html[data-theme="pitch"] .lu-teamseg button.on{background:#eef1f8;color:#121826}
   display: none !important;
   background: none !important;
 }
+/* 6307 .hero > *:not(.hero-edge-nav) { position: relative; z-index: 1 } is more
+   specific than a bare .hero-wx rule and collapsed this layer to height 0,
+   leaving only the charcoal fill — the 356–359 “pure black” hero. */
+.hero.hero--weather > .hero-wx {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
 .hero-wx {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
+}
+html[data-theme="pitch"] .hero.hero--weather {
+  background:
+    radial-gradient(ellipse 66% 120% at 13% 52%, rgb(51 47 37) 0%, rgb(51 47 37 / .61) 33%, rgb(51 47 37 / .14) 67%, transparent 100%),
+    radial-gradient(ellipse 66% 120% at 87% 52%, rgb(37 47 51) 0%, rgb(37 47 51 / .61) 33%, rgb(37 47 51 / .14) 67%, transparent 100%),
+    #0A0B0E !important;
 }
 .hero-wx-base,
 .hero-wx-glow,
@@ -8443,12 +8465,11 @@ html[data-theme="pitch"] .lu-teamseg button.on{background:#eef1f8;color:#121826}
 }
 .hero-wx-orb {
   position: absolute;
-  /* Box is 3 sigma in each radius so the 100% stop matches the Gaussian edge. */
+  /* Box is 3 sigma in each radius so the 100% stop matches the Gaussian edge.
+     No filter:blur — overflow:hidden + blur can drop the layer in Android WebView. */
   width: 132%;
   height: 240%;
   pointer-events: none;
-  filter: blur(8px);
-  -webkit-filter: blur(8px);
 }
 .hero-wx-orb--home {
   left: 13%;

@@ -11517,7 +11517,10 @@ function paintHeroGlow(hero, home, away) {
   const glow = hero.querySelector('.hero-wx-glow');
   const homeOrb = hero.querySelector('.hero-wx-orb--home');
   const awayOrb = hero.querySelector('.hero-wx-orb--away');
-  /* Orbs paint the wash. Keep the container background empty so two Gaussians do not stack. */
+  /* Paint the washes on the hero element itself (setProperty important) so they
+     beat both the charcoal !important and the older navy !important fill. */
+  const bg = heroGlowGradient(home || HERO_GLOW_HOME, away || HERO_GLOW_AWAY) + ', #0A0B0E';
+  try { hero.style.setProperty('background', bg, 'important'); } catch (_) { hero.style.background = bg; }
   if (glow) glow.style.background = 'none';
   if (homeOrb) homeOrb.style.background = heroOrbGradient(home || HERO_GLOW_HOME);
   if (awayOrb) awayOrb.style.background = heroOrbGradient(away || HERO_GLOW_AWAY);
@@ -11890,7 +11893,8 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
   const homeGlow = teamGlowCached(x, 'home');
   const awayGlow = teamGlowCached(x, 'away');
   const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow" style="background:none"><div class="hero-wx-orb hero-wx-orb--home" style="background:${esc(heroOrbGradient(homeGlow))}"></div><div class="hero-wx-orb hero-wx-orb--away" style="background:${esc(heroOrbGradient(awayGlow))}"></div></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
-  let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}">${wxLayer}${nav}<div class="meta">${leagueHeroMark(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
+  const heroBg = heroGlowGradient(homeGlow, awayGlow) + ', #0A0B0E';
+  let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="background:${esc(heroBg)}">${wxLayer}${nav}<div class="meta">${leagueHeroMark(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
     <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo)}<em class="tm-mv" id="tm-mv-h-${esc(id)}" hidden></em><span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small></div>
     <div class="mid">${mid}</div>
     <div class="tm">${badge(x.away, 'lg', x.awayLogo)}<em class="tm-mv" id="tm-mv-a-${esc(id)}" hidden></em><span>${esc(x.away)}</span><small>客队 ${esc(x.awayRank || '')}</small></div></div></div>`;
