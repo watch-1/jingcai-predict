@@ -1,0 +1,15 @@
+{
+  "note": "Manual official-or-free headshots for leaderboard players whose ESPN/AF/TM CDNs have no usable photo. Used only when packing APK assets.",
+  "byEspnId": {
+    "384482": {
+      "player": "Gustavo Varela",
+      "team": "Monza",
+      "tmId": "931900",
+      "urls": [
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/Gustavo_Varela%2C_Monza_vs._Sassuolo_2026-09-18_%28cropped%29.jpg/500px-Gustavo_Varela%2C_Monza_vs._Sassuolo_2026-09-18_%28cropped%29.jpg"
+      ],
+      "license": "CC BY-SA 4.0",
+      "credit": "Wikimedia Commons"
+    }
+  }
+}

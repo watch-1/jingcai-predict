@@ -37,8 +37,16 @@ const FAMOUS_PHOTO_BY_ESPN = (() => {
     return {};
   }
 })();
+const PHOTO_OVERRIDES = (() => {
+  try {
+    return require('../data/leader-photo-overrides.json').byEspnId || {};
+  } catch (_) {
+    return {};
+  }
+})();
+const WIKI_UA = 'JingcaiPredict/2.1.5 (leaderboard photo pack)';
 
-const LEAGUES = ['epl', 'laliga', 'seriea', 'bundesliga', 'ligue1', 'csl', 'ucl'];
+const LEAGUES = ['epl', 'laliga', 'seriea', 'bundesliga', 'ligue1', 'csl', 'ucl', 'championship', 'eredivisie'];
 const SLICE_LIMITS = {
   topscorers: 30,
   topassists: 30,
@@ -119,6 +127,9 @@ function photoCandidatesForRow(row, leaderPhotos) {
   if (id) {
     push(`https://a.espncdn.com/i/headshots/soccer/players/full/${id}.png`);
     if (FAMOUS_PHOTO_BY_ESPN[id]) push(FAMOUS_PHOTO_BY_ESPN[id]);
+    const ov = PHOTO_OVERRIDES[id];
+    if (ov && Array.isArray(ov.urls)) ov.urls.forEach(push);
+    else if (typeof ov === 'string') push(ov);
   }
   push(row && row.photo);
   push(row && row.photoAlt);
@@ -128,8 +139,10 @@ function photoCandidatesForRow(row, leaderPhotos) {
     const tt = String(row.team || '').toLowerCase().replace(/\s+/g, ' ').trim();
     if (nn && tt && leaderPhotos.byClub.has(nn + '|' + tt)) push(leaderPhotos.byClub.get(nn + '|' + tt));
   }
-  if (row && row.tmId != null && String(row.tmId)) {
-    push(`https://img.a.transfermarkt.technology/portrait/header/${String(row.tmId)}.jpg`);
+  const tmId = (row && row.tmId != null && String(row.tmId))
+    || (id && PHOTO_OVERRIDES[id] && PHOTO_OVERRIDES[id].tmId);
+  if (tmId) {
+    push(`https://img.a.transfermarkt.technology/portrait/header/${String(tmId)}.jpg`);
   }
   if (!urls.length && id && /^\d+$/.test(id)) {
     push(`https://a.espncdn.com/i/headshots/soccer/players/full/${id}.png`);
@@ -378,16 +391,18 @@ async function gapFillFromTsdb(map) {
   await Promise.all(Array.from({ length: concurrency }, () => worker()));
 }
 
-function fetchUrl(url, redirects = 0) {
+function fetchUrl(url, redirects = 0, extraHeaders = null) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('https') ? https : require('http');
-    lib.get(url, { headers: { 'User-Agent': 'jingcai-player-sync/1.9.206' } }, (res) => {
+    const wiki = /wikimedia\.org|wikipedia\.org/i.test(String(url));
+    const headers = Object.assign({ 'User-Agent': wiki ? WIKI_UA : 'jingcai-player-sync/2.1.5' }, extraHeaders || {});
+    lib.get(url, { headers }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects < 5) {
         const next = res.headers.location.startsWith('http')
           ? res.headers.location
           : new URL(res.headers.location, url).href;
         res.resume();
-        return fetchUrl(next, redirects + 1).then(resolve, reject);
+        return fetchUrl(next, redirects + 1, extraHeaders).then(resolve, reject);
       }
       if (res.statusCode !== 200) {
         res.resume();
@@ -398,6 +413,50 @@ function fetchUrl(url, redirects = 0) {
       res.on('end', () => resolve(Buffer.concat(chunks)));
     }).on('error', reject);
   });
+}
+
+async function wikiPhotoUrl(player, team) {
+  const name = String(player || '').trim();
+  if (!name || !/[A-Za-z]/.test(name)) return '';
+  const q = [name, team || '', 'footballer'].filter(Boolean).join(' ');
+  const api = 'https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=5&srsearch='
+    + encodeURIComponent(q);
+  try {
+    const buf = await fetchUrl(api, 0, { Accept: 'application/json', 'User-Agent': WIKI_UA });
+    const j = JSON.parse(buf.toString('utf8'));
+    const hits = ((j.query || {}).search) || [];
+    const nlow = name.toLowerCase();
+    const tlow = String(team || '').toLowerCase();
+    const pick = hits.find((h) => String(h.title || '').toLowerCase().includes(nlow)
+      && (!tlow || String(h.snippet || h.title || '').toLowerCase().includes(tlow)))
+      || hits.find((h) => String(h.title || '').toLowerCase().includes(nlow));
+    if (!pick || !pick.title) return '';
+    const imgApi = 'https://en.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages&piprop=thumbnail|name&pithumbsize=400&titles='
+      + encodeURIComponent(pick.title);
+    const buf2 = await fetchUrl(imgApi, 0, { Accept: 'application/json', 'User-Agent': WIKI_UA });
+    const j2 = JSON.parse(buf2.toString('utf8'));
+    const pages = ((j2.query || {}).pages) || {};
+    for (const pg of Object.values(pages)) {
+      const src = pg && pg.thumbnail && pg.thumbnail.source;
+      if (src && /wikimedia\.org|wikipedia\.org/i.test(src)) return String(src).split('?')[0];
+    }
+  } catch (e) {
+    console.warn('[sync-players] wiki', name, e.message);
+  }
+  return '';
+}
+
+function existingPackedIds() {
+  const out = new Set();
+  try {
+    for (const f of fs.readdirSync(outDir)) {
+      if (!f.endsWith('.png')) continue;
+      const id = f.slice(0, -4);
+      const fp = path.join(outDir, f);
+      if (/^\d+$/.test(id) && fs.statSync(fp).size > MIN_BYTES && !isPlaceholderFile(fp)) out.add(id);
+    }
+  } catch (_) { /* */ }
+  return out;
 }
 
 const PREFERRED_MAX_BYTES = 95000;
@@ -457,7 +516,9 @@ async function main() {
     if (!entry.urls) entry.urls = [];
   }
   const allPlayers = [...map.values()];
-  let players = allPlayers.filter((p) => bootIds.has(p.id) && p.urls && p.urls.length);
+  const kept = existingPackedIds();
+  // Wanted: everyone we already packed, plus every current candidate (top boards + boot).
+  let players = allPlayers.filter((p) => p && p.id && (bootIds.has(p.id) || kept.has(p.id) || (p.urls && p.urls.length)));
   if (process.env.SYNC_DEBUG) console.error('[sync-players] map', allPlayers.length, 'withUrls', players.length);
   let ok = 0;
   let skip = 0;
@@ -508,37 +569,70 @@ async function main() {
       .sort((a, b) => Number(a) - Number(b));
   }
 
+  // Wikipedia / Commons fallback for still-missing wanted ids (top boards).
+  const stillMissing = players.filter((p) => {
+    const fp = path.join(outDir, p.id + '.png');
+    return !(fs.existsSync(fp) && fs.statSync(fp).size > MIN_BYTES && !isPlaceholderFile(fp));
+  });
+  for (const p of stillMissing) {
+    const url = await wikiPhotoUrl(p.player, p.team);
+    if (!url) continue;
+    if (!p.urls) p.urls = [];
+    if (!p.urls.includes(url)) p.urls.push(url);
+    const r = await downloadOne(p);
+    if (r === 'ok') ok++;
+    else if (r === 'skip') skip++;
+    else fail++;
+  }
+  playerIds = [...new Set([
+    ...players.map((p) => p.id),
+    ...kept,
+    ...[...bootIds],
+  ])].filter((id) => {
+    const fp = path.join(outDir, id + '.png');
+    return fs.existsSync(fp) && fs.statSync(fp).size > MIN_BYTES && !isPlaceholderFile(fp);
+  }).sort((a, b) => Number(a) - Number(b));
+
   if (sharp) {
     for (const id of playerIds) {
       await optimizePlayerPng(path.join(outDir, id + '.png'));
     }
   }
-  for (const id of bootIds) {
-    const fp = path.join(outDir, id + '.png');
-    if (playerIds.includes(id)) continue;
-    if (fs.existsSync(fp) && fs.statSync(fp).size > MIN_BYTES && !isPlaceholderFile(fp)) {
-      playerIds.push(id);
-    }
-  }
-  playerIds.sort((a, b) => Number(a) - Number(b));
+  // Never delete a good existing headshot — only drop placeholders.
   const idSet = new Set(playerIds);
   for (const f of fs.readdirSync(outDir)) {
     if (!f.endsWith('.png')) continue;
     const id = f.slice(0, -4);
     const fp = path.join(outDir, f);
-    if (!idSet.has(id) || isPlaceholderFile(fp)) {
+    if (isPlaceholderFile(fp)) {
       try { fs.unlinkSync(fp); } catch (_) { /* */ }
+      continue;
+    }
+    if (/^\d+$/.test(id) && !idSet.has(id) && fs.statSync(fp).size > MIN_BYTES) {
+      playerIds.push(id);
+      idSet.add(id);
     }
   }
+  playerIds.sort((a, b) => Number(a) - Number(b));
+  const mapping = {};
+  for (const id of playerIds) {
+    const ov = PHOTO_OVERRIDES[id] || {};
+    mapping[id] = {
+      ns: 'espn',
+      tmId: ov.tmId || undefined,
+      source: ov.urls ? 'override' : 'cdn',
+    };
+  }
   const manifest = {
-    v: 2,
+    v: 3,
     source: 'boot-leader-photos',
     playerIds,
+    mapping,
     syncedAt: new Date().toISOString(),
   };
   fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   const idsPath = path.join(root, 'public/bundled-player-ids.json');
-  fs.writeFileSync(idsPath, JSON.stringify({ v: 2, playerIds, syncedAt: manifest.syncedAt }) + '\n');
+  fs.writeFileSync(idsPath, JSON.stringify({ v: 3, playerIds, mapping, syncedAt: manifest.syncedAt }) + '\n');
   const configPath = path.join(root, 'public/config.js');
   try {
     let cfg = fs.readFileSync(configPath, 'utf8');
@@ -551,7 +645,7 @@ async function main() {
     const next = `window.APP_CONFIG={apiBase:"",platform:"web",version:"${ver}",bundledPlayerIds:${JSON.stringify(playerIds)}};\n`;
     fs.writeFileSync(configPath, next);
   } catch (_) { /* optional */ }
-  const bytes = playerIds.reduce((n, id) => n + fs.statSync(path.join(outDir, id + '.png')).size, 0);
+  const bytes = playerIds.reduce((n, id) => { try { const st=fs.statSync(path.join(outDir, id + '.png')); return n + (st && st.size ? st.size : 0); } catch (_) { return n; } }, 0);
   const placeholdersLeft = fs.readdirSync(outDir).filter((f) => f.endsWith('.png') && isPlaceholderFile(path.join(outDir, f))).length;
   console.log(JSON.stringify({
     candidates: players.length,

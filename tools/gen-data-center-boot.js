@@ -6,7 +6,7 @@ const path = require('path');
 const lt = require('../lib/league-tables');
 const { listHotTribePosts } = require('../lib/tribe-feed');
 
-const LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'csl', 'ucl'];
+const LEAGUES = ['epl', 'laliga', 'bundesliga', 'seriea', 'ligue1', 'csl', 'ucl', 'championship', 'eredivisie'];
 const VALUE_ESPN_BY_TM = (() => {
   try {
     return require('../data/value-board-espn-overrides.json').byTmId || {};

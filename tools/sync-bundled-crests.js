@@ -11,25 +11,35 @@ const root = path.join(__dirname, '..');
 const bootPath = path.join(root, 'public/data-center-boot.json');
 const outDir = path.join(root, 'public/assets/crests');
 
-const LEAGUES = ['epl', 'laliga', 'seriea', 'bundesliga', 'ligue1', 'csl', 'ucl'];
+const LEAGUES = ['epl', 'laliga', 'seriea', 'bundesliga', 'ligue1', 'csl', 'ucl', 'championship', 'eredivisie'];
 const SLICE_SUFFIXES = ['standings', 'topscorers', 'topassists', 'clubvalues'];
 
 function collectTeamIds() {
-  const j = JSON.parse(fs.readFileSync(bootPath, 'utf8'));
   const ids = new Set();
   const addRow = (r) => {
     if (r && r.teamId) ids.add(String(r.teamId));
   };
-  for (const lg of LEAGUES) {
-    for (const suf of SLICE_SUFFIXES) {
-      const s = j.slices && j.slices[lg + ':' + suf];
-      if (!s) continue;
-      for (const tb of s.tables || []) {
-        for (const r of tb.rows || []) addRow(r);
+  try {
+    const j = JSON.parse(fs.readFileSync(bootPath, 'utf8'));
+    for (const lg of LEAGUES) {
+      for (const suf of SLICE_SUFFIXES) {
+        const s = j.slices && j.slices[lg + ':' + suf];
+        if (!s) continue;
+        for (const tb of s.tables || []) {
+          for (const r of tb.rows || []) addRow(r);
+        }
+        for (const r of s.rows || []) addRow(r);
       }
-      for (const r of s.rows || []) addRow(r);
     }
-  }
+  } catch (_) { /* boot optional */ }
+  // Keep already-packed ESPN crest ids (never delete a good file).
+  try {
+    for (const f of fs.readdirSync(outDir)) {
+      if (f.endsWith('.png') && /^\d+\.png$/.test(f) && fs.statSync(path.join(outDir, f)).size > 400) {
+        ids.add(f.slice(0, -4));
+      }
+    }
+  } catch (_) { /* */ }
   return [...ids].sort((a, b) => Number(a) - Number(b));
 }
 

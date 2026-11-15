@@ -69,7 +69,7 @@ function oddsOf(p) { return p && p.h ? { h: f(p.h), d: f(p.d), a: f(p.a), goalLi
 // TheSportsDB badge URLs that were fetched and checked as real images (free key 123).
 // A missing file or the generic teamdef placeholder is not a crest — the client keeps the letter badge.
 const LOGO_CDN = 'https://static.sporttery.cn/res_1_0/jcw/upload/mnjc/zq/';
-const LOGO_HOSTS = new Set(['static.sporttery.cn', 'www.sporttery.cn', 'm.sporttery.cn', 'r2.thesportsdb.com', 'media.api-sports.io', 'a.espncdn.com', 'a1.espncdn.com', 'a2.espncdn.com', 'a3.espncdn.com', 'a4.espncdn.com', 'secure.espncdn.com', 'media.espn.com', 'img.a.transfermarkt.technology', 'cdn.sportmonks.com', 'media.sportmonks.com', 'flagcdn.com', 'cdn.flagcdn.com']);
+const LOGO_HOSTS = new Set(['static.sporttery.cn', 'www.sporttery.cn', 'm.sporttery.cn', 'r2.thesportsdb.com', 'media.api-sports.io', 'a.espncdn.com', 'a1.espncdn.com', 'a2.espncdn.com', 'a3.espncdn.com', 'a4.espncdn.com', 'secure.espncdn.com', 'media.espn.com', 'img.a.transfermarkt.technology', 'cdn.sportmonks.com', 'media.sportmonks.com', 'flagcdn.com', 'cdn.flagcdn.com', 'upload.wikimedia.org', 'thumb.wikimedia.org']);
 /** Prefer hi-res sources: TheSportsDB ~512 > ESPN 500 > AF media ~150. */
 function preferHiResLogo(url) {
   let s = String(url || '').trim();
@@ -221,6 +221,10 @@ function safeLogoTarget(raw) {
   // Transfermarkt player portraits (身价榜 tmId headshots)
   if (host === 'img.a.transfermarkt.technology') {
     const ok = /^\/portrait\/(header|big|medium)\/\d+\.jpg$/i.test(u.pathname);
+    if (!ok) return null;
+  }
+  if (host === 'upload.wikimedia.org' || host === 'thumb.wikimedia.org') {
+    const ok = /\/wikipedia\/commons\//i.test(u.pathname) && /\.(png|jpe?g|webp)$/i.test(u.pathname);
     if (!ok) return null;
   }
   // ESPN soccer team logos / athlete images

@@ -443,6 +443,127 @@ try {
     .catch(() => { if (_bundledPlayerIds === null) _bundledPlayerIds = new Set(); });
 } catch (_) { if (_bundledPlayerIds === null) _bundledPlayerIds = new Set(); }
 
+/* ── Incremental player-photo IDB (preview 375). First paint uses APK assets;
+   a newer official photo is saved silently and used on the next open. ── */
+const PHOTO_IDB_NAME = 'jc-player-photos-v1';
+const PHOTO_IDB_STORE = 'blobs';
+let _photoDbP = null;
+const _photoMem = new Map();
+const _photoInflight = new Map();
+function playerPhotoKey(playerId) {
+  const pid = playerId != null && String(playerId) !== '' ? String(playerId) : '';
+  return pid ? ('espn:' + pid) : '';
+}
+function photoIdb() {
+  if (_photoDbP) return _photoDbP;
+  _photoDbP = new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(PHOTO_IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(PHOTO_IDB_STORE)) db.createObjectStore(PHOTO_IDB_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    } catch (_) { resolve(null); }
+  });
+  return _photoDbP;
+}
+function photoIdbGet(key) {
+  return photoIdb().then((db) => new Promise((resolve) => {
+    if (!db || !key) return resolve(null);
+    try {
+      const tx = db.transaction(PHOTO_IDB_STORE, 'readonly');
+      const r = tx.objectStore(PHOTO_IDB_STORE).get(key);
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => resolve(null);
+    } catch (_) { resolve(null); }
+  }));
+}
+function photoIdbPut(key, blob) {
+  return photoIdb().then((db) => new Promise((resolve) => {
+    if (!db || !key || !blob) return resolve(false);
+    try {
+      const tx = db.transaction(PHOTO_IDB_STORE, 'readwrite');
+      tx.objectStore(PHOTO_IDB_STORE).put(blob, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    } catch (_) { resolve(false); }
+  }));
+}
+function photoRemember(key, blob) {
+  if (!key || !blob) return '';
+  const pid = String(key).replace(/^espn:/, '');
+  const prev = _photoMem.get(pid);
+  if (prev && String(prev).startsWith('blob:')) {
+    try { URL.revokeObjectURL(prev); } catch (_) {}
+  }
+  const u = URL.createObjectURL(blob);
+  _photoMem.set(pid, u);
+  return u;
+}
+/** Save a fetched official photo. Never clears a good bundled/local image on failure. */
+async function saveOfficialPlayerPhoto(playerId, src) {
+  const pid = playerId != null ? String(playerId) : '';
+  const key = playerPhotoKey(pid);
+  if (!pid || !key || !src) return '';
+  if (_photoInflight.has(key)) return _photoInflight.get(key);
+  const job = (async () => {
+    try {
+      if (_photoMem.has(pid)) return _photoMem.get(pid);
+      const hit = await photoIdbGet(key);
+      if (hit instanceof Blob && hit.size > 1200) return photoRemember(key, hit);
+      if (String(src).startsWith('assets/players/')) return '';
+      const res = await fetch(src, { credentials: 'omit', cache: 'force-cache' });
+      if (!res || !res.ok) return '';
+      const blob = await res.blob();
+      if (!blob || blob.size < 1200) return '';
+      try { await photoIdbPut(key, blob); } catch (_) {}
+      return photoRemember(key, blob);
+    } catch (_) { return ''; }
+  })();
+  _photoInflight.set(key, job);
+  try { return await job; } finally { _photoInflight.delete(key); }
+}
+async function warmLocalPlayerPhotos(ids) {
+  try {
+    const list = (ids || []).map(String).filter(Boolean).slice(0, 80);
+    await Promise.all(list.map(async (pid) => {
+      if (_photoMem.has(pid)) return;
+      const blob = await photoIdbGet(playerPhotoKey(pid));
+      if (blob instanceof Blob && blob.size > 1200) photoRemember(playerPhotoKey(pid), blob);
+    }));
+  } catch (_) {}
+}
+function hydratePlayerPhotos(root) {
+  try {
+    const scope = root || document;
+    const nodes = scope.querySelectorAll('.dc-avatar[data-pid] img, img.player-hero-ph[data-pid], img.sq-ph[data-pid]');
+    nodes.forEach((img) => {
+      const wrap = img.closest('[data-pid]') || img;
+      const pid = (wrap.getAttribute && wrap.getAttribute('data-pid')) || img.getAttribute('data-pid') || '';
+      if (!pid) return;
+      const srcNow = img.getAttribute('src') || '';
+      const bundled = bundledPlayerPath(pid);
+      if (bundled && srcNow === bundled) {
+        // Bundled first paint stays; a newer official photo is stored for next open only.
+        const net = wrap.getAttribute('data-official') || '';
+        if (net) saveOfficialPlayerPhoto(pid, net).catch(() => {});
+        return;
+      }
+      if (_photoMem.has(pid) && srcNow !== _photoMem.get(pid)) {
+        img.setAttribute('src', _photoMem.get(pid));
+        return;
+      }
+      photoIdbGet(playerPhotoKey(pid)).then((blob) => {
+        if (!(blob instanceof Blob) || blob.size < 1200) return;
+        const u = photoRemember(playerPhotoKey(pid), blob);
+        if (u && img.getAttribute('src') !== u) img.setAttribute('src', u);
+      }).catch(() => {});
+    });
+  } catch (_) {}
+}
+
 const VALUE_ESPN_BY_TM = (CFG.valueBoardEspnByTmId && typeof CFG.valueBoardEspnByTmId === 'object')
   ? CFG.valueBoardEspnByTmId
   : {
@@ -512,17 +633,40 @@ function tmPortraitUrl(tmId) {
   if (!id) return '';
   return 'https://img.a.transfermarkt.technology/portrait/header/' + id + '.jpg';
 }
-/** API-Football CDN placeholder when URL uses ESPN athlete id (not AF player id). */
-function isAfEspnIdPhotoUrl(url, espnPlayerId) {
-  if (!url || espnPlayerId == null || String(espnPlayerId) === '') return false;
+/** ESPN vs API-Football vs Transfermarkt id namespaces. Leaderboards default to ESPN. */
+function playerIdNamespace(row) {
+  if (!row || typeof row !== 'object') return 'espn';
+  if (row.idNs) return String(row.idNs);
+  if (row.afPlayerId != null && String(row.afPlayerId) !== ''
+    && String(row.afPlayerId) === String(row.playerId || '')
+    && (row.espnAthleteId == null || String(row.espnAthleteId) === ''
+      || String(row.espnAthleteId) !== String(row.playerId))) {
+    return 'af';
+  }
+  if (row.espnAthleteId != null && String(row.espnAthleteId) !== ''
+    && String(row.espnAthleteId) === String(row.playerId || '')) return 'espn';
+  if (row.photo && /espncdn\.com\/i\/headshots/i.test(row.photo)) return 'espn';
+  return 'espn';
+}
+/** API-Football CDN URL built from an ESPN athlete id (placeholder). Real AF ids are kept. */
+function isAfEspnIdPhotoUrl(url, espnPlayerId, row) {
+  if (!url) return false;
   const m = String(url).match(/media\.api-sports\.io\/football\/players\/(\d+)\./i);
-  return m && m[1] === String(espnPlayerId);
+  if (!m) return false;
+  const rowObj = row && typeof row === 'object' ? row : null;
+  if (rowObj && playerIdNamespace(rowObj) === 'af') return false;
+  const pid = espnPlayerId != null && String(espnPlayerId) !== ''
+    ? String(espnPlayerId)
+    : (rowObj && rowObj.playerId != null ? String(rowObj.playerId) : '');
+  if (!pid) return false;
+  if (rowObj && playerIdNamespace(rowObj) !== 'espn') return false;
+  return m[1] === String(pid);
 }
 function pickDcNetworkPhoto(row) {
   if (!row) return '';
   const pid = playerIdForBundledPhoto(row);
-  const alt = row.photoAlt && !isAfEspnIdPhotoUrl(row.photoAlt, pid) ? row.photoAlt : '';
-  const main = row.photo && !isAfEspnIdPhotoUrl(row.photo, pid) ? row.photo : '';
+  const alt = row.photoAlt && !isAfEspnIdPhotoUrl(row.photoAlt, pid, row) ? row.photoAlt : '';
+  const main = row.photo && !isAfEspnIdPhotoUrl(row.photo, pid, row) ? row.photo : '';
   return main || alt || '';
 }
 function bundledPlayerPath(playerId) {
@@ -534,10 +678,24 @@ function bundledPlayerPath(playerId) {
   if (IS_APP) return BUNDLED_PLAYER_BASE + pid + '.png';
   return '';
 }
-function dcPlayerPhotoSrc(row) {
+function bundledPlayerPathForRow(row) {
+  if (!row) return '';
   const pid = playerIdForBundledPhoto(row);
-  const bundled = bundledPlayerPath(pid);
+  const tm = row.tmId != null && String(row.tmId) !== '' ? String(row.tmId) : '';
+  if (pid && typeof _photoMem !== 'undefined' && _photoMem.has(pid)) return _photoMem.get(pid);
+  if (tm && typeof _photoMem !== 'undefined' && _photoMem.has('tm-' + tm)) return _photoMem.get('tm-' + tm);
+  const byPid = bundledPlayerPath(pid);
+  if (byPid) return byPid;
+  if (tm) {
+    const byTm = bundledPlayerPath('tm-' + tm);
+    if (byTm) return byTm;
+  }
+  return '';
+}
+function dcPlayerPhotoSrc(row) {
+  const bundled = bundledPlayerPathForRow(row);
   if (bundled) return bundled;
+  const pid = playerIdForBundledPhoto(row);
   const net = pickDcNetworkPhoto(row);
   if (net) {
     if (/^https?:\/\//i.test(net) && IS_APP && /media\.api-sports\.io\/football\/players\/\d+/i.test(net)) {
@@ -1988,6 +2146,11 @@ const DC_IMG_PREFETCH_MAX = 10;
 function prefetchDcImages(root) {
   try {
     const scope = root || document.getElementById('view') || document;
+    try { hydrateTribeCrests(scope); } catch (_) {}
+    try { hydratePlayerPhotos(scope); } catch (_) {}
+    const pids = Array.from(scope.querySelectorAll('.dc-avatar[data-pid]'))
+      .map((el) => el.getAttribute('data-pid')).filter(Boolean);
+    if (pids.length) warmLocalPlayerPhotos(pids);
     const urls = Array.from(scope.querySelectorAll('.dc-avatar img, .dc-table .badge.crest img, .dc-scorers .badge.crest img'))
       .map((img) => img.currentSrc || img.src).filter(Boolean).slice(0, DC_IMG_PREFETCH_MAX);
     if (!urls.length) return;
@@ -6574,8 +6737,21 @@ function renderStandingsTable(payload) {
   return h;
 }
 
+const DC_PHOTO_QUALITY_BAR = 10;
+function leaderRowHasUsablePhoto(row) {
+  return !!(row && dcPlayerPhotoSrc(row));
+}
+/** Top 10 always stay (fix the photo, do not drop the row). Below that, omit rows with no usable photo. */
+function filterScorerRowsForDisplay(rows) {
+  return (rows || []).filter((r, i) => {
+    const rank = Number(r && r.rank);
+    const n = Number.isFinite(rank) && rank > 0 ? rank : (i + 1);
+    if (n <= DC_PHOTO_QUALITY_BAR) return true;
+    return leaderRowHasUsablePhoto(r);
+  });
+}
 function renderScorersList(payload, kind) {
-  const rows = payload.rows || [];
+  const rows = filterScorerRowsForDisplay(payload.rows || []);
   if (kind === 'topkeepers') {
     if (payload.preparing || !rows.length) {
       const tip = payload.noteZh || '门神榜（零封 / 扑救）数据接入筹备中，可先查看射手榜与助攻榜。';
@@ -6593,7 +6769,7 @@ function renderScorersList(payload, kind) {
   let h = `<div class="dc-scorers">`;
   rows.forEach((r, i) => {
     const initial = esc([...(r.playerZh || r.player || '?')][0] || '?');
-    const altPhoto = (r.photoAlt && !isAfEspnIdPhotoUrl(r.photoAlt, r.playerId)) ? r.photoAlt : '';
+    const altPhoto = (r.photoAlt && !isAfEspnIdPhotoUrl(r.photoAlt, r.playerId, r)) ? r.photoAlt : '';
     const lazyAttr = i >= 6 ? ' loading="lazy"' : '';
     const resolvedPid = resolveDcPlayerEspnId(r);
     const tmAttr = (r.tmId != null && String(r.tmId) !== '') ? ` data-tmid="${esc(String(r.tmId))}"` : '';
@@ -6905,19 +7081,187 @@ function prefetchDetailWarm(lg, payload, kind) {
   } catch { /* ignore */ }
 }
 
+
+function findDcLeaderRow(playerId, lg) {
+  const pid = String(playerId || '');
+  if (!pid) return null;
+  const bags = [];
+  try { if (S.dataCache) bags.push(S.dataCache); } catch (_) {}
+  try { if (_bootPackSlices) bags.push(_bootPackSlices); } catch (_) {}
+  const suffixes = [':topscorers', ':topassists', ':playervalues', ':topkeepers'];
+  const keys = [];
+  if (lg) suffixes.forEach((s) => keys.push(lg + s));
+  for (const bag of bags) {
+    const useKeys = keys.length ? keys.concat(Object.keys(bag)) : Object.keys(bag);
+    const seen = new Set();
+    for (const k of useKeys) {
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const slice = bag[k];
+      if (!slice || !slice.rows) continue;
+      const hit = slice.rows.find((r) => r && String(r.playerId) === pid);
+      if (hit) return Object.assign({ leagueKey: slice.leagueKey || lg, leagueZh: slice.leagueZh }, hit);
+    }
+  }
+  if (S.playerHint && (String(S.playerHint.playerId || S.playerHint.id) === pid)) return S.playerHint;
+  return null;
+}
+function findDcTeamRow(teamId, lg) {
+  const tid = String(teamId || '');
+  if (!tid) return null;
+  const bags = [];
+  try { if (S.dataCache) bags.push(S.dataCache); } catch (_) {}
+  try { if (_bootPackSlices) bags.push(_bootPackSlices); } catch (_) {}
+  const prefer = lg ? [lg + ':standings', lg + ':clubvalues', lg + ':topscorers', lg + ':topassists'] : [];
+  for (const bag of bags) {
+    const keys = prefer.concat(Object.keys(bag));
+    const seen = new Set();
+    for (const k of keys) {
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const slice = bag[k];
+      if (!slice) continue;
+      const rows = slice.rows
+        || ((slice.tables && slice.tables[0] && slice.tables[0].rows) || []);
+      const hit = (rows || []).find((r) => r && String(r.teamId) === tid);
+      if (hit) {
+        return Object.assign({
+          leagueKey: slice.leagueKey || lg,
+          leagueZh: slice.leagueZh,
+          seasonLabel: slice.seasonLabel,
+          logo: hit.logo || hit.teamLogo || '',
+        }, hit);
+      }
+    }
+  }
+  if (S.teamHint && String(S.teamHint.teamId || S.teamHint.id) === tid) return S.teamHint;
+  return null;
+}
+function hintToAfPlayer(row, lg) {
+  if (!row) return null;
+  const photoSrc = dcPlayerPhotoSrc(row) || row.photo || row.photoAlt || '';
+  return {
+    ok: true,
+    player: row.player || row.name || '',
+    playerZh: row.playerZh || row.nameZh || row.player || row.name || '',
+    playerZhAuto: row.playerZhAuto,
+    playerId: row.playerId || row.id,
+    photo: photoSrc,
+    photoAlt: row.photoAlt || '',
+    tmId: row.tmId,
+    team: row.team,
+    teamZh: row.teamZh || row.team,
+    teamId: row.teamId,
+    teamLogo: row.teamLogo || row.logo || '',
+    goals: row.goals,
+    assists: row.assists,
+    appearances: row.appearances,
+    minutes: row.minutes,
+    position: row.position,
+    positionZh: row.positionZh,
+    nationality: row.nationality,
+    nationalityZh: row.nationalityZh,
+    leagueZh: row.leagueZh,
+    seasonLabel: row.seasonLabel,
+    marketValue: row.marketValue || (row.labelZh || row.text ? { ok: true, text: row.text, labelZh: row.labelZh || row.text } : null),
+    noteZh: '先显示榜单资料，详细数据后台更新中。',
+    _fromHint: true,
+  };
+}
+function hintToTeam(row, id, lg) {
+  if (!row) return null;
+  return {
+    ok: true,
+    team: row.team || row.teamZh || '',
+    teamZh: row.teamZh || row.team || '',
+    teamId: row.teamId || id,
+    logo: row.logo || row.teamLogo || '',
+    rank: row.rank,
+    points: row.points,
+    played: row.played,
+    win: row.win, draw: row.draw, lose: row.lose,
+    gf: row.gf, ga: row.ga,
+    form: row.form, formDots: row.form,
+    leagueZh: row.leagueZh,
+    seasonLabel: row.seasonLabel,
+    marketValue: row.marketValue || (row.labelZh || row.text ? { ok: true, text: row.text, labelZh: row.labelZh || row.text } : null),
+    noteZh: '先显示榜单资料，详细数据后台更新中。',
+    _fromHint: true,
+  };
+}
+function stashDetailHintFromEl(el, href) {
+  const go = String(href || (el && el.getAttribute && el.getAttribute('data-go')) || '');
+  const qLg = (route().query && route().query.league) || dataLeagueOf() || '';
+  const mPl = go.match(/#\/aplayer\/([^?&]+)/);
+  const mTm = go.match(/#\/team\/([^?&]+)/);
+  const mPy = go.match(/#\/player\/([^?&]+)/);
+  if (mPl) {
+    let id;
+    try { id = decodeURIComponent(mPl[1]); } catch (_) { id = mPl[1]; }
+    const row = findDcLeaderRow(id, qLg);
+    if (row) S.playerHint = Object.assign({ id, playerId: row.playerId || id }, row);
+  }
+  if (mTm) {
+    let id;
+    try { id = decodeURIComponent(mTm[1]); } catch (_) { id = mTm[1]; }
+    const row = findDcTeamRow(id, qLg);
+    if (row) S.teamHint = Object.assign({ id, teamId: row.teamId || id }, row);
+  }
+  if (mPy) {
+    let id;
+    try { id = decodeURIComponent(mPy[1]); } catch (_) { id = mPy[1]; }
+    const row = findDcLeaderRow(id, qLg) || findSquadPlayerHint(id);
+    if (row) S.playerHint = Object.assign({ id, playerId: row.playerId || row.id || id }, row);
+  }
+}
+
+function teamDetailFirstHtml(t, id, lg, { fromCache, fromHint } = {}) {
+  if (!t || t.ok === false) return '';
+  const logo = t.logo ? badge(t.teamZh || t.team, 'lg', t.logo, t.teamId || id ? { teamId: t.teamId || id, eager: true } : null) : badge(t.teamZh || t.team, 'lg');
+  let stats = '';
+  if (t.rank != null || t.points != null || t.played != null) {
+    stats = `<div class="det-stats">
+      <div><b class="num">${dash(t.rank)}</b><small>排名</small></div>
+      <div><b class="num">${dash(t.points)}</b><small>积分</small></div>
+      <div><b class="num">${dash(t.played)}</b><small>赛</small></div>
+      <div><b class="num">${t.win ?? '-'}<span class="sep">/</span>${t.draw ?? '-'}<span class="sep">/</span>${t.lose ?? '-'}</b><small>胜/平/负</small></div>
+    </div>`;
+  }
+  const cacheNote = fromHint ? '<span class="note"> · 来自榜单，后台更新中</span>'
+    : (fromCache ? '<span class="note"> · 本地缓存，后台更新中</span>' : '');
+  return `<div class="det-hero">${logo}<div>
+      <h2>${esc(t.teamZh || t.team)}</h2>
+      ${t.teamZh && t.team && t.teamZh !== t.team ? `<div class="note">原文 ${esc(t.team)}</div>` : ''}
+      <div class="player-tags">
+        ${t.leagueZh ? `<span>${esc(t.leagueZh)}</span>` : ''}
+        ${t.seasonLabel ? `<span>${esc(t.seasonLabel)} 赛季</span>` : ''}
+      </div>
+    </div></div>
+    ${stats}
+    <p class="note">${esc(t.noteZh || '')}${cacheNote}</p>`;
+}
 function pageTeam(id) {
   const lg = (route().query && route().query.league) || dataLeagueOf() || 'epl';
   let h = hdr('球队详情');
   const cached = readDetailLs('td', id, lg);
-  h += `<div id="team-box" class="det-box">${cached && cached.data ? '' : skeleton(2)}</div>`;
+  const usableCache = cached && cached.data && !squadMvCorrupt(cached.data);
+  const hintRow = (!usableCache) ? (findDcTeamRow(id, lg) || S.teamHint) : null;
+  const hint = hintRow && String(hintRow.teamId || hintRow.id || '') === String(id)
+    ? hintToTeam(hintRow, id, lg) : (hintRow ? hintToTeam(hintRow, id, lg) : null);
+  const instant = usableCache ? cached.data : hint;
+  const firstHtml = instant
+    ? (usableCache ? teamDetailFirstHtml(cached.data, id, lg, { fromCache: true }) : teamDetailFirstHtml(hint, id, lg, { fromHint: true }))
+    : skeleton(2);
+  h += `<div id="team-box" class="det-box">${firstHtml}</div>`;
   setTimeout(() => {
-    const usable = cached && cached.data && !squadMvCorrupt(cached.data);
-    if (usable) {
+    if (usableCache) {
       try { paintTeamDetail(cached.data, id, lg, { fromCache: true }); } catch { /* fall through */ }
     } else if (cached && cached.data && squadMvCorrupt(cached.data)) {
       try { LS.del(detailLsKey('td', id, lg)); } catch { /* ignore */ }
+    } else if (hint) {
+      try { paintTeamDetail(hint, id, lg, { fromCache: true, fromHint: true }); } catch { /* ignore */ }
     }
-    fillTeam(id, lg, { soft: !!usable });
+    fillTeam(id, lg, { soft: !!instant });
   }, 0);
   return h;
 }
@@ -7209,8 +7553,10 @@ function paintTeamDetail(t, id, lg, { fromCache } = {}) {
       <div class="det-mv-list">`;
     ranked.forEach((p, i) => {
       const rk = p.marketValueRank || (i + 1);
-      const ph = p.photo
-        ? `<img class="sq-ph" alt="" src="${esc(logoProxy(p.photo))}" onerror="this.outerHTML='<span class=sq-ph letter>${esc([...(p.playerZh || p.player || '?')][0] || '?')}</span>'"/>`
+      const phRow = { playerId: p.playerId, photo: p.photo, photoAlt: p.photoAlt, tmId: p.tmId, player: p.player, team: t.team };
+      const phSrc = dcPlayerPhotoSrc(phRow) || (p.photo ? logoProxy(p.photo) : '');
+      const ph = phSrc
+        ? `<img class="sq-ph" data-pid="${esc(String(p.playerId || ''))}" alt="" src="${esc(phSrc)}" onerror="this.outerHTML='<span class=sq-ph letter>${esc([...(p.playerZh || p.player || '?')][0] || '?')}</span>'"/>`
         : `<span class="sq-ph letter">${esc([...(p.playerZh || p.player || '?')][0] || '?')}</span>`;
       const go = p.playerId ? ` data-go="#/aplayer/${encodeURIComponent(p.playerId)}?league=${encodeURIComponent(lg)}"` : '';
       const mvOk = Number(p.marketValueEur) > 0;
@@ -7288,6 +7634,7 @@ function paintTeamDetail(t, id, lg, { fromCache } = {}) {
       el.textContent = bits.join(' · ');
     }).catch(() => {});
   }
+  try { hydrateTribeCrests(box); hydratePlayerPhotos(box); } catch (_) {}
 }
 async function fillTeam(id, lg, { squad, soft } = {}) {
   const box = document.getElementById('team-box');
@@ -7307,29 +7654,24 @@ async function fillTeam(id, lg, { squad, soft } = {}) {
   }
 }
 
-function pageAfPlayer(id) {
-  const lg = (route().query && route().query.league) || dataLeagueOf() || 'epl';
-  let h = hdr('球员详情');
-  const cached = readDetailLs('pd', id, lg);
-  h += `<div id="aplayer-box" class="det-box">${cached && cached.data ? '' : skeleton(2)}</div>`;
-  setTimeout(() => {
-    if (cached && cached.data) {
-      try { paintAfPlayer(cached.data, lg, { fromCache: true }); } catch { /* ignore */ }
-    }
-    fillAfPlayer(id, lg, { soft: !!(cached && cached.data) });
-  }, 0);
-  return h;
-}
-function paintAfPlayer(p, lg, { fromCache } = {}) {
-  const box = document.getElementById('aplayer-box');
-  if (!box || !p || p.ok === false) return;
+function afPlayerDetailHtml(p, lg, { fromCache, fromHint } = {}) {
+  if (!p || p.ok === false) return '';
   const initial = esc([...(p.playerZh || p.player || '?')][0] || '?');
-  const img = p.photo
-    ? `<img class="player-hero-ph" src="${esc(logoProxy(p.photo))}" alt="" onerror="this.outerHTML='<div class=\\'player-hero-ph fallback\\'>${initial}</div>'"/>`
+  const photoRow = {
+    playerId: p.playerId != null ? p.playerId : p.id,
+    photo: p.photo, photoAlt: p.photoAlt, tmId: p.tmId,
+    player: p.player, team: p.team, idNs: p.idNs, afPlayerId: p.afPlayerId, espnAthleteId: p.espnAthleteId,
+  };
+  const src = dcPlayerPhotoSrc(photoRow) || (p.photo && !isAfEspnIdPhotoUrl(p.photo, photoRow.playerId, photoRow) ? (String(p.photo).startsWith('assets/') ? p.photo : logoProxy(p.photo)) : '');
+  const pid = photoRow.playerId != null ? String(photoRow.playerId) : '';
+  const official = pickDcNetworkPhoto(photoRow);
+  const img = src
+    ? `<img class="player-hero-ph" data-pid="${esc(pid)}" src="${esc(src)}" alt="" onerror="this.outerHTML='<div class=\\'player-hero-ph fallback\\'>${initial}</div>'"/>`
     : `<div class="player-hero-ph fallback">${initial}</div>`;
-  const teamGo = p.teamId ? ` data-go="#/team/${encodeURIComponent(p.teamId)}?league=${encodeURIComponent(lg)}"` : '';
-  const cacheNote = fromCache ? '<span class="note"> · 本地缓存，后台更新中</span>' : (p.stale ? '<span class="note"> · 缓存刷新中</span>' : '');
-  box.innerHTML = `<div class="player-hero">${img}<div>
+  const teamGo = p.teamId ? ` data-go="#/team/${encodeURIComponent(p.teamId)}?league=${encodeURIComponent(lg || '')}"` : '';
+  const cacheNote = fromHint ? '<span class="note"> · 来自榜单，后台更新中</span>'
+    : (fromCache ? '<span class="note"> · 本地缓存，后台更新中</span>' : (p.stale ? '<span class="note"> · 缓存刷新中</span>' : ''));
+  return `<div class="player-hero">${img}<div>
       <h2>${esc(p.playerZh || p.player)}${yiMark(p.playerZhAuto)}</h2>
       ${p.playerZh && p.player && p.playerZh !== p.player ? `<div class="note">原文 ${esc(p.player)}${p.playerZhAuto ? '（中文为程序自动音译）' : ''}</div>` : ''}
       <div class="player-tags">
@@ -7347,7 +7689,7 @@ function paintAfPlayer(p, lg, { fromCache } = {}) {
       <div><b class="num">${p.minutes != null ? p.minutes : '暂无'}</b><small>分钟</small></div>
     </div>
     <dl class="kv">
-      <dt>俱乐部</dt><dd${teamGo} class="${p.teamId ? 'linkish-dd' : ''}">${p.teamLogo ? badge(p.teamZh || p.team, 'sm', p.teamLogo) : ''} ${dash(p.teamZh || p.team)}</dd>
+      <dt>俱乐部</dt><dd${teamGo} class="${p.teamId ? 'linkish-dd' : ''}">${p.teamLogo ? badge(p.teamZh || p.team, 'sm', p.teamLogo, p.teamId ? { teamId: p.teamId, eager: true } : null) : ''} ${dash(p.teamZh || p.team)}</dd>
       <dt>身价</dt><dd>${(p.marketValue && p.marketValue.text) ? esc(p.marketValue.text) : '暂无身价'}${(p.marketValue && p.marketValue.asOf) ? '<span class="note"> · 约 ' + esc(p.marketValue.asOf) + '</span>' : ''}</dd>
       <dt>位置</dt><dd>${dash(p.positionZh || p.position)}</dd>
       <dt>国籍</dt><dd>${dash(p.nationalityZh || p.nationality)}</dd>
@@ -7360,6 +7702,28 @@ function paintAfPlayer(p, lg, { fromCache } = {}) {
     <p class="note">${esc(p.noteZh || '')}${cacheNote}</p>
     <div style="padding:8px 0 16px"><button class="btn ghost sm" data-go="#/data">返回数据中心</button></div>`;
 }
+function pageAfPlayer(id) {
+  const lg = (route().query && route().query.league) || dataLeagueOf() || 'epl';
+  let h = hdr('球员详情');
+  const cached = readDetailLs('pd', id, lg);
+  const row = findDcLeaderRow(id, lg);
+  const hint = row ? hintToAfPlayer(row, lg) : ((S.playerHint && String(S.playerHint.playerId || S.playerHint.id) === String(id)) ? hintToAfPlayer(S.playerHint, lg) : null);
+  const instant = (cached && cached.data) ? cached.data : hint;
+  const firstHtml = instant ? afPlayerDetailHtml(instant, lg, { fromCache: !!(cached && cached.data), fromHint: !(cached && cached.data) }) : skeleton(2);
+  h += `<div id="aplayer-box" class="det-box">${firstHtml}</div>`;
+  setTimeout(() => {
+    fillAfPlayer(id, lg, { soft: !!instant });
+    try { hydratePlayerPhotos(document.getElementById('aplayer-box')); } catch (_) {}
+  }, 0);
+  return h;
+}
+function paintAfPlayer(p, lg, { fromCache, fromHint } = {}) {
+  const box = document.getElementById('aplayer-box');
+  if (!box || !p || p.ok === false) return;
+  box.innerHTML = afPlayerDetailHtml(p, lg, { fromCache, fromHint });
+  try { hydratePlayerPhotos(box); } catch (_) {}
+}
+
 async function fillAfPlayer(id, lg, { soft } = {}) {
   const box = document.getElementById('aplayer-box');
   if (!box) return;
@@ -8073,10 +8437,17 @@ function findSquadPlayerHint(pid) {
 function paintPlayerDetail(p) {
   const box = document.getElementById('player-box');
   if (!box || !p) return;
-  const photo = p.cutout || p.photo || p.thumb || p.render || '';
+  p = Object.assign({}, p, {
+    name: p.name || p.player || '',
+    nameZh: p.nameZh || p.playerZh || p.name || p.player || '',
+    id: p.id || p.playerId,
+    photo: p.photo || p.cutout || p.thumb || p.render || '',
+  });
+  const photoRow = { playerId: p.id || p.playerId, photo: p.cutout || p.photo || p.thumb || p.render || '', photoAlt: p.photoAlt, tmId: p.tmId, player: p.name || p.player, team: p.team };
+  const photo = dcPlayerPhotoSrc(photoRow) || photoRow.photo;
   const img = photo
-    ? '<img class="player-hero-ph" src="' + logoProxy(photo) + '" alt="" onerror="this.style.display=\'none\'"/>'
-    : '<div class="player-hero-ph fallback">' + esc((p.nameZh || p.name || '?').slice(0, 1)) + '</div>';
+    ? '<img class="player-hero-ph" data-pid="' + esc(String(photoRow.playerId || '')) + '" src="' + (String(photo).startsWith('assets/') || String(photo).startsWith('blob:') ? esc(photo) : logoProxy(photo)) + '" alt="" onerror="this.style.display=\'none\'"/>'
+    : '<div class="player-hero-ph fallback">' + esc((p.nameZh || p.name || p.playerZh || p.player || '?').slice(0, 1)) + '</div>';
   box.innerHTML = '<div class="player-hero">' + img + '<div><h2>' + esc(p.nameZh || p.name || '') + yiMark(p.nameZhSrc === 'auto') + '</h2>' +
     (p.nameZh && p.name && p.nameZh !== p.name ? '<div class="note">原文 ' + esc(p.name) + (p.nameZhSrc === 'auto' ? '（中文为程序自动音译）' : '') + '</div>' : (p.nameAlt ? '<div class="note">' + esc(p.nameAlt) + '</div>' : '')) +
     '<div class="player-tags"><span>' + esc(p.positionZh || p.position || '') + '</span>' +
@@ -8101,27 +8472,40 @@ function paintPlayerDetail(p) {
 function pagePlayer(id) {
   const pid = normalizePlayerId(id);
   let h = hdr('球员详情');
-  h += '<div id="player-box" class="dsec"><div class="spinner"></div></div>';
-  setTimeout(() => fillPlayer(pid), 0);
+  const cached = readDetailLs('pl', pid, '');
+  const hint = (S.playerHint && String(S.playerHint.id || S.playerHint.playerId) === String(pid))
+    ? S.playerHint
+    : (findSquadPlayerHint(pid) || findDcLeaderRow(pid));
+  const instant = (cached && cached.data) || hint;
+  h += '<div id="player-box" class="dsec">' + (instant ? '' : '<div class="spinner"></div>') + '</div>';
+  setTimeout(() => {
+    if (instant) {
+      try { paintPlayerDetail(instant); } catch (_) {}
+    }
+    fillPlayer(pid);
+  }, 0);
   return h + foot();
 }
 async function fillPlayer(id) {
   const box = document.getElementById('player-box');
   if (!box) return;
   id = normalizePlayerId(id);
-  const hint = (S.playerHint && String(S.playerHint.id) === String(id))
+  const cached = readDetailLs('pl', id, '');
+  const hint = (S.playerHint && String(S.playerHint.id || S.playerHint.playerId) === String(id))
     ? S.playerHint
-    : findSquadPlayerHint(id);
-  if (hint) paintPlayerDetail(hint);
+    : (findSquadPlayerHint(id) || findDcLeaderRow(id));
+  const instant = (cached && cached.data) || hint;
+  if (instant && !box.querySelector('.player-hero')) paintPlayerDetail(instant);
   try {
     const p = await api('/player?id=' + encodeURIComponent(id), { timeout: 15000 });
     if (!p || !p.ok) {
-      if (!hint) box.innerHTML = empty(esc((p && p.error) || '未找到球员'));
+      if (!instant) box.innerHTML = empty(esc((p && p.error) || '未找到球员'));
       return;
     }
+    try { writeDetailLs('pl', id, '', p); } catch (_) {}
     paintPlayerDetail(p);
   } catch (e) {
-    if (!hint) box.innerHTML = empty('加载失败：' + esc(e.message || ''));
+    if (!instant) box.innerHTML = empty('加载失败：' + esc(e.message || ''));
   }
 }
 
@@ -16146,6 +16530,7 @@ document.addEventListener('click', async e => {
   if (d.go) {
     e.preventDefault();
     if (el.closest('#me-drawer')) S.meBackToDrawer = true;
+    try { stashDetailHintFromEl(el, d.go); } catch (_) {}
     return go(d.go);
   }
   switch (d.act) {
