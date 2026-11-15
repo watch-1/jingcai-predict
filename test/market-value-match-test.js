@@ -81,3 +81,48 @@ assert.ok(st.ok, 'index should load: ' + (st.error || st.noteZh));
 }
 
 console.log('market-value-match-test: ok');
+
+// National-roster false friends: do not attach a mononym "Artur" / "David"
+// just because the first token matches, and do not merge distinct first names
+// that only share an initial (Edgar vs Erik, Karlen vs Kamo).
+{
+  const r = mv.lookupPlayer('Artur Gharibyan', { national: true });
+  assert.ok(!r.ok, 'Artur Gharibyan must not inherit mononym Artur: ' + JSON.stringify(r));
+}
+{
+  const r = mv.lookupPlayer('David Terteryan', { national: true });
+  assert.ok(!r.ok, 'David Terteryan must not inherit mononym David: ' + JSON.stringify(r));
+}
+{
+  const erik = mv.lookupPlayer('Erik Piloyan', { national: true });
+  assert.ok(erik.ok, 'Erik Piloyan should still resolve');
+  const edgar = mv.lookupPlayer('Edgar Piloyan', { national: true });
+  assert.ok(!edgar.ok || String(edgar.tmId) !== String(erik.tmId),
+    'Edgar Piloyan must not reuse Erik Piloyan tmId: ' + JSON.stringify(edgar));
+}
+{
+  const kamo = mv.lookupPlayer('Kamo Hovhannisyan', { national: true });
+  const karlen = mv.lookupPlayer('Karlen Hovhannisyan', { national: true });
+  if (kamo.ok) {
+    assert.ok(!karlen.ok || String(karlen.tmId) !== String(kamo.tmId),
+      'Karlen must not reuse Kamo tmId: ' + JSON.stringify(karlen));
+  }
+}
+// Transliteration / diminutive should still hit
+{
+  const r = mv.lookupPlayer('Nayair Tiknizyan', { national: true });
+  assert.ok(r.ok && /nair tiknizyan/i.test(r.name || ''), 'Nayair → Nair: ' + JSON.stringify(r));
+}
+{
+  const r = mv.lookupPlayer('Uguchukwu Iwu', { club: 'FC Rubin Kazan', national: true });
+  assert.ok(r.ok && /ugochukwu iwu/i.test(r.name || ''), 'Uguchukwu → Ugochukwu: ' + JSON.stringify(r));
+}
+{
+  const r = mv.lookupPlayer('Ioannis Kosti', { national: true });
+  assert.ok(r.ok && /kosti/i.test(r.name || ''), 'Ioannis/Giannis Kosti: ' + JSON.stringify(r));
+  assert.equal(Number(r.eur) > 0, true);
+}
+{
+  const r = mv.lookupPlayer('Alisson Becker', { club: 'Liverpool', requireClub: true });
+  assert.ok(r.ok && r.eur > 0, 'Alisson Becker + club still works');
+}

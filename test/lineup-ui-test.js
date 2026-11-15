@@ -1,0 +1,33 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+
+const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+const css = fs.readFileSync(path.join(__dirname, '../public/style.css'), 'utf8');
+const index = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+
+assert.ok(index.includes('js/lineup-layout.js'), 'layout script is loaded before app.js');
+assert.ok(app.includes('function luBoardHtml'), 'board renderer');
+assert.ok(app.includes('function luInjHtml'), 'injury strip in 阵容 tab');
+assert.ok(app.includes('暂无公开伤停'), 'honest empty injury state');
+assert.ok(app.includes('查看替补'), 'subs stay behind a control');
+assert.ok(app.includes('data-view="bench"'), 'segment has 替补');
+assert.ok(app.includes('luSidelinedOf'), 'sidelined from squad cache / predict report');
+assert.ok(!/luInjHtml[\s\S]{0,200}斯通斯/.test(app), 'does not invent mock injuries');
+assert.ok(css.includes('.lu-board'), 'board CSS');
+assert.ok(css.includes('#2f9e6b'), 'captain green');
+assert.ok(css.includes('#c0b4ea') || app.includes('#c0b4ea'), 'formation lines');
+assert.ok(css.includes('#141622'), 'dark formation card');
+assert.ok(css.includes('.lu-mid:after'), 'midfield circle');
+assert.ok(!css.includes('.lu-pitch{'), 'no green pitch layer');
+assert.ok(css.includes('lineup-grain.png'), 'grain texture');
+assert.ok(css.includes('.lu-cap'), 'captain badge');
+assert.ok(css.includes('.lu-inj'), 'injury card under the board');
+assert.ok(css.includes('.lu-board.dense') || css.includes('.lu-board.dense '), 'dense formation spacing');
+assert.ok(css.includes('366/820'), 'taller pitch card');
+assert.ok(app.includes('data-act="luTeam"'), '名单/替补 team switcher');
+assert.ok(app.includes('sml-one'), 'single-team list');
+assert.ok(index.includes('216lu4'), 'cache bust');
+assert.ok(fs.existsSync(path.join(__dirname, '../public/assets/lineup-grain.png')), 'grain asset');
+console.log('lineup UI source tests OK');
