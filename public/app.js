@@ -12098,10 +12098,10 @@ function bindMatchHeroSticky() {
 }
 
 /* Scheme B mute: HSV sat=0.28 val=0.20, concrete space-separated rgb (no var(), no commas). */
-const HERO_GLOW_HOME = 'rgb(107 90 56)';
-const HERO_GLOW_AWAY = 'rgb(56 90 107)';
-const HERO_GLOW_SAT = 0.48;
-const HERO_GLOW_VAL = 0.42;
+const HERO_GLOW_HOME = 'rgb(51 47 37)';
+const HERO_GLOW_AWAY = 'rgb(37 47 51)';
+const HERO_GLOW_SAT = 0.28;
+const HERO_GLOW_VAL = 0.20;
 const HERO_GLOW_BASE = [10, 11, 14];
 function formatHeroRgb(r, g, b) {
   return 'rgb(' + Math.round(r) + ' ' + Math.round(g) + ' ' + Math.round(b) + ')';
@@ -12457,13 +12457,38 @@ function syncHeroWeatherMotion() {
   try { document.documentElement.classList.toggle('wx-paused', off); } catch (_) {}
 }
 
-/* preview 369: lens droplets on the camera glass, not a repeating streak grid. */
+/* preview 370: atmospheric rain is CSS (seamless plate); this canvas is
+   lens/screen droplets that sit and slowly slide, like water on glass. */
 const _heroRainLoops = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 const _heroRainAlive = [];
+const DROP_SHEET_SRC = 'assets/weather/drops.png';
+const DROP_CELL = 128;
+const DROP_COLS = 4;
+const DROP_ROWS = 3;
+let _dropSheet = null;
+let _dropSheetOk = false;
+let _dropSheetWait = [];
+function ensureDropSheet() {
+  if (_dropSheetOk) return;
+  if (_dropSheet) return;
+  const img = new Image();
+  _dropSheet = img;
+  img.onload = () => {
+    _dropSheetOk = !!(img.naturalWidth && img.naturalHeight);
+    const q = _dropSheetWait.splice(0);
+    q.forEach((fn) => { try { fn(); } catch (_) {} });
+  };
+  img.onerror = () => {
+    _dropSheetOk = false;
+    const q = _dropSheetWait.splice(0);
+    q.forEach((fn) => { try { fn(); } catch (_) {} });
+  };
+  img.src = DROP_SHEET_SRC;
+}
 function rainDropCount(type, compact) {
-  if (type === 'light-rain') return compact ? 16 : 34;
-  if (type === 'rain') return compact ? 28 : 68;
-  if (type === 'storm') return compact ? 36 : 92;
+  if (type === 'light-rain') return compact ? 7 : 14;
+  if (type === 'rain') return compact ? 11 : 22;
+  if (type === 'storm') return compact ? 14 : 28;
   return 0;
 }
 function stopHeroRain(el) {
@@ -12476,7 +12501,9 @@ function stopHeroRain(el) {
   }
   const i = _heroRainAlive.indexOf(el);
   if (i >= 0) _heroRainAlive.splice(i, 1);
-  try { el.innerHTML = ''; } catch (_) {}
+  try { el.querySelectorAll('canvas.hero-wx-drops').forEach((c) => c.remove()); } catch (_) {
+    try { el.innerHTML = ''; } catch (__) {}
+  }
 }
 function bindHeroRainDrops(root) {
   const scope = root || document;
@@ -12496,37 +12523,59 @@ function startHeroRain(el) {
   const compact = !!(host && host.classList.contains('hero-sticky'));
   const n = rainDropCount(type, compact);
   const prev = _heroRainLoops && _heroRainLoops.get(el);
-  if (prev && !prev.dead && prev.type === type && prev.n === n && el.querySelector('canvas')) return;
+  if (prev && !prev.dead && prev.type === type && prev.n === n && el.querySelector('canvas.hero-wx-drops')) return;
   stopHeroRain(el);
   if (!n) return;
+  ensureDropSheet();
   const canvas = document.createElement('canvas');
   canvas.className = 'hero-wx-drops';
   canvas.setAttribute('aria-hidden', 'true');
   el.appendChild(canvas);
-  const st = { dead: false, type, n, compact, canvas, drops: [], last: 0, raf: 0, dpr: 1, w: 0, h: 0, cssW: 0, cssH: 0 };
+  const st = {
+    dead: false, type, n, compact, canvas, drops: [], trails: [],
+    last: 0, raf: 0, dpr: 1, w: 0, h: 0, cssW: 0, cssH: 0
+  };
   if (_heroRainLoops) _heroRainLoops.set(el, st);
   _heroRainAlive.push(el);
-  const spawn = (anyY) => {
+  const rollKind = () => {
+    const r = Math.random();
+    if (r < 0.55) return { kind: Math.floor(Math.random() * 4), shape: 'bead' };
+    if (r < 0.82) return { kind: 4 + Math.floor(Math.random() * 4), shape: 'tear' };
+    if (r < 0.92) return { kind: 8 + Math.floor(Math.random() * 2), shape: 'trail' };
+    return { kind: 10 + Math.floor(Math.random() * 2), shape: Math.random() < 0.5 ? 'bead' : 'tear' };
+  };
+  const spawn = (anywhere) => {
     const dpr = st.dpr || 1;
-    const mul = compact ? 0.72 : 1;
-    const kind = Math.random();
-    let r;
-    if (kind < 0.6) r = (1.15 + Math.random() * 2.05) * dpr * mul;
-    else if (kind < 0.9) r = (2.3 + Math.random() * 3.1) * dpr * mul;
-    else r = (4.2 + Math.random() * 5.2) * dpr * mul;
-    const trail = Math.random() < (type === 'light-rain' ? 0.16 : 0.3) && r > 2.1 * dpr;
+    const mul = compact ? 0.7 : 1;
+    const meta = rollKind();
+    let size;
+    const k = Math.random();
+    if (k < 0.5) size = (5 + Math.random() * 7) * mul;
+    else if (k < 0.85) size = (10 + Math.random() * 10) * mul;
+    else size = (16 + Math.random() * 12) * mul;
+    const sitting = meta.shape === 'bead' ? Math.random() < 0.78 : Math.random() < 0.22;
+    const slide = !sitting;
     return {
-      x: Math.random() * (st.w || 2),
-      y: anyY ? Math.random() * (st.h || 2) : -r * 5 - Math.random() * 50 * dpr,
-      r,
-      vy: (18 + Math.random() * 36 + r * 1.6) * (compact ? 0.75 : 1),
-      vx: (Math.random() - 0.5) * 7,
-      wob: Math.random() * Math.PI * 2,
-      wobSp: 1.1 + Math.random() * 2.0,
-      trail,
-      trailLen: trail ? (8 + Math.random() * 20) * dpr : 0,
-      alpha: 0.32 + Math.random() * 0.42
+      x: Math.random() * Math.max(2, st.w || 2),
+      y: anywhere ? Math.random() * Math.max(2, st.h || 2) : Math.random() * Math.max(2, (st.h || 2) * 0.85),
+      size: size * dpr,
+      kind: meta.kind,
+      shape: meta.shape,
+      sitting,
+      vy: slide ? (8 + Math.random() * 16 + size * 0.4) * dpr * (compact ? 0.7 : 1) : 0,
+      vx: slide ? (Math.random() - 0.45) * 5 * dpr : (Math.random() - 0.5) * 0.6 * dpr,
+      wait: sitting ? 1.2 + Math.random() * 7 : 0,
+      rot: (Math.random() - 0.5) * 0.18,
+      alpha: anywhere ? (0.72 + Math.random() * 0.28) : 0,
+      fade: anywhere ? 0 : (0.9 + Math.random() * 0.6),
+      path: []
     };
+  };
+  const startSlide = (d) => {
+    d.sitting = false;
+    d.vy = (8 + Math.random() * 18) * (st.dpr || 1) * (compact ? 0.7 : 1) + d.size * 0.25;
+    d.vx = (Math.random() - 0.35) * 6 * (st.dpr || 1);
+    d.wait = 0;
   };
   const resize = () => {
     const box = el.getBoundingClientRect();
@@ -12534,45 +12583,87 @@ function startHeroRain(el) {
     const w = Math.max(1, Math.round(box.width));
     const h = Math.max(1, Math.round(box.height));
     if (w === st.cssW && h === st.cssH && dpr === st.dpr) return;
+    const sx = st.w ? (Math.round(w * dpr) / st.w) : 1;
+    const sy = st.h ? (Math.round(h * dpr) / st.h) : 1;
     st.cssW = w; st.cssH = h; st.dpr = dpr;
     canvas.width = Math.max(1, Math.round(w * dpr));
     canvas.height = Math.max(1, Math.round(h * dpr));
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
     st.w = canvas.width; st.h = canvas.height;
-    st.drops = [];
-    for (let i = 0; i < n; i++) st.drops.push(spawn(true));
+    if (!st.drops.length) {
+      for (let i = 0; i < n; i++) st.drops.push(spawn(true));
+    } else {
+      for (const d of st.drops) {
+        d.x *= sx; d.y *= sy; d.size *= (sx + sy) / 2;
+      }
+    }
   };
-  const drawDrop = (ctx, d) => {
+  const drawProcedural = (ctx, d) => {
+    const r = Math.max(1.2, d.size * 0.5);
     ctx.save();
     ctx.translate(d.x, d.y);
-    if (d.trail && d.trailLen > 0) {
-      const g = ctx.createLinearGradient(0, -d.trailLen - d.r, 0, -d.r);
-      g.addColorStop(0, 'rgba(210,225,245,0)');
-      g.addColorStop(1, 'rgba(210,225,245,' + (d.alpha * 0.3).toFixed(3) + ')');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(-0.5, -d.r);
-      ctx.lineTo(0.5, -d.r);
-      ctx.lineTo(0.16, -d.trailLen - d.r);
-      ctx.lineTo(-0.16, -d.trailLen - d.r);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.scale(1, 1.2);
-    const rg = ctx.createRadialGradient(-d.r * 0.32, -d.r * 0.38, d.r * 0.04, 0, 0, d.r);
-    rg.addColorStop(0, 'rgba(255,255,255,' + Math.min(0.9, d.alpha + 0.28).toFixed(3) + ')');
-    rg.addColorStop(0.38, 'rgba(210,224,240,' + (d.alpha * 0.52).toFixed(3) + ')');
-    rg.addColorStop(1, 'rgba(150,172,200,' + (d.alpha * 0.1).toFixed(3) + ')');
-    ctx.fillStyle = rg;
+    ctx.rotate(d.rot || 0);
+    ctx.globalAlpha = d.alpha;
+    const sy = d.shape === 'bead' ? 1.08 : (d.shape === 'trail' ? 1.55 : 1.28);
+    ctx.scale(1, sy);
     ctx.beginPath();
-    ctx.arc(0, 0, d.r, 0, Math.PI * 2);
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(210,226,240,0.08)';
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,' + (0.5 + d.alpha * 0.32).toFixed(3) + ')';
+    ctx.strokeStyle = 'rgba(16,20,26,0.38)';
+    ctx.lineWidth = Math.max(0.7, r * 0.08);
+    ctx.stroke();
     ctx.beginPath();
-    ctx.ellipse(-d.r * 0.28, -d.r * 0.34, Math.max(0.4, d.r * 0.28), Math.max(0.3, d.r * 0.16), -0.4, 0, Math.PI * 2);
+    ctx.ellipse(0, r * 0.15, r * 0.92, r * 0.85, 0, 0.12 * Math.PI, 0.88 * Math.PI);
+    ctx.strokeStyle = 'rgba(10,12,16,0.42)';
+    ctx.lineWidth = Math.max(0.8, r * 0.1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.78, r * 0.78, 0, -0.95 * Math.PI, -0.15 * Math.PI);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = Math.max(0.6, r * 0.07);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.28, -r * 0.38, Math.max(0.5, r * 0.18), Math.max(0.35, r * 0.1), -0.4, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+  };
+  const drawTrail = (ctx, d) => {
+    if (!d.path || d.path.length < 2) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    for (let i = 1; i < d.path.length; i++) {
+      const p = d.path[i];
+      const q = d.path[i - 1];
+      const t = i / d.path.length;
+      ctx.strokeStyle = 'rgba(220,232,245,' + (0.08 + 0.16 * t * d.alpha).toFixed(3) + ')';
+      ctx.lineWidth = Math.max(0.6, d.size * 0.08 * t);
+      ctx.beginPath();
+      ctx.moveTo(q.x, q.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+  const drawDrop = (ctx, d) => {
+    if (d.alpha <= 0.01) return;
+    drawTrail(ctx, d);
+    if (_dropSheetOk && _dropSheet && _dropSheet.naturalWidth) {
+      const cell = DROP_CELL;
+      const col = d.kind % DROP_COLS;
+      const row = Math.min(DROP_ROWS - 1, Math.floor(d.kind / DROP_COLS));
+      const s = d.size;
+      ctx.save();
+      ctx.translate(d.x, d.y);
+      ctx.rotate(d.rot || 0);
+      ctx.globalAlpha = d.alpha;
+      ctx.drawImage(_dropSheet, col * cell, row * cell, cell, cell, -s, -s, s * 2, s * 2);
+      ctx.restore();
+      return;
+    }
+    drawProcedural(ctx, d);
   };
   const tick = (now) => {
     if (st.dead) return;
@@ -12584,31 +12675,24 @@ function startHeroRain(el) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, st.w, st.h);
-    const drops = st.drops;
-    for (let i = 0; i < drops.length; i++) {
-      const a = drops[i];
-      if (!a) continue;
-      for (let j = i + 1; j < drops.length; j++) {
-        const b = drops[j];
-        if (!b) continue;
-        const dx = a.x - b.x, dy = a.y - b.y;
-        const lim = a.r + b.r + 0.7;
-        if (dx * dx + dy * dy < lim * lim) {
-          const big = a.r >= b.r ? a : b;
-          const sm = a.r >= b.r ? b : a;
-          big.r = Math.min(big.r + sm.r * 0.26, (compact ? 6.5 : 11) * st.dpr);
-          big.alpha = Math.min(0.86, big.alpha + 0.04);
-          drops[j] = null;
-        }
-      }
-    }
-    st.drops = drops.filter(Boolean);
     while (st.drops.length < n) st.drops.push(spawn(false));
     for (const d of st.drops) {
-      d.wob += d.wobSp * dt;
-      d.x += (d.vx + Math.sin(d.wob) * 3.6 * st.dpr) * dt;
-      d.y += d.vy * dt;
-      if (d.y - d.r > st.h + 10 || d.x < -40 || d.x > st.w + 40) {
+      if (d.alpha < 1 && d.fade >= 0) {
+        d.alpha = Math.min(1, d.alpha + dt / (d.fade || 0.8));
+      }
+      if (d.sitting) {
+        d.wait -= dt;
+        d.x += d.vx * dt * 0.2;
+        if (d.wait <= 0 && d.size > 7 * (st.dpr || 1) && Math.random() < dt * 0.35) startSlide(d);
+      } else {
+        d.x += d.vx * dt;
+        d.y += d.vy * dt;
+        d.vy += 6 * (st.dpr || 1) * dt;
+        d.vy = Math.min(d.vy, 42 * (st.dpr || 1));
+        d.path.push({ x: d.x, y: d.y });
+        if (d.path.length > 14) d.path.shift();
+      }
+      if (d.y - d.size > st.h + 8 || d.x < -40 || d.x > st.w + 40) {
         Object.assign(d, spawn(false));
         continue;
       }
@@ -12616,12 +12700,16 @@ function startHeroRain(el) {
     }
   };
   resize();
+  const kick = () => { if (!st.dead && !st.raf) st.raf = requestAnimationFrame(tick); };
+  if (_dropSheetOk) kick();
+  else _dropSheetWait.push(kick);
   st.raf = requestAnimationFrame(tick);
   if (typeof ResizeObserver !== 'undefined' && !el._heroRainRo) {
     el._heroRainRo = new ResizeObserver(() => { try { resize(); } catch (_) {} });
     try { el._heroRainRo.observe(el); } catch (_) {}
   }
 }
+
 function bindMatchHeroWeather(root) {
   const scope = root || document;
   const heroes = scope.querySelectorAll ? scope.querySelectorAll('.hero.hero--weather') : [];
