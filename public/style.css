@@ -8403,7 +8403,7 @@ html[data-theme="pitch"] .lu-teamseg button.on{background:#eef1f8;color:#121826}
     radial-gradient(ellipse 66% 120% at 87% 52%, rgb(37 47 51) 0%, rgb(32 40 44) 18%, rgb(26 33 37) 33%, rgb(20 24 27) 50%, rgb(14 16 19) 67%, rgb(11 13 16) 82%, rgb(10 11 14) 100%),
     #0A0B0E !important;
   color: #fff;
-  padding: 0 10px 16px;
+  padding: 0 16px 26px;
   position: relative;
   overflow: hidden;
 }
@@ -8513,28 +8513,83 @@ html[data-theme="pitch"] .hero.hero--weather {
 .hero.hero--weather .mid small {
   text-shadow: 0 1px 2px rgba(0, 0, 0, .55), 0 2px 10px rgba(0, 0, 0, .35);
 }
-.hero.hero--weather .meta { opacity: .95; gap: 8px; flex-wrap: wrap; }
+.hero.hero--weather .meta {
+  opacity: .95;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  margin-top: 2px;
+}
+.hero.hero--weather.hero--edge .badge.lg,
+.hero.hero--weather.hero--edge .tm .badge.lg.crest {
+  width: 84px;
+  height: 84px;
+}
+.hero.hero--weather .teams {
+  margin-top: 16px;
+  column-gap: 8px;
+}
+.hero.hero--weather .tm {
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+}
+.hero.hero--weather .tm span { line-height: 1.25; }
+.hero.hero--weather .tm small { font-size: 11px; opacity: .78; font-weight: 400; }
+.hero.hero--weather .mid .vs { font-size: 22px; }
+.hero.hero--weather .mid .score { font-size: 32px; }
+.hero.hero--weather .tm-tick {
+  display: block;
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+  margin-top: 2px;
+  background: #d9c48a;
+  flex: none;
+}
+.hero.hero--weather .tm-tick[hidden] { display: none; }
 .hero-lg {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  gap: 8px;
   min-width: 0;
-  max-width: 46vw;
+  max-width: 92vw;
+}
+.hero-lg-plate {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(236, 232, 224, .92);
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .28);
+  overflow: hidden;
 }
 .hero-lg-ico {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
   flex: none;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .45));
+  filter: none;
 }
 .hero-lg-name {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   color: #fff;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.hero-lg-date {
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(220, 226, 234, .88);
+  letter-spacing: .02em;
 }
 .hero.hero--weather .tag {
   background: rgba(255, 255, 255, .16);

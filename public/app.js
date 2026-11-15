@@ -764,7 +764,8 @@ function badge(name, cls = '', logo, opts) {
   const lazyAttr = (opts && opts.eager) ? '' : ' loading="lazy"';
   const dataAttrs = ` data-crest-key="${esc(ckey)}" data-crest-logo="${esc(logo)}"${tid ? ` data-team-id="${esc(tid)}"` : ''}`;
   const onerr = "var img=this,p=img.parentNode;if(!p)return;var fb=img.getAttribute('data-fb');if(fb&&!img.dataset.triedFb){img.dataset.triedFb=1;img.src=fb;return;}if(p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter " + cls + "';p.style.background='" + bg + "';p.textContent=p.dataset.letter||'';img.remove()";
-  return `<span class="badge crest ${cls}" data-letter="${letter}"${dataAttrs}><img alt="" width="160" height="160" decoding="async"${lazyAttr}${fbAttr} src="${src}" onerror="${onerr}"></span>`;
+  const corsAttr = /^https?:/i.test(srcUrl) ? ' crossorigin="anonymous"' : '';
+  return `<span class="badge crest ${cls}" data-letter="${letter}"${dataAttrs}><img alt="" width="160" height="160" decoding="async"${lazyAttr}${fbAttr}${corsAttr} src="${src}" onerror="${onerr}"></span>`;
 }
 const shortRk = s => (String(s || '').length <= 5 ? esc(s) : ''); // long group ranks like [亚运男足1] only shown on the detail page
 const lgTag = m => homeTheme() === 'pitch'
@@ -11469,8 +11470,8 @@ try { window.setMatchWeatherType = setMatchWeatherType; } catch (_) {}
 /* Scheme B mute: HSV sat=0.28 val=0.20, concrete space-separated rgb (no var(), no commas). */
 const HERO_GLOW_HOME = 'rgb(51 47 37)';
 const HERO_GLOW_AWAY = 'rgb(37 47 51)';
-const HERO_GLOW_SAT = 0.28;
-const HERO_GLOW_VAL = 0.20;
+const HERO_GLOW_SAT = 0.34;
+const HERO_GLOW_VAL = 0.24;
 const HERO_GLOW_BASE = [10, 11, 14];
 function formatHeroRgb(r, g, b) {
   return 'rgb(' + Math.round(r) + ' ' + Math.round(g) + ' ' + Math.round(b) + ')';
@@ -11529,6 +11530,20 @@ function paintHeroGlow(hero, home, away) {
   const bg = heroGlowGradient(home || HERO_GLOW_HOME, away || HERO_GLOW_AWAY) + ', #0A0B0E';
   try { hero.style.setProperty('background', bg, 'important'); } catch (_) { hero.style.background = bg; }
 }
+function hsvToRgbCss(hh, s, v) {
+  const h = ((Number(hh) % 360) + 360) % 360 / 60;
+  const c = v * s;
+  const x = c * (1 - Math.abs(h % 2 - 1));
+  const m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (h < 1) { r = c; g = x; }
+  else if (h < 2) { r = x; g = c; }
+  else if (h < 3) { g = c; b = x; }
+  else if (h < 4) { g = x; b = c; }
+  else if (h < 5) { r = x; b = c; }
+  else { r = c; b = x; }
+  return formatHeroRgb((r + m) * 255, (g + m) * 255, (b + m) * 255);
+}
 function muteRgbForGlow(r, g, b) {
   r /= 255; g /= 255; b /= 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
@@ -11542,19 +11557,44 @@ function muteRgbForGlow(r, g, b) {
     hh *= 60;
     if (hh < 0) hh += 360;
   }
-  if (!(sat > 0.1)) return null;
-  return muteHsvToGlow(hh);
+  if (!(sat > 0.08)) return null;
+  return { glow: muteHsvToGlow(hh), accent: hsvToRgbCss(hh, 0.70, 0.78), hue: hh };
 }
 function sampleImgGlow(img) {
+  const pack = sampleImgGlowPack(img);
+  return pack ? pack.glow : null;
+}
+function hueDelta(a, b) {
+  let d = Math.abs(Number(a) - Number(b)) % 360;
+  if (d > 180) d = 360 - d;
+  return d;
+}
+function packFromHue(hh) {
+  if (!Number.isFinite(Number(hh))) return null;
+  return { glow: muteHsvToGlow(hh), accent: hsvToRgbCss(hh, 0.70, 0.78), hue: ((Number(hh) % 360) + 360) % 360 };
+}
+function pickHueFromClusters(clusters, avoidHue) {
+  if (!clusters || !clusters.length) return null;
+  const maxW = clusters[0].weight;
+  const cands = clusters.filter((c) => c.weight >= maxW * 0.45);
+  if (avoidHue == null || avoidHue === '') return cands[0].hue;
+  let best = cands[0], bestD = -1;
+  for (let i = 0; i < cands.length; i++) {
+    const d = hueDelta(cands[i].hue, avoidHue);
+    if (d > bestD) { bestD = d; best = cands[i]; }
+  }
+  return best.hue;
+}
+function sampleImgGlowPack(img) {
   try {
     if (!img || !img.naturalWidth) return null;
-    const w = 24, h = 24;
+    const w = 48, h = 48, bins = 24;
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     const ctx = c.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(img, 0, 0, w, h);
     const data = ctx.getImageData(0, 0, w, h).data;
-    let r = 0, g = 0, b = 0, n = 0;
+    const acc = new Array(bins).fill(0);
     for (let i = 0; i < data.length; i += 4) {
       if (data[i + 3] < 40) continue;
       const rr = data[i], gg = data[i + 1], bb = data[i + 2];
@@ -11562,11 +11602,27 @@ function sampleImgGlow(img) {
       if (lum > 245 || lum < 14) continue;
       const mx = Math.max(rr, gg, bb), mn = Math.min(rr, gg, bb);
       const sat = mx === 0 ? 0 : (mx - mn) / mx;
-      const wt = 0.35 + sat * 1.4;
-      r += rr * wt; g += gg * wt; b += bb * wt; n += wt;
+      if (sat < 0.12) continue;
+      let hh = 0;
+      const d = mx - mn;
+      if (d !== 0) {
+        if (mx === rr) hh = ((gg - bb) / d) % 6;
+        else if (mx === gg) hh = (bb - rr) / d + 2;
+        else hh = (rr - gg) / d + 4;
+        hh *= 60;
+        if (hh < 0) hh += 360;
+      }
+      acc[Math.floor(hh / 360 * bins) % bins] += 0.2 + sat * 1.6;
     }
-    if (n < 4) return null;
-    return muteRgbForGlow(r / n, g / n, b / n);
+    const clusters = acc.map((weight, i) => ({ hue: (i + 0.5) * 360 / bins, weight }))
+      .filter((x) => x.weight > 0)
+      .sort((a, b) => b.weight - a.weight);
+    if (!clusters.length || clusters[0].weight < 4) return null;
+    const pack = packFromHue(clusters[0].hue);
+    if (!pack) return null;
+    pack.clusters = clusters.slice(0, 4);
+    pack.sampled = true;
+    return pack;
   } catch (_) { return null; }
 }
 function teamGlowSeed(x, side) {
@@ -11574,21 +11630,132 @@ function teamGlowSeed(x, side) {
   const name = side === 'away' ? (x && x.away) : (x && x.home);
   return String(id || name || side);
 }
+function glowEntry(val, seed) {
+  if (val && typeof val === 'object' && val.glow) return val;
+  if (typeof val === 'string' && val) return { glow: val, accent: '', sampled: false };
+  return { glow: hashTeamGlow(seed), accent: '', sampled: false };
+}
 function teamGlowCached(x, side) {
   S.teamGlowColors = S.teamGlowColors || {};
   const key = teamGlowSeed(x, side);
-  return S.teamGlowColors[key] || hashTeamGlow(key);
+  return glowEntry(S.teamGlowColors[key], key).glow;
+}
+function teamAccentCached(x, side) {
+  S.teamGlowColors = S.teamGlowColors || {};
+  const key = teamGlowSeed(x, side);
+  return glowEntry(S.teamGlowColors[key], key).accent || '';
+}
+function rememberTeamGlow(x, side, pack) {
+  if (!pack || !pack.glow) return;
+  S.teamGlowColors = S.teamGlowColors || {};
+  S.teamGlowColors[teamGlowSeed(x, side)] = { glow: pack.glow, accent: pack.accent || '', sampled: true };
+}
+function crestSampleSrc(logo, teamId) {
+  const tid = teamId != null && teamId !== '' ? String(teamId) : '';
+  const bundled = tid && typeof bundledCrestPath === 'function' ? bundledCrestPath(tid) : '';
+  if (bundled) return bundled;
+  const s = String(logo || '');
+  if (!s) return '';
+  if (s.startsWith('data:') || s.startsWith('blob:') || s.startsWith('/')) return s;
+  if (/\/api\/logo\?/.test(s)) return /^https?:/i.test(s) ? s : (API + s);
+  return API + '/api/logo?url=' + encodeURIComponent(s);
+}
+function fetchCrestGlow(logo, teamId) {
+  const src = crestSampleSrc(logo, teamId);
+  if (!src) return Promise.resolve(null);
+  return fetch(src, { mode: 'cors', cache: 'force-cache', credentials: 'omit' }).then((r) => {
+    if (!r.ok) return null;
+    return r.blob();
+  }).then((blob) => {
+    if (!blob) return null;
+    const url = URL.createObjectURL(blob);
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const pack = sampleImgGlowPack(img);
+        try { URL.revokeObjectURL(url); } catch (_) {}
+        resolve(pack);
+      };
+      img.onerror = () => {
+        try { URL.revokeObjectURL(url); } catch (_) {}
+        resolve(null);
+      };
+      img.src = url;
+    });
+  }).catch(() => null);
+}
+function paintHeroTicks(hero, homeAccent, awayAccent) {
+  if (!hero) return;
+  const ticks = hero.querySelectorAll('.tm-tick');
+  ticks.forEach((el, i) => {
+    const col = i === 0 ? homeAccent : awayAccent;
+    if (col) {
+      el.style.background = col;
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
+  });
+}
+/* Official competition badges already used by the product (API-Football / SportMonks CDN).
+   Only names we can resolve to a verified logo; do not invent a mark. */
+const LEAGUE_LOGO_BY_NAME = {
+  '英超': 'https://media.api-sports.io/football/leagues/39.png',
+  '西甲': 'https://media.api-sports.io/football/leagues/140.png',
+  '德甲': 'https://media.api-sports.io/football/leagues/78.png',
+  '意甲': 'https://media.api-sports.io/football/leagues/135.png',
+  '法甲': 'https://media.api-sports.io/football/leagues/61.png',
+  '欧冠': 'https://media.api-sports.io/football/leagues/2.png',
+  '中超': 'https://media.api-sports.io/football/leagues/169.png',
+  '英冠': 'https://media.api-sports.io/football/leagues/40.png',
+  '荷甲': 'https://media.api-sports.io/football/leagues/88.png',
+  '欧罗巴': 'https://media.api-sports.io/football/leagues/3.png',
+  '欧协联': 'https://media.api-sports.io/football/leagues/848.png',
+  '日职': 'https://media.api-sports.io/football/leagues/98.png',
+  '日乙': 'https://media.api-sports.io/football/leagues/99.png',
+  '日联赛杯': 'https://cdn.sportmonks.com/images/soccer/leagues/7/1031.png',
+  '欧国联': 'https://media.api-sports.io/football/leagues/5.png',
+  '韩职': 'https://media.api-sports.io/football/leagues/292.png',
+  '瑞超': 'https://media.api-sports.io/football/leagues/207.png',
+  '葡超': 'https://media.api-sports.io/football/leagues/94.png',
+  '巴甲': 'https://media.api-sports.io/football/leagues/71.png',
+  '澳超': 'https://media.api-sports.io/football/leagues/188.png',
+  '挪超': 'https://media.api-sports.io/football/leagues/103.png',
+  '巴西杯': 'https://media.api-sports.io/football/leagues/73.png',
+  '美职': 'https://media.api-sports.io/football/leagues/253.png',
+  '芬超': 'https://media.api-sports.io/football/leagues/244.png',
+  '法乙': 'https://media.api-sports.io/football/leagues/62.png',
+  '德乙': 'https://media.api-sports.io/football/leagues/79.png',
+  '荷乙': 'https://media.api-sports.io/football/leagues/89.png',
+  '亚冠精英': 'https://media.api-sports.io/football/leagues/17.png'
+};
+function leagueHeroLogoUrl(m) {
+  const direct = m && (m.leagueLogo || m.leagueIcon || m.leagueCrest || '');
+  if (direct) return String(direct);
+  const name = m && m.league;
+  return (name && LEAGUE_LOGO_BY_NAME[name]) || '';
+}
+function formatHeroKickoff(m) {
+  const raw = (m && (m.date || issueDate(m))) || '';
+  const day = String(raw).replace(/-/g, '/');
+  const tm = m && m.time ? String(m.time).slice(0, 5) : '';
+  if (!day && !tm) return '';
+  return (day + (tm ? '  ' + tm : '') + '  北京时间').trim();
 }
 function leagueHeroMark(m) {
-  const logo = m && (m.leagueLogo || m.leagueIcon || m.leagueCrest || '');
   const name = (m && m.league) || '';
-  if (logo && name) {
+  const num = (m && m.num) || '';
+  const title = name && num ? (name + ' · ' + num) : (name || num);
+  const logo = leagueHeroLogoUrl(m);
+  let ico = '';
+  if (logo) {
     const src = String(logo).startsWith('data:') || String(logo).startsWith('blob:') || String(logo).startsWith('/')
       ? logo
       : (API + '/api/logo?url=' + encodeURIComponent(logo));
-    return `<span class="hero-lg"><img class="hero-lg-ico" alt="" width="18" height="18" src="${esc(src)}" onerror="this.remove()"><span class="hero-lg-name">${esc(name)}</span></span>`;
+    ico = `<span class="hero-lg-plate"><img class="hero-lg-ico" alt="" width="40" height="40" src="${esc(src)}" onerror="var p=this.parentNode;if(p)p.remove();"></span>`;
   }
-  return lgTag(m);
+  const when = formatHeroKickoff(m);
+  return `<div class="hero-lg">${ico}<span class="hero-lg-name">${esc(title)}</span></div>${when ? `<div class="hero-lg-date">${esc(when)}</div>` : ''}`;
 }
 function syncHeroWeatherMotion() {
   const off = !!(document.hidden || (typeof route === 'function' && route().name !== 'match'));
@@ -11603,22 +11770,39 @@ function bindMatchHeroWeather(root) {
       || (S.results || []).find((z) => String(z.id) === id)
       || (typeof loadFxShell === 'function' && loadFxShell(id))
       || { id };
-    const homeCol = teamGlowCached(x, 'home');
-    const awayCol = teamGlowCached(x, 'away');
-    paintHeroGlow(hero, homeCol, awayCol);
+    paintHeroGlow(hero, teamGlowCached(x, 'home'), teamGlowCached(x, 'away'));
+    paintHeroTicks(hero, teamAccentCached(x, 'home'), teamAccentCached(x, 'away'));
+    const packs = { home: null, away: null };
+    const commitPair = () => {
+      const hp = packs.home, ap = packs.away;
+      if (hp && ap && hp.clusters && ap.clusters) {
+        const hh = pickHueFromClusters(hp.clusters, null);
+        const ah = pickHueFromClusters(ap.clusters, hh);
+        rememberTeamGlow(x, 'home', Object.assign({}, packFromHue(hh), { clusters: hp.clusters, sampled: true }));
+        rememberTeamGlow(x, 'away', Object.assign({}, packFromHue(ah), { clusters: ap.clusters, sampled: true }));
+      } else {
+        if (hp) rememberTeamGlow(x, 'home', hp);
+        if (ap) rememberTeamGlow(x, 'away', ap);
+      }
+      paintHeroGlow(hero, teamGlowCached(x, 'home'), teamGlowCached(x, 'away'));
+      paintHeroTicks(hero, teamAccentCached(x, 'home'), teamAccentCached(x, 'away'));
+    };
+    const applyPack = (side, pack) => {
+      if (!pack || !pack.glow) return;
+      packs[side] = pack;
+      commitPair();
+    };
     const imgs = hero.querySelectorAll('.tm .badge.crest img');
     imgs.forEach((img, i) => {
       const side = i === 0 ? 'home' : 'away';
-      const apply = () => {
-        const col = sampleImgGlow(img);
-        if (!col) return;
-        S.teamGlowColors = S.teamGlowColors || {};
-        S.teamGlowColors[teamGlowSeed(x, side)] = col;
-        paintHeroGlow(hero, teamGlowCached(x, 'home'), teamGlowCached(x, 'away'));
-      };
-      if (img.complete && img.naturalWidth) apply();
-      else img.addEventListener('load', apply, { once: true });
+      const tryImg = () => applyPack(side, sampleImgGlowPack(img));
+      if (img.complete && img.naturalWidth) tryImg();
+      else img.addEventListener('load', tryImg, { once: true });
     });
+    const homeLogo = x.homeLogo || (imgs[0] && imgs[0].parentNode && imgs[0].parentNode.getAttribute('data-crest-logo')) || '';
+    const awayLogo = x.awayLogo || (imgs[1] && imgs[1].parentNode && imgs[1].parentNode.getAttribute('data-crest-logo')) || '';
+    fetchCrestGlow(homeLogo, x.homeTeamId).then((pack) => applyPack('home', pack));
+    fetchCrestGlow(awayLogo, x.awayTeamId).then((pack) => applyPack('away', pack));
   });
   syncHeroWeatherMotion();
 }
@@ -11898,10 +12082,10 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
   const awayGlow = teamGlowCached(x, 'away');
   const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
   const heroBg = heroGlowGradient(homeGlow, awayGlow) + ', #0A0B0E';
-  let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="background:${esc(heroBg)}">${wxLayer}${nav}<div class="meta">${leagueHeroMark(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
-    <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo)}<em class="tm-mv" id="tm-mv-h-${esc(id)}" hidden></em><span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small></div>
+  let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="background:${esc(heroBg)}">${wxLayer}${nav}<div class="meta">${leagueHeroMark(x)}${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
+    <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo, { teamId: x.homeTeamId, eager: true })}<em class="tm-mv" id="tm-mv-h-${esc(id)}" hidden></em><span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small><i class="tm-tick" hidden></i></div>
     <div class="mid">${mid}</div>
-    <div class="tm">${badge(x.away, 'lg', x.awayLogo)}<em class="tm-mv" id="tm-mv-a-${esc(id)}" hidden></em><span>${esc(x.away)}</span><small>客队 ${esc(x.awayRank || '')}</small></div></div></div>`;
+    <div class="tm">${badge(x.away, 'lg', x.awayLogo, { teamId: x.awayTeamId, eager: true })}<em class="tm-mv" id="tm-mv-a-${esc(id)}" hidden></em><span>${esc(x.away)}</span><small>客队 ${esc(x.awayRank || '')}</small><i class="tm-tick" hidden></i></div></div></div>`;
   return h;
 }
 
