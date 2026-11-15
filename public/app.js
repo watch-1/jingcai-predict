@@ -11466,18 +11466,68 @@ function setMatchWeatherType(id, type) {
   return t;
 }
 try { window.setMatchWeatherType = setMatchWeatherType; } catch (_) {}
+/* Scheme B mute: HSV sat=0.28 val=0.20, concrete space-separated rgb (no var(), no commas). */
+const HERO_GLOW_HOME = 'rgb(51 47 37)';
+const HERO_GLOW_AWAY = 'rgb(37 47 51)';
+const HERO_GLOW_SAT = 0.28;
+const HERO_GLOW_VAL = 0.20;
+function formatHeroRgb(r, g, b) {
+  return 'rgb(' + Math.round(r) + ' ' + Math.round(g) + ' ' + Math.round(b) + ')';
+}
+function heroColorAlpha(color, a) {
+  const s = String(color || '');
+  if (s.charAt(s.length - 1) === ')') return s.slice(0, -1) + ' / ' + a + ')';
+  return s;
+}
+function muteHsvToGlow(hue) {
+  const s = HERO_GLOW_SAT, v = HERO_GLOW_VAL;
+  const hh = ((Number(hue) % 360) + 360) % 360 / 60;
+  const c = v * s;
+  const x = c * (1 - Math.abs(hh % 2 - 1));
+  const m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (hh < 1) { r = c; g = x; }
+  else if (hh < 2) { r = x; g = c; }
+  else if (hh < 3) { g = c; b = x; }
+  else if (hh < 4) { g = x; b = c; }
+  else if (hh < 5) { r = x; b = c; }
+  else { r = c; b = x; }
+  return formatHeroRgb((r + m) * 255, (g + m) * 255, (b + m) * 255);
+}
 function hashTeamGlow(seed) {
   let h = 0;
-  for (const c of String(seed || '')) h = (h * 33 + c.charCodeAt(0)) >>> 0;
-  return 'hsla(' + (h % 360) + ', 64%, 54%, .86)';
+  for (const ch of String(seed || '')) h = (h * 33 + ch.charCodeAt(0)) >>> 0;
+  return muteHsvToGlow(h % 360);
+}
+/* 3-sigma ellipse (66% x 120%) at the background_b() centers 13%/52% and 87%/52%. */
+function heroGlowGradient(home, away) {
+  const h = home || HERO_GLOW_HOME;
+  const a = away || HERO_GLOW_AWAY;
+  const stops = (c) => c + ' 0%, ' + heroColorAlpha(c, '.61') + ' 33%, ' + heroColorAlpha(c, '.14') + ' 67%, transparent 100%';
+  return 'radial-gradient(ellipse 66% 120% at 13% 52%, ' + stops(h) + '),'
+    + 'radial-gradient(ellipse 66% 120% at 87% 52%, ' + stops(a) + ')';
+}
+function heroOrbGradient(color) {
+  const c = color || HERO_GLOW_HOME;
+  return 'radial-gradient(ellipse 50% 50% at 50% 50%, ' + c + ' 0%, '
+    + heroColorAlpha(c, '.61') + ' 33%, ' + heroColorAlpha(c, '.14') + ' 67%, transparent 100%)';
+}
+function paintHeroGlow(hero, home, away) {
+  if (!hero) return;
+  const glow = hero.querySelector('.hero-wx-glow');
+  const homeOrb = hero.querySelector('.hero-wx-orb--home');
+  const awayOrb = hero.querySelector('.hero-wx-orb--away');
+  /* Orbs paint the wash. Keep the container background empty so two Gaussians do not stack. */
+  if (glow) glow.style.background = 'none';
+  if (homeOrb) homeOrb.style.background = heroOrbGradient(home || HERO_GLOW_HOME);
+  if (awayOrb) awayOrb.style.background = heroOrbGradient(away || HERO_GLOW_AWAY);
 }
 function muteRgbForGlow(r, g, b) {
   r /= 255; g /= 255; b /= 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
   const d = max - min;
   let hh = 0;
-  const l = (max + min) / 2;
-  let sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  const sat = max === 0 ? 0 : d / max;
   if (d !== 0) {
     if (max === r) hh = ((g - b) / d) % 6;
     else if (max === g) hh = (b - r) / d + 2;
@@ -11486,9 +11536,7 @@ function muteRgbForGlow(r, g, b) {
     if (hh < 0) hh += 360;
   }
   if (!(sat > 0.1)) return null;
-  sat = Math.max(0.52, Math.min(0.78, sat * 1.2));
-  const light = Math.max(0.46, Math.min(0.60, 0.38 + l * 0.35));
-  return 'hsla(' + Math.round(hh) + ', ' + Math.round(sat * 100) + '%, ' + Math.round(light * 100) + '%, .86)';
+  return muteHsvToGlow(hh);
 }
 function sampleImgGlow(img) {
   try {
@@ -11548,8 +11596,9 @@ function bindMatchHeroWeather(root) {
       || (S.results || []).find((z) => String(z.id) === id)
       || (typeof loadFxShell === 'function' && loadFxShell(id))
       || { id };
-    hero.style.setProperty('--hero-home', teamGlowCached(x, 'home'));
-    hero.style.setProperty('--hero-away', teamGlowCached(x, 'away'));
+    const homeCol = teamGlowCached(x, 'home');
+    const awayCol = teamGlowCached(x, 'away');
+    paintHeroGlow(hero, homeCol, awayCol);
     const imgs = hero.querySelectorAll('.tm .badge.crest img');
     imgs.forEach((img, i) => {
       const side = i === 0 ? 'home' : 'away';
@@ -11558,7 +11607,7 @@ function bindMatchHeroWeather(root) {
         if (!col) return;
         S.teamGlowColors = S.teamGlowColors || {};
         S.teamGlowColors[teamGlowSeed(x, side)] = col;
-        hero.style.setProperty(side === 'away' ? '--hero-away' : '--hero-home', col);
+        paintHeroGlow(hero, teamGlowCached(x, 'home'), teamGlowCached(x, 'away'));
       };
       if (img.complete && img.naturalWidth) apply();
       else img.addEventListener('load', apply, { once: true });
@@ -11840,8 +11889,8 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
   const wx = matchWeatherType(x);
   const homeGlow = teamGlowCached(x, 'home');
   const awayGlow = teamGlowCached(x, 'away');
-  const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
-  let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="--hero-home:${esc(homeGlow)};--hero-away:${esc(awayGlow)}">${wxLayer}${nav}<div class="meta">${leagueHeroMark(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
+  const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow" style="background:none"><div class="hero-wx-orb hero-wx-orb--home" style="background:${esc(heroOrbGradient(homeGlow))}"></div><div class="hero-wx-orb hero-wx-orb--away" style="background:${esc(heroOrbGradient(awayGlow))}"></div></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
+  let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}">${wxLayer}${nav}<div class="meta">${leagueHeroMark(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
     <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo)}<em class="tm-mv" id="tm-mv-h-${esc(id)}" hidden></em><span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small></div>
     <div class="mid">${mid}</div>
     <div class="tm">${badge(x.away, 'lg', x.awayLogo)}<em class="tm-mv" id="tm-mv-a-${esc(id)}" hidden></em><span>${esc(x.away)}</span><small>客队 ${esc(x.awayRank || '')}</small></div></div></div>`;
