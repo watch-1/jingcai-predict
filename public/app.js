@@ -9034,26 +9034,13 @@ function predTabHtml(m) {
   if (!m || !m.id) {
     return `<div class="dsec reason"><h3>预测分析</h3><p class="note">暂无可用的场次信息。</p></div>`;
   }
-  const fin = isMatchFinished(m);
-  const rep = m && S.predictCache && S.predictCache[String(m.id)];
-  const pr = m ? effectivePredict(m) : null;
+  // 358: 预测 tab keeps 赛前参考 + 个人知识库 only. Still call loadPredictReport
+  // so 赛前参考 can use model/oddsEdge; do not inject the old pr-report body
+  // (including the post-kickoff 赛前快照 report).
   let h = prematchRefHtml(m);
-  if (fin) {
-    h += `<div class="dsec reason pr-snap-hint"><h3>预测分析</h3><p class="note">【赛前快照·完场调试】以下为开赛前信息重建的综合简报；赔率来自赛程在售快照（非滚球）；不含本场赛果后情报。首次打开可能需稍候生成。</p></div>`;
-  }
-  // 1.9.127: slim cache (ok, no html) → still loading, not 「未知」
-  if (!rep || (rep.ok && !rep.html)) {
-    h += `<div class="dsec reason"><h3>${fin ? '赛前快照' : '预测'}</h3><div class="spinner"></div><p class="note">正在整理胜平负、让球对照、大小球、半全场、伤停和近况攻防习惯…</p></div>`;
-  } else if (predictReportFull(rep)) {
-    h += `<div class="dsec reason pr-report">${productizePredictHtml(rep.html)}</div>`;
-    h += `<div class="pr-src-bar"><span>更新于 ${esc(rep.generatedAtLocal || '')}</span>
-      <button type="button" class="btn ghost sm" data-act="refreshPredict" data-id="${esc(m.id)}">刷新报告</button></div>`;
-  } else {
-    h += `<div class="dsec reason"><h3>赛前情报简报</h3><p class="note">综合报告暂不可用（${esc(rep.error || rep.reason || '加载失败')}），先展示赔率参考层。</p>${m ? reasoningOddsFallback(m).join('') : ''}</div>`;
-  }
   h += `<div class="dsec kb-match-entry">
     <h3>个人知识库预测</h3>
-    <p class="note" style="margin:0 0 10px">与上方「平台赛前简报」分开：仅在你主动选择知识条目后，按你的笔记调整参考概率。</p>
+    <p class="note" style="margin:0 0 10px">仅在你主动选择知识条目后，按你的笔记调整参考概率。</p>
     <button type="button" class="btn pri block" data-go="${loggedIn() ? ('#/kb/predict/' + encodeURIComponent(String(m.id))) : '#/login'}">用我的知识库预测</button>
   </div>`;
   return h;
@@ -11450,6 +11437,7 @@ function dataTabHtml(x) {
     + `<div id="sm-form-${key}" class="sm-slot"><p class="note">正在整理球员近况…</p></div>`
     + `<div id="sm-player-radar-${key}" class="sm-slot"></div>`
     + `<div id="sm-xg-${key}" class="sm-slot"></div>`
+    + `<div id="sm-goal-clock-${key}" class="sm-slot"></div>`
     + `<div id="sm-bars-${key}" class="sm-slot"><p class="note">正在整理球队统计…</p></div>`
     + `<div id="sm-growth-${key}" class="sm-slot"></div>`;
 }
@@ -11481,7 +11469,7 @@ try { window.setMatchWeatherType = setMatchWeatherType; } catch (_) {}
 function hashTeamGlow(seed) {
   let h = 0;
   for (const c of String(seed || '')) h = (h * 33 + c.charCodeAt(0)) >>> 0;
-  return 'hsla(' + (h % 360) + ', 30%, 28%, .62)';
+  return 'hsla(' + (h % 360) + ', 64%, 54%, .86)';
 }
 function muteRgbForGlow(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -11497,8 +11485,10 @@ function muteRgbForGlow(r, g, b) {
     hh *= 60;
     if (hh < 0) hh += 360;
   }
-  sat = Math.max(0.22, Math.min(0.40, sat * 0.85 || 0.28));
-  return 'hsla(' + Math.round(hh) + ', ' + Math.round(sat * 100) + '%, 28%, .62)';
+  if (!(sat > 0.1)) return null;
+  sat = Math.max(0.52, Math.min(0.78, sat * 1.2));
+  const light = Math.max(0.46, Math.min(0.60, 0.38 + l * 0.35));
+  return 'hsla(' + Math.round(hh) + ', ' + Math.round(sat * 100) + '%, ' + Math.round(light * 100) + '%, .86)';
 }
 function sampleImgGlow(img) {
   try {
@@ -11597,20 +11587,35 @@ function prefPct(v) {
   if (!Number.isFinite(n)) return '—';
   return (n * 100).toFixed(n >= 0.1 || n === 0 ? 0 : 1) + '%';
 }
+function prefHas(v) {
+  return v != null && v !== '' && Number.isFinite(Number(v));
+}
 function prefBar(v, cls) {
-  const n = Number(v);
-  const w = Number.isFinite(n) ? Math.max(0, Math.min(100, n * 100)) : 0;
-  return `<div class="pref-bar${cls ? ' ' + cls : ''}"><i style="width:${w.toFixed(1)}%"></i></div>`;
+  const ok = prefHas(v);
+  const w = ok ? Math.max(0, Math.min(100, Number(v) * 100)) : 0;
+  return `<div class="pref-bar${cls ? ' ' + cls : ''}${ok ? '' : ' empty'}"><i style="width:${w.toFixed(1)}%"></i></div>`;
 }
 function prefRow(lab, v, cls) {
   return `<div class="pref-row"><span class="lab">${esc(lab)}</span>${prefBar(v, cls)}<b class="num">${esc(prefPct(v))}</b></div>`;
+}
+function prefTwinRow(lab, marketV, modelV) {
+  const hasM = prefHas(marketV);
+  const hasMo = prefHas(modelV);
+  if (!hasM && !hasMo) return '';
+  if (hasM && hasMo) {
+    return `<div class="pref-row pref-row--twin"><span class="lab">${esc(lab)}</span><div class="pref-twin-bars">`
+      + `<div class="pref-twin-line">${prefBar(marketV)}<b class="num">${esc(prefPct(marketV))}</b></div>`
+      + `<div class="pref-twin-line">${prefBar(modelV, 'model')}<b class="num">${esc(prefPct(modelV))}</b></div>`
+      + `</div></div>`;
+  }
+  return prefRow(lab, hasM ? marketV : modelV, hasM ? '' : 'model');
 }
 function prefCell(lab, v, cls) {
   return `<div class="pref-cell"><span>${esc(lab)}</span>${prefBar(v, cls)}<b class="num">${esc(prefPct(v))}</b></div>`;
 }
 function prefBlock(title, src, body) {
   if (!body) return '';
-  return `<div class="pref-block"><div class="pref-hd">${esc(title)}<small>${esc(src)}</small></div>${body}</div>`;
+  return `<div class="pref-block"><div class="pref-hd">${esc(title)}${src ? `<small>${esc(src)}</small>` : ''}</div>${body}</div>`;
 }
 function prematchRefHtml(m) {
   if (!m) return '';
@@ -11642,71 +11647,159 @@ function prematchRefHtml(m) {
   const over25 = edge && edge.over25 != null && Number.isFinite(Number(edge.over25)) ? Number(edge.over25) : null;
 
   let body = '';
-  // 胜平负
+  let mixed = false;
+  // 胜平负 — one row per outcome; 盘口/模型 share the row when both exist
   if (marketHad || modelWdl) {
-    let rows = '';
     if (marketHad && modelWdl) {
-      rows += prefRow('主胜 · 盘口', marketHad.h) + prefRow('主胜 · 模型', modelWdl.h, 'model');
-      rows += prefRow('平局 · 盘口', marketHad.d) + prefRow('平局 · 模型', modelWdl.d, 'model');
-      rows += prefRow('客胜 · 盘口', marketHad.a) + prefRow('客胜 · 模型', modelWdl.a, 'model');
-      body += prefBlock('胜平负', '盘口去水隐含 · 站内模型', rows);
+      mixed = true;
+      body += prefBlock('胜平负', '', prefTwinRow('主胜', marketHad.h, modelWdl.h) + prefTwinRow('平局', marketHad.d, modelWdl.d) + prefTwinRow('客胜', marketHad.a, modelWdl.a));
     } else if (marketHad) {
-      body += prefBlock('胜平负', '盘口去水隐含', prefRow('主胜', marketHad.h) + prefRow('平局', marketHad.d) + prefRow('客胜', marketHad.a));
+      body += prefBlock('胜平负', '盘口', prefRow('主胜', marketHad.h) + prefRow('平局', marketHad.d) + prefRow('客胜', marketHad.a));
     } else {
-      body += prefBlock('胜平负', '站内模型', prefRow('主胜', modelWdl.h, 'model') + prefRow('平局', modelWdl.d, 'model') + prefRow('客胜', modelWdl.a, 'model'));
+      body += prefBlock('胜平负', '模型', prefRow('主胜', modelWdl.h, 'model') + prefRow('平局', modelWdl.d, 'model') + prefRow('客胜', modelWdl.a, 'model'));
     }
   }
   // 让球
   if (marketHhad || modelRq) {
     const labs = { h: '让胜', d: '让平', a: '让负' };
-    let rows = '';
     if (marketHhad && modelRq) {
+      mixed = true;
       const byK = {};
       for (const r of modelRq.rows) if (r && r.k) byK[r.k] = r.model;
-      for (const k of ['h', 'd', 'a']) {
-        rows += prefRow(labs[k] + ' · 盘口', marketHhad[k]);
-        rows += prefRow(labs[k] + ' · 模型', byK[k], 'model');
-      }
-      body += prefBlock(hhadTitle, '盘口去水隐含 · 站内模型', rows);
+      let rows = '';
+      for (const k of ['h', 'd', 'a']) rows += prefTwinRow(labs[k], marketHhad[k], byK[k]);
+      body += prefBlock(hhadTitle, '', rows);
     } else if (marketHhad) {
-      body += prefBlock(hhadTitle, '盘口去水隐含', prefRow('让胜', marketHhad.h) + prefRow('让平', marketHhad.d) + prefRow('让负', marketHhad.a));
+      body += prefBlock(hhadTitle, '盘口', prefRow('让胜', marketHhad.h) + prefRow('让平', marketHhad.d) + prefRow('让负', marketHhad.a));
     } else {
       const rows2 = modelRq.rows.map((r) => prefRow(r.lab || labs[r.k] || r.k, r.model, 'model')).join('');
-      body += prefBlock(hhadTitle, '站内模型', rows2);
+      body += prefBlock(hhadTitle, '模型', rows2);
     }
   }
   // 进球数 / 大小球
   if (ttgImp) {
     const labs = [];
-    for (let i = 0; i <= 7; i++) labs.push([i === 7 ? '7+' : String(i), ttgImp['s' + i] || 0]);
-    body += prefBlock('进球数', '盘口去水隐含', `<div class="pref-grid8">${labs.map(([lab, v]) => prefCell(lab, v)).join('')}</div>`);
+    for (let i = 0; i <= 7; i++) labs.push([i === 7 ? '7+' : String(i), ttgImp['s' + i]]);
+    body += prefBlock('进球数', '盘口', `<div class="pref-grid8">${labs.map(([lab, v]) => prefCell(lab, v)).join('')}</div>`);
   }
   if (over25 != null || ttgImp) {
     let marketOver = null;
     if (ttgImp) {
-      let under = 0, over = 0;
-      for (let i = 0; i <= 2; i++) under += ttgImp['s' + i] || 0;
-      for (let i = 3; i <= 7; i++) over += ttgImp['s' + i] || 0;
+      let under = 0, over = 0, seen = false;
+      for (let i = 0; i <= 2; i++) if (prefHas(ttgImp['s' + i])) { under += Number(ttgImp['s' + i]); seen = true; }
+      for (let i = 3; i <= 7; i++) if (prefHas(ttgImp['s' + i])) { over += Number(ttgImp['s' + i]); seen = true; }
       const tot = under + over;
-      if (tot > 0) marketOver = over / tot;
+      if (seen && tot > 0) marketOver = over / tot;
     }
     if (marketOver != null && over25 != null) {
-      body += prefBlock('大小球（2.5）', '盘口由进球数汇总 · 站内模型',
-        prefRow('大球 · 盘口', marketOver) + prefRow('大球 · 模型', over25, 'model')
-        + prefRow('小球 · 盘口', 1 - marketOver) + prefRow('小球 · 模型', 1 - over25, 'model'));
+      mixed = true;
+      body += prefBlock('大小球（2.5）', '', prefTwinRow('大球', marketOver, over25) + prefTwinRow('小球', 1 - marketOver, 1 - over25));
     } else if (over25 != null) {
-      body += prefBlock('大小球（2.5）', '站内模型', prefRow('大球', over25, 'model') + prefRow('小球', 1 - over25, 'model'));
+      body += prefBlock('大小球（2.5）', '模型', prefRow('大球', over25, 'model') + prefRow('小球', 1 - over25, 'model'));
     }
   }
-  // 半全场 — 仅展示已有盘口，不编造模型九宫格
+  // 半全场 — 仅展示已有盘口，不编造模型九宫格；缺项为 — 不是 0
   if (hafuImp) {
     const labs = [['hh', '胜胜'], ['hd', '胜平'], ['ha', '胜负'], ['dh', '平胜'], ['dd', '平平'], ['da', '平负'], ['ah', '负胜'], ['ad', '负平'], ['aa', '负负']];
-    body += prefBlock('半全场', '盘口去水隐含', `<div class="pref-grid3">${labs.map(([k, lab]) => prefCell(lab, hafuImp[k] || 0)).join('')}</div>`);
+    body += prefBlock('半全场', '盘口', `<div class="pref-grid3">${labs.map(([k, lab]) => prefCell(lab, hafuImp[k])).join('')}</div>`);
   }
   if (!body) {
     body = '<p class="pref-empty">本场暂无可用的胜平负、让球、进球数或半全场参考。未开售的盘口不会展示。</p>';
   }
-  return `<div class="dsec pref-ref"><h3>赛前参考</h3><p class="note">盘口为竞彩去水隐含概率；模型为站内进球估算。没有数据的玩法不展示。本页不含官方第三方预测源。</p>${body}</div>`;
+  const legend = mixed
+    ? '<div class="pref-legend"><span><i class="mkt"></i>盘口</span><span><i class="mod"></i>模型</span></div>'
+    : '';
+  return `<div class="dsec pref-ref"><h3>赛前参考</h3>${legend}${body}</div>`;
+}
+
+const GOAL_CLOCK_PERIODS = [
+  ['0-15', '0-15′'],
+  ['16-30', '16-30′'],
+  ['31-45', '31-45′'],
+  ['46-60', '46-60′'],
+  ['61-75', '61-75′'],
+  ['76-90', '76-90′'],
+];
+function goalClockUsable(side) {
+  return !!(side && Number(side.n_fixtures) >= 4 && side.segments);
+}
+function goalClockAvg(side, key) {
+  if (!goalClockUsable(side)) return null;
+  const n = Number(side.n_fixtures);
+  const c = Number(side.segments && side.segments[key]);
+  if (!Number.isFinite(c) || !(n > 0)) return null;
+  return c / n;
+}
+function goalClockFmt(v) {
+  if (!Number.isFinite(v)) return '—';
+  return v.toFixed(1);
+}
+function goalClockHtml(m) {
+  const homeName = (m && m.home) || '主队';
+  const awayName = (m && m.away) || '客队';
+  const rep = m && S.predictCache && S.predictCache[String(m.id)];
+  if (!rep || (rep.ok && !rep.sections)) {
+    return `<section class="sm-kit gc-kit"><div class="sm-kit-hd"><h3>近况进球时段</h3></div><p class="sm-empty">正在整理近况进球时段…</p></section>`;
+  }
+  const clock = (rep.ok && rep.sections && rep.sections.goalClock) || null;
+  const h = clock && clock.home;
+  const a = clock && clock.away;
+  const hOk = goalClockUsable(h);
+  const aOk = goalClockUsable(a);
+  if (!hOk && !aOk) {
+    const why = (!clock || (!(h && h.n_fixtures) && !(a && a.n_fixtures)))
+      ? '本场暂无近况进球时段。'
+      : '两边进球分钟不够（不足 4 场），不放在一起比。';
+    return `<section class="sm-kit gc-kit"><div class="sm-kit-hd"><h3>近况进球时段</h3></div><p class="sm-empty">${esc(why)}</p></section>`;
+  }
+  const avgs = GOAL_CLOCK_PERIODS.map(([key]) => [goalClockAvg(h, key), goalClockAvg(a, key)]);
+  let max = 0.5;
+  for (const [hv, av] of avgs) {
+    if (Number.isFinite(hv)) max = Math.max(max, hv);
+    if (Number.isFinite(av)) max = Math.max(max, av);
+  }
+  const bar = (v, side) => {
+    const ok = Number.isFinite(v);
+    const w = ok ? Math.max(0, Math.min(100, (v / max) * 100)) : 0;
+    return `<div class="${side}${ok ? '' : ' empty'}"><i style="width:${w.toFixed(1)}%"></i></div>`;
+  };
+  const num = (v, side) => `<div class="num ${side}">${esc(goalClockFmt(v))}</div>`;
+  let rows = avgs.map((pair, i) => {
+    const lab = GOAL_CLOCK_PERIODS[i][1];
+    return `<div class="xg-row gc-row">${num(pair[0], 'left')}<div class="stat-mid"><div class="label">${esc(lab)}</div><div class="bars">${bar(pair[0], 'h')}${bar(pair[1], 'a')}</div></div>${num(pair[1], 'right')}</div>`;
+  }).join('');
+  const cfRow = () => {
+    const hv = hOk && h.concede_first_index != null && Number.isFinite(Number(h.concede_first_index)) ? Number(h.concede_first_index) : null;
+    const av = aOk && a.concede_first_index != null && Number.isFinite(Number(a.concede_first_index)) ? Number(a.concede_first_index) : null;
+    if (hv == null && av == null) return '';
+    const fmt = (v) => v == null ? '—' : Math.round(v * 100) + '%';
+    const maxCf = Math.max(hv == null ? 0 : hv, av == null ? 0 : av, 0.25);
+    const b = (v, side) => {
+      const ok = v != null;
+      const w = ok ? Math.max(0, Math.min(100, (v / maxCf) * 100)) : 0;
+      return `<div class="${side}${ok ? '' : ' empty'}"><i style="width:${w.toFixed(1)}%"></i></div>`;
+    };
+    return `<div class="xg-row gc-row"><div class="num left">${esc(fmt(hv))}</div><div class="stat-mid"><div class="label">先丢球</div><div class="bars">${b(hv, 'h')}${b(av, 'a')}</div></div><div class="num right">${esc(fmt(av))}</div></div>`;
+  };
+  const nBits = [];
+  if (h && Number(h.n_fixtures) > 0) nBits.push(`${homeName}近 ${Number(h.n_fixtures)} 场`);
+  if (a && Number(a.n_fixtures) > 0) nBits.push(`${awayName}近 ${Number(a.n_fixtures)} 场`);
+  const sideNote = (!hOk || !aOk)
+    ? `<p class="gc-empty-side">${esc((!hOk ? homeName : awayName) + '进球分钟不够（不足 4 场），不和对方放在一起比。')}</p>`
+    : '';
+  return `<section class="sm-kit gc-kit"><div class="sm-kit-hd"><h3>近况进球时段</h3><small>场均进球</small></div>
+    <p class="gc-sub">近况场均：该段进球数 ÷ 场次。不是本场会进几个。</p>
+    <div class="sm-legend"><i class="h"></i><span>${esc(homeName)}</span><i class="a"></i><span>${esc(awayName)}</span></div>
+    ${rows}${cfRow()}
+    ${sideNote}
+    ${nBits.length ? `<p class="gc-n">${esc(nBits.join(' · '))}，数字是场均。</p>` : ''}
+  </section>`;
+}
+function paintGoalClock(id, x) {
+  const el = document.getElementById('sm-goal-clock-' + id);
+  if (!el) return;
+  const m = x || (typeof findMatch === 'function' && findMatch(id)) || { id, home: '主队', away: '客队' };
+  el.innerHTML = goalClockHtml(m);
 }
 
 function matchHero(x, m, r, { favBtn = '' } = {}) {
@@ -11747,7 +11840,7 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
   const wx = matchWeatherType(x);
   const homeGlow = teamGlowCached(x, 'home');
   const awayGlow = teamGlowCached(x, 'away');
-  const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
+  const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
   let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="--hero-home:${esc(homeGlow)};--hero-away:${esc(awayGlow)}">${wxLayer}${nav}<div class="meta">${leagueHeroMark(x)}<span>${esc(x.num)}</span><span>${esc(issueDate(x))} ${issueWeek(x)}${x.time ? ' · 开赛 ' + esc(x.date) + ' ' + esc(x.time) : ''}</span>${x.sample ? '<span class="sample-tag">示例数据</span>' : ''}</div>
     <div class="teams"><div class="tm">${badge(x.home, 'lg', x.homeLogo)}<em class="tm-mv" id="tm-mv-h-${esc(id)}" hidden></em><span>${esc(x.home)}</span><small>主队 ${esc(x.homeRank || '')}</small></div>
     <div class="mid">${mid}</div>
@@ -12204,6 +12297,7 @@ async function enrichMatchDetail(x) {
           if (sm) paintSmSurface(String(x.id), sm);
           paintMatchSquadValue(String(x.id));
           paintMatchRadar(String(x.id));
+          paintGoalClock(String(x.id), x);
         }
         else if (tab === 'live') {
           const live = (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null;

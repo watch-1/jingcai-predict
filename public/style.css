@@ -8416,6 +8416,7 @@ html[data-theme="pitch"] .lu-teamseg button.on{background:#eef1f8;color:#121826}
   overflow: hidden;
 }
 .hero-wx-base,
+.hero-wx-glow,
 .hero-wx-sky,
 .hero-wx-fx,
 .hero-wx-scrim {
@@ -8423,11 +8424,18 @@ html[data-theme="pitch"] .lu-teamseg button.on{background:#eef1f8;color:#121826}
   inset: 0;
 }
 .hero-wx-base {
+  /* Texture only; team washes live in .hero-wx-glow above this layer. */
+  opacity: .58;
   background:
-    radial-gradient(ellipse 46% 78% at 12% 56%, var(--hero-home, hsla(42, 28%, 28%, .62)), transparent 72%),
-    radial-gradient(ellipse 46% 78% at 88% 56%, var(--hero-away, hsla(196, 28%, 28%, .62)), transparent 72%),
     url("assets/weather/neutral-base.webp") center / cover no-repeat,
     #0a0b0e;
+}
+.hero-wx-glow {
+  background:
+    radial-gradient(ellipse 72% 100% at 10% 62%, var(--hero-home, hsla(350, 64%, 54%, .86)), transparent 70%),
+    radial-gradient(ellipse 92% 120% at -4% 58%, var(--hero-home, hsla(350, 64%, 54%, .86)), transparent 74%),
+    radial-gradient(ellipse 72% 100% at 90% 62%, var(--hero-away, hsla(196, 64%, 54%, .86)), transparent 70%),
+    radial-gradient(ellipse 92% 120% at 104% 58%, var(--hero-away, hsla(196, 64%, 54%, .86)), transparent 74%);
 }
 .hero-wx-sky {
   opacity: 0;
@@ -8475,10 +8483,11 @@ html[data-theme="pitch"] .lu-teamseg button.on{background:#eef1f8;color:#121826}
 .hero-wx-scrim {
   background: linear-gradient(
     180deg,
-    rgba(0, 0, 0, .42) 0%,
-    rgba(0, 0, 0, .14) 38%,
-    rgba(0, 0, 0, .1) 62%,
-    rgba(0, 0, 0, .46) 100%
+    rgba(0, 0, 0, .34) 0%,
+    rgba(0, 0, 0, .06) 28%,
+    rgba(0, 0, 0, 0) 48%,
+    rgba(0, 0, 0, 0) 68%,
+    rgba(0, 0, 0, .26) 100%
   );
 }
 .hero.hero--weather > *:not(.hero-wx) { position: relative; z-index: 1; }
@@ -8578,7 +8587,7 @@ html:not([data-theme="pitch"]) .view.sub.md-wrap .dtabs button.on {
 }
 html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane {
   background: transparent;
-  padding: 8px 0 20px;
+  padding: 16px 16px 20px;
 }
 html:not([data-theme="pitch"]) .view.sub.md-wrap .foot,
 html:not([data-theme="pitch"]) .view.sub.md-wrap .foot b {
@@ -8603,16 +8612,49 @@ html:not([data-theme="pitch"]) .view.sub.md-wrap .match-attitude-sec {
   box-shadow: none;
   color: var(--t1, #1B2A4A);
 }
+/* Drop the old navy-wrap 12px side inset so cards use the pane's 16px padding only. */
+html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane > .dsec,
+html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane > .card,
+html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane > .ana-card,
+html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane > .intel-scoop,
+html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane > .sm-slot,
+html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane > .sm-slot > .dsec,
+html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane > .sm-slot > .sm-kit,
+html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane .lu-xg,
+html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane > .match-attitude-sec,
+html:not([data-theme="pitch"]) .view.sub.md-wrap .detail-pane > .pr-src-bar {
+  margin-left: 0;
+  margin-right: 0;
+}
 html:not([data-theme="pitch"]) .view.sub.md-wrap .dsec h3,
 html:not([data-theme="pitch"]) .view.sub.md-wrap .ana-hd h3,
 html:not([data-theme="pitch"]) .view.sub.md-wrap .intel-scoop-hd h3 {
   color: var(--t1, #1B2A4A);
 }
 
-/* 赛前参考 — compact probability bars on the 预测 tab */
-.pref-ref { margin-top: 10px; }
-.pref-ref > h3 { margin-bottom: 4px; }
-.pref-ref > .note { margin: 0 0 12px; font-size: 12px; color: var(--t3, #8B95A8); }
+/* 赛前参考 — one row per outcome; 盘口/模型 share the bar column */
+.pref-ref { margin-top: 0; }
+.pref-ref > h3 { margin-bottom: 8px; }
+.pref-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: -2px 0 12px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--t3, #8B95A8);
+}
+.pref-legend i {
+  width: 10px;
+  height: 6px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.pref-legend i.mkt { background: var(--pri, #2F6FED); }
+.pref-legend i.mod { background: #0f9d58; }
 .pref-block { margin: 0 0 14px; }
 .pref-block:last-child { margin-bottom: 2px; }
 .pref-hd {
@@ -8632,15 +8674,35 @@ html:not([data-theme="pitch"]) .view.sub.md-wrap .intel-scoop-hd h3 {
 }
 .pref-row {
   display: grid;
-  grid-template-columns: 3.6em 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   font-size: 12.5px;
   color: var(--t1, #1B2A4A);
 }
-.pref-row .lab { text-align: left; color: var(--t2, #4A5568); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pref-row .lab {
+  text-align: left;
+  color: var(--t2, #4A5568);
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
 .pref-row b { font-variant-numeric: tabular-nums; font-size: 12.5px; min-width: 3.1em; text-align: right; }
+.pref-row--twin {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  margin-bottom: 10px;
+}
+.pref-row--twin > .lab { padding-top: 2px; }
+.pref-twin-bars { display: grid; gap: 4px; min-width: 0; }
+.pref-twin-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
 .pref-bar {
   height: 8px;
   border-radius: 999px;
@@ -8656,13 +8718,7 @@ html:not([data-theme="pitch"]) .view.sub.md-wrap .intel-scoop-hd h3 {
   max-width: 100%;
 }
 .pref-bar.model > i { background: #0f9d58; }
-.pref-twin { margin-bottom: 8px; }
-.pref-twin .pref-src {
-  grid-column: 1 / -1;
-  font-size: 10.5px;
-  color: var(--t3, #8B95A8);
-  margin: 2px 0 0;
-}
+.pref-bar.empty > i { width: 0 !important; background: transparent; }
 .pref-grid3, .pref-grid4, .pref-grid8 {
   display: grid;
   gap: 6px 8px;
@@ -8674,3 +8730,22 @@ html:not([data-theme="pitch"]) .view.sub.md-wrap .intel-scoop-hd h3 {
 .pref-cell b { display: block; font-size: 13px; color: var(--t1, #1B2A4A); font-variant-numeric: tabular-nums; margin-top: 2px; }
 .pref-cell .pref-bar { margin-top: 4px; }
 .pref-empty { margin: 0; font-size: 12.5px; color: var(--t2, #4A5568); }
+.gc-kit .gc-sub {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #8B95A8;
+  font-weight: 600;
+}
+.gc-kit .gc-n {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: #8B95A8;
+  font-weight: 600;
+}
+.gc-kit .gc-empty-side {
+  margin: 0;
+  font-size: 12px;
+  color: #7b8499;
+  line-height: 1.45;
+}
