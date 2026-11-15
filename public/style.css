@@ -8504,8 +8504,7 @@ html[data-theme="pitch"] .hero.hero--weather {
 .hero-sticky[data-weather="cloudy"] .hero-wx-sky::before {
   background-image: url("assets/weather/cloudy.webp");
 }
-/* preview 370: atmospheric rain is a seamless scrolling plate on ::before;
-   lens droplets are a canvas on top (not filled grey balloons). */
+/* preview 370: atmospheric rain is a seamless scrolling plate on ::before. */
 .hero-wx-rain {
   opacity: 0;
   overflow: hidden;
@@ -8523,15 +8522,6 @@ html[data-theme="pitch"] .hero.hero--weather {
   animation: wx-rain-fall 1s linear infinite;
   will-change: background-position;
   mix-blend-mode: screen;
-}
-.hero-wx-rain .hero-wx-drops,
-canvas.hero-wx-drops {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  pointer-events: none;
 }
 .hero.hero--weather[data-weather="light-rain"] .hero-wx-rain,
 .hero-sticky[data-weather="light-rain"] .hero-wx-rain { opacity: 1; }

@@ -1092,7 +1092,7 @@ async function loadData(kind, force) {
     if (c) j = { ...c, fromCache: true };
     else { const SM = window.SAMPLE; j = { source: 'sample', local: true, note: '无法连接服务器，当前展示内置示例数据（非真实赛事/赔率）', fetchedAt: new Date().toISOString(), data: kind === 'results' ? SM.results() : SM.matches() }; }
   }
-  if (kind === 'matches') { S.matches = j.data; S.msrc = j; }
+  if (kind === 'matches') { S.matches = j.data; S.msrc = j; try { warmupMatchWeather(j.data); } catch (_) {} }
   else if (kind === 'schedule') { S.schedule = j.data; S.ssrc = j; }
   else { S.results = j.data; S.rsrc = j; }
 }
@@ -5839,6 +5839,7 @@ function pageSchedule() {
   }
   const allDayIds = classifiedDay.map(x => String(x.id));
   if (allDayIds.length) {
+    try { warmupMatchWeather(classifiedDay); } catch (_) {}
     setTimeout(async () => {
       const pending = scheduleNeedLivePoll(classifiedDay, model.counts);
       const missing = allDayIds.some(id => !(S.liveScores && S.liveScores[id]));
@@ -11894,13 +11895,20 @@ function weatherCardHtml(x) {
   const hum = ok ? wxFmtHumidity(pack.humidity) : '—';
   const wind = ok ? wxFmtWind(pack.windMs) : '—';
   const pres = ok ? wxFmtPressure(pack) : '—';
-  const srcName = (pack && /sportmonks/i.test(String(pack.source || ''))) ? 'SportMonks' : 'Open-Meteo';
-  let foot = '天气来源 ' + srcName;
-  if (ok && pack.sourceNote) foot += ' · ' + pack.sourceNote;
-  else if (pack && pack.sourceNote) foot += ' · ' + pack.sourceNote;
-  else if (pack && pack.error) foot += ' · ' + pack.error;
-  else if (pending) foot += ' · 正在读取天气';
-  else foot += ' · 暂无本场天气';
+  const srcName = (pack && /sportmonks/i.test(String(pack.source || ''))) ? 'SportMonks'
+    : (pack && /open-?meteo/i.test(String(pack.source || ''))) ? 'Open-Meteo'
+    : '';
+  let foot;
+  if (srcName) {
+    foot = '天气来源 ' + srcName;
+    if (ok && pack.sourceNote) foot += ' · ' + pack.sourceNote;
+    else if (pack && pack.sourceNote) foot += ' · ' + pack.sourceNote;
+    else if (pack && pack.error) foot += ' · ' + pack.error;
+    else if (pending) foot += ' · 正在读取天气';
+    else if (!ok) foot += ' · 暂无本场天气';
+  } else if (pending) foot = '正在读取天气';
+  else if (pack && pack.error) foot = pack.error;
+  else foot = '暂无本场天气';
   const cls = 'wx-slip' + (pending ? ' is-pending' : (ok ? '' : ' is-empty'));
   return `<section class="${cls}" id="wx-card-${esc(id)}" data-wx="${esc(type)}" data-source="${esc(srcName)}">
     <div class="wx-slip-sky"><i class="wx-slip-sky-fx" aria-hidden="true"></i>
@@ -11934,7 +11942,99 @@ function applyMatchWeather(x, pack) {
   const t = matchWeatherType(x);
   if (hero) hero.setAttribute('data-weather', t);
   if (sticky) sticky.setAttribute('data-weather', t);
-  try { bindHeroRainDrops((hero && hero.parentNode) || document); } catch (_) {}
+}
+const _matchWeatherInflight = Object.create(null);
+function wxPackUsable(pack) {
+  if (!pack || pack.ok !== true) return false;
+  if (pack.tempC != null || pack.humidity != null || pack.windMs != null || pack.pressureHpa != null) return true;
+  if (pack.type && pack.type !== 'neutral') return true;
+  if (pack.description) return true;
+  return false;
+}
+function matchWeatherTtlMs(hit) {
+  return (hit && /sportmonks/i.test(String(hit.source || ''))) ? 30 * 60 * 1000 : 10 * 60 * 1000;
+}
+function matchWeatherQs(x) {
+  const q = new URLSearchParams();
+  if (x.id) q.set('matchId', x.id);
+  if (x.homeTeamId) q.set('homeTeamId', x.homeTeamId);
+  if (x.awayTeamId) q.set('awayTeamId', x.awayTeamId);
+  if (x.home) q.set('home', x.home);
+  if (x.away) q.set('away', x.away);
+  if (x.date) q.set('date', x.date);
+  if (x.time) q.set('time', x.time);
+  if (x.businessDate) q.set('businessDate', x.businessDate);
+  return q;
+}
+function storeMatchWeather(id, pack, sourceFallback) {
+  const next = Object.assign({ source: sourceFallback || (pack && pack.source) || '' }, pack || {});
+  next._at = Date.now();
+  S.matchWeatherData = S.matchWeatherData || {};
+  S.matchWeatherData[id] = next;
+  if (route().name === 'match' && String(route().arg) === String(id)) {
+    const x = (typeof findMatch === 'function' && findMatch(id))
+      || (S.results || []).find((z) => String(z.id) === String(id))
+      || (typeof loadFxShell === 'function' && loadFxShell(id))
+      || { id };
+    try { applyMatchWeather(x, next); } catch (_) {}
+  }
+  return next;
+}
+function fetchMatchWeatherApi(x, timeoutMs) {
+  const id = String(x && x.id || '');
+  if (!id) return Promise.resolve(null);
+  if (_matchWeatherInflight[id]) return _matchWeatherInflight[id];
+  const p = (async () => {
+    try {
+      const sm = await api('/match-weather?' + matchWeatherQs(x).toString(), { timeout: timeoutMs || 5000 });
+      if (wxPackUsable(sm)) return storeMatchWeather(id, sm, (sm && sm.source) || 'sportmonks');
+      return storeMatchWeather(id, {
+        ok: false, status: 'no-data', type: 'neutral',
+        error: '暂无本场天气', source: (sm && sm.source) || ''
+      }, (sm && sm.source) || '');
+    } catch (_) {
+      return storeMatchWeather(id, {
+        ok: false, status: 'fetch-failed', type: 'neutral',
+        error: '天气数据暂时不可用', source: ''
+      }, '');
+    } finally {
+      delete _matchWeatherInflight[id];
+    }
+  })();
+  _matchWeatherInflight[id] = p;
+  return p;
+}
+function warmupMatchWeather(list, opts) {
+  const concurrency = (opts && opts.concurrency) || 3;
+  const limit = (opts && opts.limit) || 32;
+  const items = Array.isArray(list) ? list : [];
+  S.matchWeatherData = S.matchWeatherData || {};
+  const todo = [];
+  const seen = Object.create(null);
+  for (let i = 0; i < items.length; i++) {
+    const x = items[i];
+    if (!x || !x.id) continue;
+    const id = String(x.id);
+    if (seen[id]) continue;
+    seen[id] = true;
+    if (_matchWeatherInflight[id]) continue;
+    const hit = S.matchWeatherData[id];
+    const age = hit && hit._at ? Date.now() - hit._at : Infinity;
+    if (hit && hit.ok && age < matchWeatherTtlMs(hit)) continue;
+    if (hit && !hit.ok && hit.status !== 'pending' && age < 5 * 60 * 1000) continue;
+    todo.push(x);
+    if (todo.length >= limit) break;
+  }
+  if (!todo.length) return;
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < todo.length) {
+      const x = todo[cursor++];
+      try { await fetchMatchWeatherApi(x, 5000); } catch (_) {}
+    }
+  };
+  const n = Math.min(concurrency, todo.length);
+  for (let k = 0; k < n; k++) worker();
 }
 async function ensureMatchWeather(x) {
   if (!x || !x.id) return null;
@@ -11942,59 +12042,26 @@ async function ensureMatchWeather(x) {
   S.matchWeatherData = S.matchWeatherData || {};
   const hit = S.matchWeatherData[id];
   const age = hit && hit._at ? Date.now() - hit._at : Infinity;
-  const hitTtl = (hit && /sportmonks/i.test(String(hit.source || ''))) ? 30 * 60 * 1000 : 10 * 60 * 1000;
-  if (hit && hit.ok && age < hitTtl) {
+  if (hit && hit.ok && age < matchWeatherTtlMs(hit)) {
     applyMatchWeather(x, hit);
     return hit;
   }
-  if (hit && hit.status === 'pending' && age < 20000) return hit;
-  if (hit && !hit.ok && hit.status !== 'no-venue' && hit.status !== 'pending' && age < 5 * 60 * 1000) {
+  if (_matchWeatherInflight[id]) {
+    if (!(hit && hit.status === 'pending')) {
+      S.matchWeatherData[id] = Object.assign({}, hit || {}, { status: 'pending', ok: false, type: 'neutral', _at: Date.now() });
+      applyMatchWeather(x, S.matchWeatherData[id]);
+    } else {
+      applyMatchWeather(x, hit);
+    }
+    return _matchWeatherInflight[id];
+  }
+  if (hit && !hit.ok && hit.status !== 'pending' && age < 10000) {
     applyMatchWeather(x, hit);
     return hit;
   }
   S.matchWeatherData[id] = Object.assign({}, hit || {}, { status: 'pending', ok: false, type: 'neutral', _at: Date.now() });
   applyMatchWeather(x, S.matchWeatherData[id]);
-  let venue = venueFromLive(x);
-  if (!venue || !(venue.name || venue.city)) {
-    try { await loadLiveStats(x); } catch (_) {}
-    venue = venueFromLive(x);
-  }
-  function smUsable(pack) {
-    if (!pack || pack.ok !== true) return false;
-    if (pack.tempC != null || pack.humidity != null || pack.windMs != null || pack.pressureHpa != null) return true;
-    if (pack.type && pack.type !== 'neutral') return true;
-    if (pack.description) return true;
-    return false;
-  }
-  function cacheAndApply(pack, sourceFallback) {
-    const next = Object.assign({ source: sourceFallback || (pack && pack.source) || '' }, pack || {});
-    next._at = Date.now();
-    S.matchWeatherData[id] = next;
-    if (route().name === 'match' && String(route().arg) === id) applyMatchWeather(x, next);
-    return next;
-  }
-  try {
-    const q = new URLSearchParams();
-    if (x.id) q.set('matchId', x.id);
-    if (x.homeTeamId) q.set('homeTeamId', x.homeTeamId);
-    if (x.awayTeamId) q.set('awayTeamId', x.awayTeamId);
-    if (x.home) q.set('home', x.home);
-    if (x.away) q.set('away', x.away);
-    if (x.date) q.set('date', x.date);
-    if (x.time) q.set('time', x.time);
-    if (x.businessDate) q.set('businessDate', x.businessDate);
-    const sm = await api('/match-weather?' + q.toString(), { timeout: 10000 });
-    if (smUsable(sm)) return cacheAndApply(sm, 'sportmonks');
-  } catch (_) { /* 404 / network / not yet deployed → Open-Meteo */ }
-  if (typeof JCWeather === 'undefined' || !JCWeather.load) {
-    return cacheAndApply({ ok: false, status: 'fetch-failed', type: 'neutral', error: '天气组件未加载', source: 'Open-Meteo' }, 'Open-Meteo');
-  }
-  try {
-    const pack = await JCWeather.load(x, venue);
-    return cacheAndApply(pack, (pack && pack.source) || 'Open-Meteo');
-  } catch (e) {
-    return cacheAndApply({ ok: false, status: 'fetch-failed', type: 'neutral', error: '天气数据暂时不可用', source: 'Open-Meteo' }, 'Open-Meteo');
-  }
+  return fetchMatchWeatherApi(x, 5000);
 }
 
 function matchScoreState(x, m, r) {
@@ -12457,456 +12524,6 @@ function syncHeroWeatherMotion() {
   try { document.documentElement.classList.toggle('wx-paused', off); } catch (_) {}
 }
 
-/* preview 371: atmospheric rain stays CSS (seamless plate). This canvas
-   draws clear lens/screen droplets that refract the same weather sky
-   texture used by .hero-wx-sky — organic beads, soft Fresnel rims, tight
-   speculars, short wet traces. Not a filled sticker sheet. */
-const _heroRainLoops = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
-const _heroRainAlive = [];
-const HERO_SKY_SRC = {
-  'light-rain': 'assets/weather/light-rain.webp',
-  rain: 'assets/weather/light-rain.webp',
-  storm: 'assets/weather/storm.webp',
-  sunny: 'assets/weather/sunny.webp',
-  cloudy: 'assets/weather/cloudy.webp'
-};
-const _heroSkyCache = Object.create(null);
-function ensureHeroSky(type, cb) {
-  const src = HERO_SKY_SRC[type] || HERO_SKY_SRC['light-rain'];
-  let rec = _heroSkyCache[src];
-  if (rec && rec.ok && rec.tile) {
-    if (cb) cb(rec);
-    return rec;
-  }
-  if (rec && rec.img) {
-    if (cb) rec.wait.push(cb);
-    return rec;
-  }
-  rec = { img: new Image(), ok: false, tile: null, wait: cb ? [cb] : [] };
-  _heroSkyCache[src] = rec;
-  rec.img.onload = () => {
-    rec.ok = !!(rec.img.naturalWidth && rec.img.naturalHeight);
-    if (rec.ok) {
-      try {
-        const c = document.createElement('canvas');
-        c.width = rec.img.naturalWidth * 2;
-        c.height = rec.img.naturalHeight;
-        const g = c.getContext('2d');
-        if (g) {
-          g.drawImage(rec.img, 0, 0);
-          g.drawImage(rec.img, rec.img.naturalWidth, 0);
-          rec.tile = c;
-        } else rec.ok = false;
-      } catch (_) { rec.ok = false; }
-    }
-    const q = rec.wait.splice(0);
-    q.forEach((fn) => { try { fn(rec); } catch (_) {} });
-  };
-  rec.img.onerror = () => {
-    rec.ok = false;
-    rec.tile = null;
-    const q = rec.wait.splice(0);
-    q.forEach((fn) => { try { fn(rec); } catch (_) {} });
-  };
-  rec.img.src = src;
-  return rec;
-}
-function rainDropCount(type, compact) {
-  if (type === 'light-rain') return compact ? 7 : 14;
-  if (type === 'rain') return compact ? 11 : 22;
-  if (type === 'storm') return compact ? 14 : 28;
-  return 0;
-}
-function stopHeroRain(el) {
-  if (!el) return;
-  const st = _heroRainLoops && _heroRainLoops.get(el);
-  if (st) {
-    st.dead = true;
-    if (st.raf) try { cancelAnimationFrame(st.raf); } catch (_) {}
-    try { _heroRainLoops.delete(el); } catch (_) {}
-  }
-  const i = _heroRainAlive.indexOf(el);
-  if (i >= 0) _heroRainAlive.splice(i, 1);
-  try { el.querySelectorAll('canvas.hero-wx-drops').forEach((c) => c.remove()); } catch (_) {
-    try { el.innerHTML = ''; } catch (__) {}
-  }
-}
-function bindHeroRainDrops(root) {
-  const scope = root || document;
-  for (let i = _heroRainAlive.length - 1; i >= 0; i--) {
-    const el = _heroRainAlive[i];
-    if (!el || !el.isConnected) stopHeroRain(el);
-  }
-  const nodes = scope.querySelectorAll
-    ? scope.querySelectorAll('.hero.hero--weather .hero-wx-rain, .hero-sticky .hero-wx-rain')
-    : [];
-  nodes.forEach((el) => { try { startHeroRain(el); } catch (_) {} });
-}
-function _cssLen(val, ref) {
-  if (!val || val === 'auto' || val === 'none') return null;
-  const n = parseFloat(val);
-  if (!Number.isFinite(n)) return null;
-  if (val.indexOf('%') >= 0) return n / 100 * (ref || 0);
-  return n;
-}
-function _parseTx(tr) {
-  if (!tr || tr === 'none') return null;
-  const m3 = /^matrix3d\((.+)\)$/.exec(tr);
-  if (m3) {
-    const p = m3[1].split(',');
-    const tx = parseFloat(p[12]);
-    return Number.isFinite(tx) ? tx : null;
-  }
-  const m = /^matrix\((.+)\)$/.exec(tr);
-  if (m) {
-    const p = m[1].split(',');
-    const tx = parseFloat(p[4]);
-    return Number.isFinite(tx) ? tx : null;
-  }
-  return null;
-}
-function _skyLayout(host, compact, cssW, cssH) {
-  let top = compact ? 0 : -0.18 * cssH;
-  let tileH = (compact ? 2.2 : 1.36) * cssH;
-  let tileW = cssW;
-  let panX = 0;
-  let gotPan = false;
-  const sky = host && host.querySelector ? host.querySelector('.hero-wx-sky') : null;
-  if (sky) {
-    try {
-      const cs = window.getComputedStyle(sky, '::before');
-      if (cs) {
-        const t = _cssLen(cs.top, cssH);
-        const h = _cssLen(cs.height, cssH);
-        if (t != null) top = t;
-        if (h != null && h > 1) tileH = h;
-        const bw = _cssLen(cs.width, cssW);
-        if (bw != null && bw > 1) tileW = bw * 0.5;
-        const tx = _parseTx(cs.transform);
-        if (tx != null) { panX = tx; gotPan = true; }
-      }
-    } catch (_) {}
-  }
-  if (!gotPan) {
-    const dur = 52;
-    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
-    panX = -((now % dur) / dur) * tileW;
-  }
-  return { top: top, tileW: tileW, tileH: tileH, panX: panX };
-}
-function startHeroRain(el) {
-  if (!el) return;
-  const host = el.closest('.hero.hero--weather, .hero-sticky');
-  const type = (host && host.getAttribute('data-weather')) || '';
-  const compact = !!(host && host.classList.contains('hero-sticky'));
-  const n = rainDropCount(type, compact);
-  const prev = _heroRainLoops && _heroRainLoops.get(el);
-  if (prev && !prev.dead && prev.type === type && prev.n === n && el.querySelector('canvas.hero-wx-drops')) return;
-  stopHeroRain(el);
-  if (!n) return;
-  const skyRec = ensureHeroSky(type);
-  const canvas = document.createElement('canvas');
-  canvas.className = 'hero-wx-drops';
-  canvas.setAttribute('aria-hidden', 'true');
-  el.appendChild(canvas);
-  const st = {
-    dead: false, type, n, compact, canvas, host, skyRec, drops: [],
-    last: 0, raf: 0, dpr: 1, w: 0, h: 0, cssW: 0, cssH: 0
-  };
-  if (_heroRainLoops) _heroRainLoops.set(el, st);
-  _heroRainAlive.push(el);
-  const rollKind = () => {
-    const r = Math.random();
-    if (r < 0.55) return { shape: 'bead', tear: Math.random() * 0.08 };
-    if (r < 0.84) return { shape: 'tear', tear: 0.22 + Math.random() * 0.16 };
-    return { shape: 'trail', tear: 0.42 + Math.random() * 0.16 };
-  };
-  const spawn = (anywhere) => {
-    const dpr = st.dpr || 1;
-    const mul = compact ? 0.7 : 1;
-    const meta = rollKind();
-    let size;
-    const k = Math.random();
-    if (k < 0.5) size = (5 + Math.random() * 7) * mul;
-    else if (k < 0.85) size = (10 + Math.random() * 10) * mul;
-    else size = (16 + Math.random() * 12) * mul;
-    const sitting = meta.shape === 'bead' ? Math.random() < 0.78 : Math.random() < 0.22;
-    const slide = !sitting;
-    return {
-      x: Math.random() * Math.max(2, st.w || 2),
-      y: anywhere ? Math.random() * Math.max(2, st.h || 2) : Math.random() * Math.max(2, (st.h || 2) * 0.85),
-      size: size * dpr,
-      shape: meta.shape,
-      tear: meta.tear,
-      sitting,
-      vy: slide ? (8 + Math.random() * 16 + size * 0.4) * dpr * (compact ? 0.7 : 1) : 0,
-      vx: slide ? (Math.random() - 0.45) * 5 * dpr : (Math.random() - 0.5) * 0.6 * dpr,
-      wait: sitting ? 1.2 + Math.random() * 7 : 0,
-      rot: (Math.random() - 0.5) * 0.18,
-      alpha: anywhere ? (0.82 + Math.random() * 0.18) : 0,
-      fade: anywhere ? 0 : (0.9 + Math.random() * 0.6),
-      path: [],
-      a1: 0.04 + Math.random() * 0.08,
-      p1: Math.random() * Math.PI * 2,
-      a2: 0.02 + Math.random() * 0.06,
-      p2: Math.random() * Math.PI * 2,
-      a3: 0.01 + Math.random() * 0.035,
-      p3: Math.random() * Math.PI * 2,
-      sy: meta.shape === 'bead' ? (1.02 + Math.random() * 0.10) : (1.06 + Math.random() * 0.12),
-      fov: 0.42 + Math.random() * 0.20,
-      loffx: Math.random() * 0.55 - 0.35,
-      loffy: Math.random() * 0.55 - 0.45,
-      hx: 0.18 + Math.random() * 0.18,
-      hy: 0.26 + Math.random() * 0.20,
-      hs: 0.09 + Math.random() * 0.05
-    };
-  };
-  const startSlide = (d) => {
-    d.sitting = false;
-    d.vy = (8 + Math.random() * 18) * (st.dpr || 1) * (compact ? 0.7 : 1) + d.size * 0.25;
-    d.vx = (Math.random() - 0.35) * 6 * (st.dpr || 1);
-    d.wait = 0;
-  };
-  const resize = () => {
-    const box = el.getBoundingClientRect();
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const w = Math.max(1, Math.round(box.width));
-    const h = Math.max(1, Math.round(box.height));
-    if (w === st.cssW && h === st.cssH && dpr === st.dpr) return;
-    const sx = st.w ? (Math.round(w * dpr) / st.w) : 1;
-    const sy = st.h ? (Math.round(h * dpr) / st.h) : 1;
-    st.cssW = w; st.cssH = h; st.dpr = dpr;
-    canvas.width = Math.max(1, Math.round(w * dpr));
-    canvas.height = Math.max(1, Math.round(h * dpr));
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
-    st.w = canvas.width; st.h = canvas.height;
-    if (!st.drops.length) {
-      for (let i = 0; i < n; i++) st.drops.push(spawn(true));
-    } else {
-      for (const d of st.drops) {
-        d.x *= sx; d.y *= sy; d.size *= (sx + sy) / 2;
-      }
-    }
-  };
-  const dropPath = (ctx, d, r) => {
-    const segs = 16;
-    const tear = d.tear || 0;
-    const sy = d.sy || 1;
-    ctx.beginPath();
-    for (let i = 0; i <= segs; i++) {
-      const t = i / segs;
-      const a = t * Math.PI * 2 - Math.PI / 2;
-      const rr = r * (1 + d.a1 * Math.sin(a * 2 + d.p1) + d.a2 * Math.sin(a * 3 + d.p2) + d.a3 * Math.sin(a * 5 + d.p3));
-      let x = Math.cos(a) * rr;
-      let y = Math.sin(a) * rr * sy;
-      if (tear) {
-        const down = Math.max(0, Math.min(1, (y / (r * sy) + 1) * 0.5));
-        y += tear * r * down * down;
-        x *= 1 - tear * 0.38 * down;
-      }
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-  };
-  const drawTrail = (ctx, d) => {
-    if (!d.path || d.path.length < 2) return;
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    for (let i = 1; i < d.path.length; i++) {
-      const p = d.path[i];
-      const q = d.path[i - 1];
-      const t = i / (d.path.length - 1);
-      ctx.strokeStyle = 'rgba(8,10,14,' + (0.04 + 0.14 * t * d.alpha).toFixed(3) + ')';
-      ctx.lineWidth = Math.max(0.8, d.size * 0.28 * (0.28 + 0.72 * t));
-      ctx.beginPath();
-      ctx.moveTo(q.x, q.y);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-    }
-    for (let i = 1; i < d.path.length; i++) {
-      const p = d.path[i];
-      const q = d.path[i - 1];
-      const t = i / (d.path.length - 1);
-      ctx.strokeStyle = 'rgba(220,230,240,' + (0.025 + 0.05 * t * d.alpha).toFixed(3) + ')';
-      ctx.lineWidth = Math.max(0.5, d.size * 0.08 * (0.3 + 0.7 * t));
-      ctx.beginPath();
-      ctx.moveTo(q.x, q.y);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-    }
-    ctx.restore();
-  };
-  const drawSkyInside = (ctx, d, r, layout, tile) => {
-    if (!tile || !tile.width || !layout.tileW || !layout.tileH) return false;
-    const dpr = st.dpr || 1;
-    const imgW = tile.width / 2;
-    const imgH = tile.height;
-    const fov = d.fov || 0.55;
-    const box = r * (1.2 + (d.tear || 0) * 0.6);
-    const cssX = d.x / dpr;
-    const cssY = d.y / dpr;
-    const rCss = box / dpr;
-    let u = (cssX - layout.panX) / layout.tileW;
-    u -= Math.floor(u);
-    let v = (cssY - layout.top) / layout.tileH;
-    u += (d.loffx || 0) * (r / dpr) / layout.tileW;
-    v += (d.loffy || 0) * (r / dpr) / layout.tileH;
-    v = Math.max(0, Math.min(1, v));
-    u -= Math.floor(u);
-    const srcW = Math.max(2, (2 * rCss / layout.tileW) * imgW / fov);
-    const srcH = Math.max(2, (2 * rCss / layout.tileH) * imgH / fov);
-    let sx = u * imgW - srcW / 2;
-    sx = ((sx % imgW) + imgW) % imgW;
-    let sy = v * imgH - srcH / 2;
-    if (sy < 0) sy = 0;
-    if (sy + srcH > imgH) sy = Math.max(0, imgH - srcH);
-    try {
-      ctx.drawImage(tile, sx, sy, srcW, srcH, -box, -box, box * 2, box * 2);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  };
-  const drawProcedural = (ctx, d, r) => {
-    /* Clear-glass fallback when the sky texture is not ready. Almost
-       transparent body, soft rim, tight specular — not a pale-blue bead. */
-    const g = ctx.createRadialGradient(-r * 0.1, -r * 0.22, r * 0.08, 0, r * 0.06, r);
-    g.addColorStop(0, 'rgba(255,255,255,0.07)');
-    g.addColorStop(0.55, 'rgba(16,20,26,0.04)');
-    g.addColorStop(1, 'rgba(6,8,12,0.16)');
-    ctx.fillStyle = g;
-    dropPath(ctx, d, r);
-    ctx.fill();
-  };
-  const drawGlass = (ctx, d, r) => {
-    ctx.globalCompositeOperation = 'source-atop';
-    const fres = ctx.createRadialGradient(-r * 0.12, -r * 0.22, r * 0.10, 0, r * 0.10, r);
-    fres.addColorStop(0, 'rgba(255,255,255,0.08)');
-    fres.addColorStop(0.52, 'rgba(255,255,255,0.00)');
-    fres.addColorStop(0.78, 'rgba(0,0,0,0.06)');
-    fres.addColorStop(0.92, 'rgba(0,0,0,0.30)');
-    fres.addColorStop(1, 'rgba(0,0,0,0.42)');
-    ctx.fillStyle = fres;
-    dropPath(ctx, d, r);
-    ctx.fill();
-    const bot = ctx.createRadialGradient(0, r * 0.48, 0, 0, r * 0.55, r * 0.9);
-    bot.addColorStop(0, 'rgba(0,0,0,0.16)');
-    bot.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = bot;
-    ctx.beginPath();
-    ctx.ellipse(0, r * 0.52, r * 0.82, r * 0.38, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(0, 0, r * 0.86, r * 0.86 * (d.sy || 1), 0, -0.95 * Math.PI, -0.12 * Math.PI);
-    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-    ctx.lineWidth = Math.max(0.6, r * 0.055);
-    ctx.stroke();
-    ctx.globalCompositeOperation = 'lighter';
-    const hx = -r * (d.hx || 0.28);
-    const hy = -r * (d.hy || 0.36);
-    const hs = Math.max(0.7, r * (d.hs || 0.12));
-    const spec = ctx.createRadialGradient(hx, hy, 0, hx, hy, hs);
-    spec.addColorStop(0, 'rgba(255,255,255,0.78)');
-    spec.addColorStop(0.32, 'rgba(255,255,255,0.28)');
-    spec.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = spec;
-    ctx.beginPath();
-    ctx.ellipse(hx, hy, hs, hs * 0.60, -0.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(hx + hs * 1.15, hy + hs * 0.7, hs * 0.28, hs * 0.18, -0.3, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.28)';
-    ctx.fill();
-    ctx.globalCompositeOperation = 'source-over';
-  };
-  const drawDrop = (ctx, d, layout) => {
-    if (d.alpha <= 0.01) return;
-    drawTrail(ctx, d);
-    const r = Math.max(1.2, d.size * 0.5);
-    ctx.save();
-    ctx.translate(d.x, d.y);
-    ctx.rotate(d.rot || 0);
-    ctx.globalAlpha = d.alpha;
-    const sh = ctx.createRadialGradient(0, r * 0.5, 0, 0, r * 0.55, r * 0.95);
-    sh.addColorStop(0, 'rgba(0,0,0,0.22)');
-    sh.addColorStop(0.55, 'rgba(0,0,0,0.08)');
-    sh.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = sh;
-    ctx.beginPath();
-    ctx.ellipse(0, r * (0.50 + (d.tear || 0) * 0.25), r * 0.85, r * 0.36, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.save();
-    dropPath(ctx, d, r);
-    ctx.clip();
-    const rec = st.skyRec;
-    const tiled = rec && rec.ok && rec.tile;
-    const drew = tiled ? drawSkyInside(ctx, d, r, layout, rec.tile) : false;
-    if (!drew) drawProcedural(ctx, d, r);
-    drawGlass(ctx, d, r);
-    ctx.restore();
-    ctx.restore();
-  };
-  const tick = (now) => {
-    if (st.dead) return;
-    st.raf = requestAnimationFrame(tick);
-    if (document.documentElement.classList.contains('wx-paused')) { st.last = now; return; }
-    if (!st.cssW) resize();
-    const dt = Math.min(0.05, st.last ? (now - st.last) / 1000 : 0.016);
-    st.last = now;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.imageSmoothingEnabled = true;
-    try { ctx.imageSmoothingQuality = 'high'; } catch (_) {}
-    ctx.clearRect(0, 0, st.w, st.h);
-    const layout = _skyLayout(st.host, compact, st.cssW, st.cssH);
-    while (st.drops.length < n) st.drops.push(spawn(false));
-    const maxTrail = Math.max(18, 36 * (st.dpr || 1));
-    const minStep = 2 * (st.dpr || 1);
-    for (const d of st.drops) {
-      if (d.alpha < 1 && d.fade >= 0) {
-        d.alpha = Math.min(1, d.alpha + dt / (d.fade || 0.8));
-      }
-      if (d.sitting) {
-        d.wait -= dt;
-        d.x += d.vx * dt * 0.2;
-        if (d.wait <= 0 && d.size > 7 * (st.dpr || 1) && Math.random() < dt * 0.35) startSlide(d);
-      } else {
-        d.x += d.vx * dt;
-        d.y += d.vy * dt;
-        d.vy += 6 * (st.dpr || 1) * dt;
-        d.vy = Math.min(d.vy, 42 * (st.dpr || 1));
-        const last = d.path.length ? d.path[d.path.length - 1] : null;
-        if (!last || Math.hypot(d.x - last.x, d.y - last.y) >= minStep) {
-          d.path.push({ x: d.x, y: d.y });
-        }
-        let span = 0;
-        for (let i = 1; i < d.path.length; i++) {
-          span += Math.hypot(d.path[i].x - d.path[i - 1].x, d.path[i].y - d.path[i - 1].y);
-        }
-        while (d.path.length > 2 && span > maxTrail) {
-          const a = d.path.shift();
-          span -= Math.hypot(d.path[0].x - a.x, d.path[0].y - a.y);
-        }
-      }
-      if (d.y - d.size > st.h + 8 || d.x < -40 || d.x > st.w + 40) {
-        Object.assign(d, spawn(false));
-        continue;
-      }
-      drawDrop(ctx, d, layout);
-    }
-  };
-  resize();
-  st.raf = requestAnimationFrame(tick);
-  if (typeof ResizeObserver !== 'undefined' && !el._heroRainRo) {
-    el._heroRainRo = new ResizeObserver(() => { try { resize(); } catch (_) {} });
-    try { el._heroRainRo.observe(el); } catch (_) {}
-  }
-}
-
 function bindMatchHeroWeather(root) {
   const scope = root || document;
   const heroes = scope.querySelectorAll ? scope.querySelectorAll('.hero.hero--weather') : [];
@@ -12950,7 +12567,6 @@ function bindMatchHeroWeather(root) {
     fetchCrestGlow(homeLogo, x.homeTeamId).then((pack) => applyPack('home', pack));
     fetchCrestGlow(awayLogo, x.awayTeamId).then((pack) => applyPack('away', pack));
   });
-  try { bindHeroRainDrops(scope); } catch (_) {}
   syncHeroWeatherMotion();
 }
 function impliedMap(odds) {
