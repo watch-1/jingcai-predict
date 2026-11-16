@@ -11,12 +11,12 @@ const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 const liveJs = fs.readFileSync(path.join(root, 'lib/live-scores.js'), 'utf8');
 const smJs = fs.readFileSync(path.join(root, 'lib/sm-live-scores.js'), 'utf8');
 
-assert.ok(/216lu30/.test(index), 'cache 216lu30');
-assert.ok(!/216lu29/.test(index), 'no stale 216lu29');
-assert.ok(/app\.js\?v=216lu30/.test(index), 'app.js cache-busted');
-assert.ok(/style\.css\?v=216lu30/.test(index), 'style cache-busted');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.379\}"/.test(apkSh), 'apk default 2.1.5.379');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-379\}"/.test(apkSh), 'apk default 379');
+assert.ok(/216lu31/.test(index), 'cache 216lu31');
+assert.ok(!/216lu30/.test(index), 'no stale 216lu30');
+assert.ok(/app\.js\?v=216lu31/.test(index), 'app.js cache-busted');
+assert.ok(/style\.css\?v=216lu31/.test(index), 'style cache-busted');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.380\}"/.test(apkSh), 'apk default 2.1.5.380');
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-380\}"/.test(apkSh), 'apk default 380');
 
 assert.ok(/function fromSm/.test(smJs) && /function mergeSmOverlay/.test(smJs), 'SM live helpers');
 assert.ok(/isSafeSmFixtureId/.test(smJs), 'SM id clash guard');
@@ -36,8 +36,9 @@ assert.ok(/_refreshing/.test(appJs), 'modules keep last-good while refreshing');
 assert.ok(/正在同时整理双方/.test(appJs), 'loading copy is paired, not one-sided');
 assert.ok(/gc-one-side/.test(appJs) && /gc-kit \.bars/.test(css), 'one-sided goal clock keeps a paired grid');
 assert.ok(/n < 0 \|\| n > 100/.test(appJs) || /n < 0/.test(appJs), '-1% / invalid pct guarded on the client');
-assert.ok(/wx-pan-sky-tile/.test(css), 'sunny/cloudy use a tileable background-position loop');
-assert.ok(/preview 379/.test(css), '379 weather notes are in CSS');
+assert.ok(/preview 380/.test(css), '380 weather notes are in CSS');
+assert.ok(!/animation:\s*wx-pan-sky-tile/.test(css), '379 background-position tile pan is retired');
+assert.ok(/--wx-pan-x/.test(css) && /is-js-pan/.test(css), 'sky pan is JS-driven transform');
 assert.ok(/animation:\s*none/.test(css), 'fixed sunny sun still does not pan');
 assert.ok(/sx, sy = 0\.78, 0\.30/.test(fs.readFileSync(path.join(root, 'tools/gen-weather-377.py'), 'utf8')), 'sun stays at 0.78, 0.30');
 assert.ok(/HERO_GLOW_SAT = 0\.28/.test(appJs), 'Neutral B sat kept');
@@ -80,4 +81,4 @@ assert.ok(/该侧留空/.test(clock), 'empty side is annotated, not hidden as a 
 const procFmt = extractNamed(appJs, 'processMetricFmt');
 assert.ok(/n < 0/.test(procFmt), 'processMetricFmt rejects negative percents');
 
-console.log('ui-379-test OK', { version: '2.1.5.379', cache: '216lu30' });
+console.log('ui-379-test OK', { version: '2.1.5.380', cache: '216lu31' });

@@ -8529,6 +8529,7 @@ html[data-theme="pitch"] .hero.hero--weather {
   opacity: 0;
   background: none;
   transition: opacity .35s ease;
+  --wx-pan-x: 0px;
 }
 /* preview 370: tileable sky, one-way linear pan. Two copies live on ::before
    (width 200%, background-size 50% 100%) so translateX(-50%) loops with no seam
@@ -8596,6 +8597,8 @@ html[data-theme="pitch"] .hero.hero--weather {
   opacity: 0;
   overflow: hidden;
   background: none;
+  --wx-rain-x: 0px;
+  --wx-rain-y: 0px;
 }
 .hero-wx-rain::before {
   content: "";
@@ -8819,26 +8822,31 @@ html[data-theme="pitch"] .hero.hero--weather {
   from { transform: translate3d(0, 0, 0); }
   to { transform: translate3d(-50%, 0, 0); }
 }
-/* preview 379: sunny/cloudy use a repeating background-position pan so the
-   52s loop is not a transform reset (that hitch is the hard jump on WebView).
-   The plate is still one tile wide; -100% equals one exact image width.
-   The fixed sunny sun stays on ::after at (0.78, 0.30). Rain/storm keep the
-   200% transform plate. */
-@keyframes wx-pan-sky-tile {
-  from { background-position: 0 42%; }
-  to { background-position: -100% 42%; }
+/* preview 380: Android WebView often does not animate background-position on
+   ::before, so the 379 tile-pan froze sunny/cloudy. The 200% plate plus
+   translate3d is WebView-viable, but a CSS animation restart can hitch at the
+   wrap. JS drives --wx-pan-x / --wx-rain-* with a modulo of one tile so the
+   loop never restarts a keyframe. wx-pan-sky / wx-rain-fall stay as the no-JS
+   fallback. The fixed sunny sun stays on ::after at (0.78, 0.30). */
+.hero-wx-sky.is-js-pan::before,
+.hero-sticky .hero-wx-sky.is-js-pan::before,
+.hero.hero--weather[data-weather] .hero-wx-sky.is-js-pan::before,
+.hero-sticky[data-weather] .hero-wx-sky.is-js-pan::before {
+  animation: none;
+  transform: translate3d(var(--wx-pan-x), 0, 0);
+  will-change: transform;
 }
-.hero.hero--weather[data-weather="sunny"] .hero-wx-sky::before,
-.hero-sticky[data-weather="sunny"] .hero-wx-sky::before,
-.hero.hero--weather[data-weather="cloudy"] .hero-wx-sky::before,
-.hero-sticky[data-weather="cloudy"] .hero-wx-sky::before {
-  width: 100%;
-  left: 0;
-  background-repeat: repeat-x;
-  background-size: 100% 100%;
-  background-position: 0 42%;
-  animation: wx-pan-sky-tile 52s linear infinite;
-  will-change: background-position;
+.hero-wx-rain.is-js-pan::before,
+.hero.hero--weather[data-weather] .hero-wx-rain.is-js-pan::before,
+.hero-sticky[data-weather] .hero-wx-rain.is-js-pan::before {
+  animation: none;
+  inset: auto;
+  top: -480px;
+  left: -48px;
+  width: calc(100% + 96px);
+  height: calc(100% + 480px);
+  transform: translate3d(var(--wx-rain-x), var(--wx-rain-y), 0);
+  will-change: transform;
 }
 @keyframes wx-rain-fall {
   from { background-position: 0 0; }

@@ -13179,9 +13179,80 @@ function leagueHeroMark(m) {
 function formatHeroRank(rank) {
   return String(rank || '').replace(/Group\s*/gi, '小组');
 }
+const WX_SKY_PAN_MS = 52000;
+const WX_RAIN_DRIFT = {
+  'light-rain': { vx: 16 / 1.35, vy: 480 / 1.35, tw: 240, th: 480 },
+  rain: { vx: 18 / 0.9, vy: 400 / 0.9, tw: 200, th: 400 },
+  storm: { vx: 20 / 0.7, vy: 320 / 0.7, tw: 160, th: 320 },
+};
+let _wxPanRaf = 0;
+let _wxPanLast = 0;
+let _wxSkyShift = 0;
+let _wxRainX = 0;
+let _wxRainY = 0;
+function wxPosMod(v, span) {
+  if (!(span > 0)) return 0;
+  const r = v % span;
+  return r < 0 ? r + span : r;
+}
+/* preview 380: rAF + tile modulo, not a CSS keyframe restart. Transform is
+   WebView-viable; wrapping x with % tileWidth is visually identical so the
+   join has no hard jump. Stops with html.wx-paused (hidden tab / left match). */
+function tickWxPan(now) {
+  const paused = !!(document.documentElement && document.documentElement.classList.contains('wx-paused'));
+  if (!_wxPanLast) _wxPanLast = now;
+  const dt = Math.min(80, Math.max(0, now - _wxPanLast));
+  _wxPanLast = now;
+  if (!paused) {
+    _wxSkyShift = wxPosMod(_wxSkyShift + dt / WX_SKY_PAN_MS, 1);
+    let drift = null;
+    const hosts = document.querySelectorAll('.hero.hero--weather[data-weather], .hero-sticky[data-weather]');
+    for (let i = 0; i < hosts.length; i++) {
+      const typ = hosts[i].getAttribute('data-weather');
+      if (WX_RAIN_DRIFT[typ]) { drift = WX_RAIN_DRIFT[typ]; break; }
+    }
+    if (drift) {
+      _wxRainX = wxPosMod(_wxRainX + drift.vx * dt / 1000, drift.tw);
+      _wxRainY = wxPosMod(_wxRainY + drift.vy * dt / 1000, drift.th);
+    }
+  }
+  const skies = document.getElementsByClassName('hero-wx-sky');
+  for (let i = 0; i < skies.length; i++) {
+    const sky = skies[i];
+    try { sky.classList.add('is-js-pan'); } catch (_) {}
+    const w = sky.clientWidth || 0;
+    if (w) {
+      try { sky.style.setProperty('--wx-pan-x', (-_wxSkyShift * w).toFixed(2) + 'px'); } catch (_) {}
+    }
+  }
+  const rains = document.getElementsByClassName('hero-wx-rain');
+  for (let i = 0; i < rains.length; i++) {
+    const rain = rains[i];
+    const host = rain.closest ? rain.closest('[data-weather]') : null;
+    const typ = host && host.getAttribute('data-weather');
+    if (!typ || !WX_RAIN_DRIFT[typ]) continue;
+    try { rain.classList.add('is-js-pan'); } catch (_) {}
+    try {
+      rain.style.setProperty('--wx-rain-x', _wxRainX.toFixed(2) + 'px');
+      rain.style.setProperty('--wx-rain-y', _wxRainY.toFixed(2) + 'px');
+    } catch (_) {}
+  }
+  if (paused) {
+    _wxPanRaf = 0;
+    _wxPanLast = 0;
+    return;
+  }
+  try { _wxPanRaf = requestAnimationFrame(tickWxPan); } catch (_) { _wxPanRaf = 0; }
+}
+function ensureWxPanLoop() {
+  if (_wxPanRaf) return;
+  _wxPanLast = 0;
+  try { _wxPanRaf = requestAnimationFrame(tickWxPan); } catch (_) { _wxPanRaf = 0; }
+}
 function syncHeroWeatherMotion() {
   const off = !!(document.hidden || (typeof route === 'function' && route().name !== 'match'));
   try { document.documentElement.classList.toggle('wx-paused', off); } catch (_) {}
+  if (!off) ensureWxPanLoop();
 }
 
 function bindMatchHeroWeather(root) {
