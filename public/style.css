@@ -8819,6 +8819,27 @@ html[data-theme="pitch"] .hero.hero--weather {
   from { transform: translate3d(0, 0, 0); }
   to { transform: translate3d(-50%, 0, 0); }
 }
+/* preview 379: sunny/cloudy use a repeating background-position pan so the
+   52s loop is not a transform reset (that hitch is the hard jump on WebView).
+   The plate is still one tile wide; -100% equals one exact image width.
+   The fixed sunny sun stays on ::after at (0.78, 0.30). Rain/storm keep the
+   200% transform plate. */
+@keyframes wx-pan-sky-tile {
+  from { background-position: 0 42%; }
+  to { background-position: -100% 42%; }
+}
+.hero.hero--weather[data-weather="sunny"] .hero-wx-sky::before,
+.hero-sticky[data-weather="sunny"] .hero-wx-sky::before,
+.hero.hero--weather[data-weather="cloudy"] .hero-wx-sky::before,
+.hero-sticky[data-weather="cloudy"] .hero-wx-sky::before {
+  width: 100%;
+  left: 0;
+  background-repeat: repeat-x;
+  background-size: 100% 100%;
+  background-position: 0 42%;
+  animation: wx-pan-sky-tile 52s linear infinite;
+  will-change: background-position;
+}
 @keyframes wx-rain-fall {
   from { background-position: 0 0; }
   to { background-position: 18px 400px; }
@@ -9071,10 +9092,60 @@ html:not([data-theme="pitch"]) .view.sub.md-wrap .intel-scoop-hd h3 {
   font-weight: 600;
 }
 .gc-kit .gc-empty-side {
-  margin: 0;
+  margin: 10px 0 0;
   font-size: 12px;
   color: #7b8499;
   line-height: 1.45;
+}
+/* preview 379: one-sided 近况进球时段 keeps a paired grid so the empty side
+   does not collapse or let the remaining bars jump/overlap. */
+.gc-kit .xg-row,
+.gc-kit .gc-row {
+  grid-template-columns: 52px minmax(0, 1fr) 52px;
+  column-gap: 8px;
+  align-items: center;
+  min-height: 28px;
+}
+.gc-kit .bars {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  height: 6px;
+  min-width: 0;
+}
+.gc-kit .bars .h,
+.gc-kit .bars .a {
+  min-width: 0;
+  height: 100%;
+  border-radius: 4px;
+  background: #eef1f6;
+  overflow: hidden;
+}
+.gc-kit .bars .h.empty,
+.gc-kit .bars .a.empty,
+.sm-kit .bars .h.empty,
+.sm-kit .bars .a.empty {
+  opacity: .55;
+  background: #eef1f6;
+}
+.gc-kit .num.na,
+.sm-kit .stat-row .num.na {
+  opacity: .5;
+  font-weight: 650;
+}
+.sm-kit .stat-row.one-side .bars {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* preview 379: stacked 身价/六围/近况 overlays — drop backdrop-filter on
+   Android WebView, which has crashed some devices when closing the stack. */
+#sheet .sheet,
+#radar-expand,
+.rk-page,
+.sm-player-sheet,
+.mv-sheet {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ---------- preview 365: bundled league plate, weather card, live tab, sticky hero ---------- */

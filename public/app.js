@@ -2763,11 +2763,19 @@ function syncSheetScrollLock() {
   if (view) view.classList.toggle('sheet-lock', !!on);
 }
 function closeSheet() {
-  const sh = $('#sheet');
-  sh.classList.add('hidden');
-  sh.classList.remove('bonus-opt-mask');
-  sh.innerHTML = '';
-  syncSheetScrollLock();
+  try {
+    const sh = document.getElementById('sheet') || $('#sheet');
+    if (!sh) return;
+    sh.classList.add('hidden');
+    sh.classList.remove('bonus-opt-mask');
+    // Hide first; clear on the next frame so WebView is not compositing a torn-down tree.
+    const clear = () => { try { if (sh.classList.contains('hidden')) sh.innerHTML = ''; } catch (_) {} };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(clear);
+    else setTimeout(clear, 0);
+    syncSheetScrollLock();
+  } catch (_) {
+    try { syncSheetScrollLock(); } catch (__) {}
+  }
 }
 globalThis.closeSheet = closeSheet;
 function openSheetHtml(html) {
@@ -2935,32 +2943,94 @@ function navNote(h) {
   if (NAV.length >= 2 && NAV[NAV.length - 2] === h) NAV.pop();
   else if (NAV[NAV.length - 1] !== h) { NAV.push(h); if (NAV.length > 50) NAV.shift(); }
 }
-function back() {
-  if (S.radarExpand) { closeRadarExpand(); return; }
-  const reopenMe = S.meBackToDrawer && isMeDrawerChildRoute(route().name);
-  if (NAV.length >= 2) {
-    NAV.pop(); const prev = NAV.pop();
-    history.replaceState(null, '', prev); navNote(prev); render(); window.scrollTo(0, 0);
-    if (reopenMe && !isMeDrawerChildRoute(route().name)) {
-      S.meBackToDrawer = false;
-      openMeDrawer();
-    }
-  } else { NAV.length = 0; go('#/home', true); navNote('#/home'); }
+function isSheetOpen() {
+  try {
+    const sh = document.getElementById('sheet') || (typeof $ === 'function' && $('#sheet'));
+    return !!(sh && !sh.classList.contains('hidden'));
+  } catch (_) { return false; }
 }
-window.addEventListener('hashchange', () => { navNote(location.hash || '#/home'); closeRadarExpand(); closeSheet(); closeMeDrawer(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopLivePoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopChatPoll(); if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll(); if (route().name !== 'match') stopMatchStatusPoll(); if (route().name !== 'home') { stopHomeFocusRotate(); stopHomeLiveScorePoll(); } render(); window.scrollTo(0, 0); });
-// Android back button hook (MainActivity calls this): returns 1 if handled in-page, 0 to exit the app
-window.__appBack = () => {
-  if (!$('#dialog').classList.contains('hidden')) { $('#dialog').querySelector('[data-r="0"]').click(); return 1; }
-  if (!$('#sheet').classList.contains('hidden')) {
-    if ($('#sheet').classList.contains('bonus-opt-mask')) { closeBonusOptSheet(); openCalcSubmitSheet(); return 1; }
-    closeSheet(); return 1;
+function isDialogOpen() {
+  try {
+    const d = document.getElementById('dialog') || (typeof $ === 'function' && $('#dialog'));
+    return !!(d && !d.classList.contains('hidden'));
+  } catch (_) { return false; }
+}
+function closeTopOverlay() {
+  try {
+    if (isDialogOpen()) {
+      const d = document.getElementById('dialog') || $('#dialog');
+      const btn = d && d.querySelector('[data-r="0"], [data-act="closeDialog"], .x');
+      if (btn && typeof btn.click === 'function') btn.click();
+      else if (d) { d.classList.add('hidden'); }
+      return true;
+    }
+  } catch (_) {}
+  try {
+    if (isSheetOpen()) {
+      const sh = document.getElementById('sheet') || $('#sheet');
+      if (sh && sh.classList.contains('bonus-opt-mask')) {
+        try { closeBonusOptSheet(); } catch (_) {}
+        try { openCalcSubmitSheet(); } catch (_) {}
+        return true;
+      }
+      closeSheet();
+      return true;
+    }
+  } catch (_) { try { closeSheet(); return true; } catch (__) {} }
+  try {
+    if (S.radarExpand) { closeRadarExpand(); return true; }
+  } catch (_) { try { closeRadarExpand(); return true; } catch (__) {} }
+  return false;
+}
+function back() {
+  try {
+    if (closeTopOverlay()) return;
+  } catch (_) {}
+  try {
+    const reopenMe = S.meBackToDrawer && isMeDrawerChildRoute(route().name);
+    if (NAV.length >= 2) {
+      NAV.pop(); const prev = NAV.pop();
+      history.replaceState(null, '', prev); navNote(prev); render(); window.scrollTo(0, 0);
+      if (reopenMe && !isMeDrawerChildRoute(route().name)) {
+        S.meBackToDrawer = false;
+        try { openMeDrawer(); } catch (_) {}
+      }
+    } else { NAV.length = 0; go('#/home', true); navNote('#/home'); }
+  } catch (_) {
+    try { go('#/home', true); } catch (__) {}
   }
-  if (S.radarExpand) { closeRadarExpand(); return 1; }
-  if (meDrawerOpen()) { closeMeDrawer(); return 1; }
-  const r = route();
-  if (r.name === 'login' && !S.guest && !loggedIn()) return 0;
-  if (r.name === 'home') return 0;
-  back(); return 1;
+}
+window.addEventListener('hashchange', () => {
+  try { navNote(location.hash || '#/home'); } catch (_) {}
+  try { closeRadarExpand(); } catch (_) {}
+  try { closeSheet(); } catch (_) {}
+  try { closeMeDrawer(); } catch (_) {}
+  try {
+    if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopLivePoll();
+    if (route().name !== 'match' || detailTabOf(route().arg) !== 'live') stopChatPoll();
+    if (route().name !== 'match' || detailTabOf(route().arg) !== 'odds') stopOddsLivePoll();
+    if (route().name !== 'match') stopMatchStatusPoll();
+    if (route().name !== 'home') { stopHomeFocusRotate(); stopHomeLiveScorePoll(); }
+  } catch (_) {}
+  try { render(); } catch (_) {}
+  try { window.scrollTo(0, 0); } catch (_) {}
+});
+// Android back button hook (MainActivity calls this): returns 1 if handled in-page, 0 to exit the app.
+// Must never throw: a thrown error is coerced to 0 and MainActivity.finish() — 闪退 on some phones.
+window.__appBack = () => {
+  try {
+    if (closeTopOverlay()) return 1;
+    if (typeof meDrawerOpen === 'function' && meDrawerOpen()) { closeMeDrawer(); return 1; }
+    const r = route();
+    if (r.name === 'login' && !S.guest && !loggedIn()) return 0;
+    if (r.name === 'home') return 0;
+    back();
+    return 1;
+  } catch (_) {
+    try { closeSheet(); } catch (__) {}
+    try { closeRadarExpand(); } catch (__) {}
+    return 1;
+  }
 };
 
 // ======================= shared UI =======================
@@ -5075,11 +5145,13 @@ async function loadLiveScores(ids, { force, bust } = {}) {
     try { await S._liveScoresInflight; } catch (_) {}
     if (S.liveScoresLoading) return S.liveScores;
   }
+  const haveLastGood = !!(S.liveScores && Object.keys(S.liveScores).length);
   S.liveScoresLoading = true;
   const job = (async () => {
     try {
       // bust (pull-to-refresh): refresh=1 skips the server-side payload cache too.
-      const j = await api('/live-scores?ids=' + encodeURIComponent(list.join(',')) + (bust ? '&refresh=1' : ''), { timeout: 15000 });
+      // 379: 8s client timeout so the schedule list is not held for 15s; last-good stays.
+      const j = await api('/live-scores?ids=' + encodeURIComponent(list.join(',')) + (bust ? '&refresh=1' : ''), { timeout: 8000 });
       if (j && j.data && typeof j.data === 'object') {
         const prevScores = S.liveScores || {};
         S.liveScores = { ...prevScores, ...j.data };
@@ -5096,6 +5168,11 @@ async function loadLiveScores(ids, { force, bust } = {}) {
     return S.liveScores;
   })();
   S._liveScoresInflight = job;
+  // Return last-good immediately (non-force) so the list / hero never sit empty waiting on SM/AF.
+  if (haveLastGood && !missing && !force) {
+    job.catch(() => {});
+    return S.liveScores;
+  }
   return job;
 }
 
@@ -8372,16 +8449,26 @@ async function ensureSmSurface(x) {
     return;
   }
   if (hit && hit._loading) return;
+  const prevGood = hit && hit.ok !== false && !hit._loading ? hit : null;
+  if (prevGood) paintSmSurface(key, prevGood);
   const q = ['matchId=' + encodeURIComponent(key), 'date=' + encodeURIComponent(x.date || ''), 'time=' + encodeURIComponent(x.time || ''),
     'homeTeamId=' + encodeURIComponent(x.homeTeamId || ''), 'awayTeamId=' + encodeURIComponent(x.awayTeamId || ''),
     'home=' + encodeURIComponent(x.home || ''), 'away=' + encodeURIComponent(x.away || '')];
-  const loadingPack = { ok: true, _loading: true, _at: Date.now() };
+  const loadingPack = prevGood
+    ? Object.assign({}, prevGood, { _loading: true, _refreshing: true })
+    : { ok: true, _loading: true, _at: Date.now() };
   S.smSurface[key] = loadingPack;
-  paintSmSurface(key, loadingPack);
+  if (!prevGood) paintSmSurface(key, loadingPack);
   let pack;
   try { pack = await api('/sm-surface?' + q.join('&'), { timeout: 120000 }); }
   catch (e) { pack = { ok: false, error: e.message || '加载失败' }; }
   pack._at = Date.now();
+  if (pack && pack.ok === false && prevGood) {
+    prevGood._at = Date.now();
+    S.smSurface[key] = prevGood;
+    paintSmSurface(key, prevGood);
+    return;
+  }
   S.smSurface[key] = pack;
   paintSmSurface(key, pack);
 }
@@ -8394,7 +8481,8 @@ function paintSmSurface(id, pack) {
   const liveBox = document.getElementById('sm-live-' + id);
   paintComponentLogic(id);
   if (pack && pack._loading) {
-    const loadNote = '<p class="note sm-loading-note">正在拉取第三方近况与统计（球队名解析或冷启动可能需数十秒，并非卡住）…</p>';
+    if (pack._refreshing && (pack.formHtml || pack.posHtml || pack.barsHtml)) return;
+    const loadNote = '<p class="note sm-loading-note">两边数据一起整理，有缓存会马上显示，不会只出一侧。</p>';
     if (form) form.innerHTML = loadNote;
     if (bars) bars.innerHTML = loadNote;
     if (pos) pos.innerHTML = loadNote;
@@ -8770,9 +8858,12 @@ function h2hBlock(h2h, home, away, { n = 5, matchId = '', h2hSource = '' } = {})
   </div>`;
 }
 function processMetricFmt(key, v) {
-  if (v == null || !Number.isFinite(Number(v))) return '-';
+  if (v == null || !Number.isFinite(Number(v))) return '—';
   const n = Number(v);
-  if (key === 'possession' || key === 'passesPct') return (Math.round(n * 10) / 10) + '%';
+  if (key === 'possession' || key === 'passesPct') {
+    if (n < 0 || n > 100) return '—';
+    return (Math.round(n * 10) / 10) + '%';
+  }
   if (key === 'expectedGoals') return (Math.round(n * 100) / 100).toFixed(2);
   return (Math.round(n * 10) / 10).toString();
 }
@@ -10960,7 +11051,11 @@ function paintMatchSquadValue(id) {
   const card = document.getElementById('sm-value-' + key);
   paintTeamMv(key, pack);
   if (pack && pack._loading) {
-    if (card) card.innerHTML = '<section class="sm-kit sm-value"><h3>阵容身价</h3><p class="sm-empty">正在按公开名单加总…</p></section>';
+    if (pack._refreshing && pack.home && pack.away) {
+      if (card) card.innerHTML = mvValueCardHtml(pack, key);
+      return;
+    }
+    if (card) card.innerHTML = '<section class="sm-kit sm-value"><h3>阵容身价</h3><p class="sm-empty">正在同时整理双方名单身价…</p></section>';
     return;
   }
   if (!pack || pack.ok === false) {
@@ -11014,7 +11109,7 @@ async function ensureMatchSquadValue(x) {
   const key = String(x.id);
   const hit = S.matchSquadValue[key];
   const age = hit && hit._at ? Date.now() - hit._at : Infinity;
-  if (hit && !hit._loading && age < 15 * 60 * 1000) {
+  if (hit && !hit._loading && hit.ok !== false && age < 15 * 60 * 1000) {
     paintMatchSquadValue(key);
     return;
   }
@@ -11031,12 +11126,22 @@ async function ensureMatchSquadValue(x) {
     'awayEn=' + encodeURIComponent(x.awayEn || ''),
     'league=' + encodeURIComponent(x.league || ''),
   ];
-  S.matchSquadValue[key] = { ok: true, _loading: true, _at: Date.now() };
-  paintMatchSquadValue(key);
+  const prevGood = hit && hit.ok !== false && !hit._loading ? hit : null;
+  if (prevGood) paintMatchSquadValue(key);
+  S.matchSquadValue[key] = prevGood
+    ? Object.assign({}, prevGood, { _loading: true, _refreshing: true })
+    : { ok: true, _loading: true, _at: Date.now() };
+  if (!prevGood) paintMatchSquadValue(key);
   let pack;
   try { pack = await api('/match-squad-value?' + q.join('&'), { timeout: 60000 }); }
   catch (e) { pack = { ok: false, error: e.message || '加载失败' }; }
   pack._at = Date.now();
+  if (pack && pack.ok === false && prevGood) {
+    prevGood._at = Date.now();
+    S.matchSquadValue[key] = prevGood;
+    paintMatchSquadValue(key);
+    return;
+  }
   S.matchSquadValue[key] = pack;
   paintMatchSquadValue(key);
 }
@@ -11096,7 +11201,10 @@ function radarFmt(key, v) {
   const n = Number(v);
   const pct = /pct|conv|duel_win|save_pct|long_pct|sib_share|aerial_win|possession|percentage|pass_pct/.test(String(key || ''))
     || /%$/.test(String(key || '')) || /成功率|转化率|控球率|扑救率/.test(String(key || ''));
-  if (pct) return (Math.abs(n) >= 10 ? n.toFixed(0) : n.toFixed(1)) + '%';
+  if (pct) {
+    if (!(n >= 0 && n <= 100)) return '—';
+    return (Math.abs(n) >= 10 ? n.toFixed(0) : n.toFixed(1)) + '%';
+  }
   if (Math.abs(n) >= 100) return n.toFixed(0);
   if (Math.abs(n) >= 10) return n.toFixed(1);
   return n.toFixed(2);
@@ -11644,8 +11752,13 @@ function paintMatchRadar(id) {
   const teamEl = document.getElementById('sm-team-radar-' + key);
   const playerEl = document.getElementById('sm-player-radar-' + key);
   if (pack && pack._loading) {
-    if (teamEl) teamEl.innerHTML = '<section class="sm-kit sm-radar"><h3>球队六围</h3><p class="sm-empty">正在整理六围…</p></section>';
-    if (playerEl) playerEl.innerHTML = '<section class="sm-kit sm-radar"><h3>球员六围</h3><p class="sm-empty">正在整理六围…</p></section>';
+    if (pack._refreshing && pack.ok !== false && (pack.team || pack.players)) {
+      if (teamEl) teamEl.innerHTML = rewritePredictLogoHtml(teamRadarCardHtml(pack, key));
+      if (playerEl) playerEl.innerHTML = rewritePredictLogoHtml(playerRadarCardHtml(pack, key));
+      return;
+    }
+    if (teamEl) teamEl.innerHTML = '<section class="sm-kit sm-radar"><h3>球队六围</h3><p class="sm-empty">正在同时整理双方六围…</p></section>';
+    if (playerEl) playerEl.innerHTML = '<section class="sm-kit sm-radar"><h3>球员六围</h3><p class="sm-empty">正在同时整理双方六围…</p></section>';
     return;
   }
   if (!pack || pack.ok === false) {
@@ -11663,7 +11776,7 @@ async function ensureMatchRadar(x) {
   const key = String(x.id);
   const hit = S.matchRadar[key];
   const age = hit && hit._at ? Date.now() - hit._at : Infinity;
-  if (hit && !hit._loading && age < 15 * 60 * 1000) {
+  if (hit && !hit._loading && hit.ok !== false && age < 15 * 60 * 1000) {
     paintMatchRadar(key);
     return;
   }
@@ -11680,15 +11793,25 @@ async function ensureMatchRadar(x) {
     'awayEn=' + encodeURIComponent(x.awayEn || ''),
     'league=' + encodeURIComponent(x.league || ''),
   ];
-  S.matchRadar[key] = { ok: true, _loading: true, _at: Date.now() };
-  paintMatchRadar(key);
+  const prevGood = hit && hit.ok !== false && !hit._loading ? hit : null;
+  if (prevGood) paintMatchRadar(key);
+  S.matchRadar[key] = prevGood
+    ? Object.assign({}, prevGood, { _loading: true, _refreshing: true })
+    : { ok: true, _loading: true, _at: Date.now() };
+  if (!prevGood) paintMatchRadar(key);
   let pack;
   try { pack = await api('/match-radar?' + q.join('&'), { timeout: 60000 }); }
   catch (e) { pack = { ok: false, error: e.message || '加载失败' }; }
   pack._at = Date.now();
+  if (pack && pack.ok === false && prevGood) {
+    prevGood._at = Date.now();
+    S.matchRadar[key] = prevGood;
+    paintMatchRadar(key);
+    return;
+  }
   S.matchRadar[key] = pack;
   paintMatchRadar(key);
-  if (S.radarExpand && String(S.radarExpand.id) === key) renderRadarExpand();
+  try { if (S.radarExpand && String(S.radarExpand.id) === key) renderRadarExpand(); } catch (_) {}
 }
 
 function radarExpandRoot() {
@@ -11706,17 +11829,20 @@ function radarExpandRoot() {
   return el;
 }
 function closeRadarExpand() {
-  S.radarExpand = null;
-  unbindRadarBoardFit();
-  const el = document.getElementById('radar-expand');
-  if (el) {
-    const body = el.querySelector('.rk-body');
-    if (body) body.scrollTop = 0;
-    el.classList.add('hidden');
-    el.innerHTML = '';
-    el.scrollTop = 0;
-  }
-  document.body.classList.remove('rk-lock');
+  try { S.radarExpand = null; } catch (_) {}
+  try { unbindRadarBoardFit(); } catch (_) {}
+  try {
+    const el = document.getElementById('radar-expand');
+    if (el) {
+      try { const body = el.querySelector('.rk-body'); if (body) body.scrollTop = 0; } catch (_) {}
+      el.classList.add('hidden');
+      el.scrollTop = 0;
+      const clear = () => { try { if (el.classList.contains('hidden')) el.innerHTML = ''; } catch (_) {} };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(clear);
+      else setTimeout(clear, 0);
+    }
+  } catch (_) {}
+  try { document.body.classList.remove('rk-lock'); } catch (_) {}
 }
 function radarPlayerIsDrawable(pack, smId) {
   if (!smId || !pack) return false;
@@ -13292,15 +13418,18 @@ function goalClockHtml(m) {
   const avgs = GOAL_CLOCK_PERIODS.map(([key]) => [goalClockAvg(h, key), goalClockAvg(a, key)]);
   let max = 0.5;
   for (const [hv, av] of avgs) {
-    if (Number.isFinite(hv)) max = Math.max(max, hv);
-    if (Number.isFinite(av)) max = Math.max(max, av);
+    if (Number.isFinite(hv) && hv >= 0) max = Math.max(max, hv);
+    if (Number.isFinite(av) && av >= 0) max = Math.max(max, av);
   }
   const bar = (v, side) => {
-    const ok = Number.isFinite(v);
+    const ok = Number.isFinite(v) && v >= 0;
     const w = ok ? Math.max(0, Math.min(100, (v / max) * 100)) : 0;
-    return `<div class="${side}${ok ? '' : ' empty'}"><i style="width:${w.toFixed(1)}%"></i></div>`;
+    return `<div class="${side}${ok ? '' : ' empty'}" aria-hidden="${ok ? 'false' : 'true'}"><i style="width:${w.toFixed(1)}%"></i></div>`;
   };
-  const num = (v, side) => `<div class="num ${side}">${esc(goalClockFmt(v))}</div>`;
+  const num = (v, side) => {
+    const ok = Number.isFinite(v) && v >= 0;
+    return `<div class="num ${side}${ok ? '' : ' na'}">${esc(ok ? goalClockFmt(v) : '—')}</div>`;
+  };
   let rows = avgs.map((pair, i) => {
     const lab = GOAL_CLOCK_PERIODS[i][1];
     return `<div class="xg-row gc-row">${num(pair[0], 'left')}<div class="stat-mid"><div class="label">${esc(lab)}</div><div class="bars">${bar(pair[0], 'h')}${bar(pair[1], 'a')}</div></div>${num(pair[1], 'right')}</div>`;
@@ -13312,19 +13441,19 @@ function goalClockHtml(m) {
     const fmt = (v) => v == null ? '—' : Math.round(v * 100) + '%';
     const maxCf = Math.max(hv == null ? 0 : hv, av == null ? 0 : av, 0.25);
     const b = (v, side) => {
-      const ok = v != null;
+      const ok = v != null && Number.isFinite(v) && v >= 0;
       const w = ok ? Math.max(0, Math.min(100, (v / maxCf) * 100)) : 0;
       return `<div class="${side}${ok ? '' : ' empty'}"><i style="width:${w.toFixed(1)}%"></i></div>`;
     };
-    return `<div class="xg-row gc-row"><div class="num left">${esc(fmt(hv))}</div><div class="stat-mid"><div class="label">先丢球</div><div class="bars">${b(hv, 'h')}${b(av, 'a')}</div></div><div class="num right">${esc(fmt(av))}</div></div>`;
+    return `<div class="xg-row gc-row"><div class="num left${hv == null ? ' na' : ''}">${esc(fmt(hv))}</div><div class="stat-mid"><div class="label">先丢球</div><div class="bars">${b(hv, 'h')}${b(av, 'a')}</div></div><div class="num right${av == null ? ' na' : ''}">${esc(fmt(av))}</div></div>`;
   };
   const nBits = [];
   if (h && Number(h.n_fixtures) > 0) nBits.push(`${homeName}近 ${Number(h.n_fixtures)} 场`);
   if (a && Number(a.n_fixtures) > 0) nBits.push(`${awayName}近 ${Number(a.n_fixtures)} 场`);
   const sideNote = (!hOk || !aOk)
-    ? `<p class="gc-empty-side">${esc((!hOk ? homeName : awayName) + '进球分钟不够（不足 4 场），不和对方放在一起比。')}</p>`
+    ? `<p class="gc-empty-side">${esc((!hOk ? homeName : awayName) + '进球分钟不够（不足 4 场），该侧留空，不编造场均。轴与另一侧对齐。')}</p>`
     : '';
-  return `<section class="sm-kit gc-kit"><div class="sm-kit-hd"><h3>近况进球时段</h3><small>场均进球</small></div>
+  return `<section class="sm-kit gc-kit${!hOk || !aOk ? ' gc-one-side' : ''}"><div class="sm-kit-hd"><h3>近况进球时段</h3><small>场均进球</small></div>
     <p class="gc-sub">近况场均：该段进球数 ÷ 场次。不是本场会进几个。</p>
     <div class="sm-legend"><i class="h"></i><span>${esc(homeName)}</span><i class="a"></i><span>${esc(awayName)}</span></div>
     ${rows}${cfRow()}
@@ -13730,26 +13859,54 @@ function refreshDetailTabs(x) {
   bar.innerHTML = tabs.map(([k, lab]) =>
     `<button type="button" class="${cur === k ? 'on' : ''}" data-act="detailTab" data-id="${esc(x.id)}" data-tab="${k}">${lab}</button>`
   ).join('');
-  // Also refresh hero score/status
-  const hero = document.getElementById('match-hero-' + x.id);
-  if (hero) {
-    const m = findMatch(x.id);
-    const r = !m && (S.results || []).find(z => z.id === String(x.id));
-    const wrap = document.createElement('div');
-    wrap.innerHTML = matchHero(x, m, r, { favBtn: matchFavBtn(x) });
-    const next = wrap.firstElementChild;
-    if (next) hero.replaceWith(next);
-    const sticky = document.getElementById('match-sticky-' + x.id);
-    if (sticky) {
-      const sw = document.createElement('div');
-      sw.innerHTML = matchStickyHero(x, m, r);
-      if (sw.firstElementChild) sticky.replaceWith(sw.firstElementChild);
-    }
-    try { bindMatchHeroWeather(document.getElementById('match-hero-' + x.id) && document.getElementById('match-hero-' + x.id).parentNode || document); } catch (_) {}
-    try { bindMatchHeroSticky(); } catch (_) {}
-    try { applyMatchWeather(x, weatherPackOf(x)); } catch (_) {}
-    paintMatchSquadValue(x.id);
+  // 379: patch score/status in place. Never remount the hero (crests flicker,
+  // weather CSS animation resets / hitch).
+  try { softPatchMatchHero(x); } catch (_) {}
+}
+
+/** Update hero/sticky score and clock without replacing the weather tree or crest <img>. */
+function softPatchMatchHero(x) {
+  if (!x || !x.id) return false;
+  const id = String(x.id);
+  const hero = document.getElementById('match-hero-' + id);
+  if (!hero) return false;
+  const m = findMatch(id);
+  const r = !m && (S.results || []).find(z => z.id === String(id));
+  const wrap = document.createElement('div');
+  wrap.innerHTML = matchHero(x, m, r, { favBtn: matchFavBtn(x) });
+  const next = wrap.firstElementChild;
+  if (!next) return false;
+  const midNow = hero.querySelector('.mid');
+  const midNext = next.querySelector('.mid');
+  if (midNow && midNext && midNow.innerHTML !== midNext.innerHTML) midNow.innerHTML = midNext.innerHTML;
+  const navNow = hero.querySelector('.hero-edge-nav, .hero-lg');
+  const navNext = next.querySelector('.hero-edge-nav, .hero-lg');
+  if (navNow && navNext) {
+    const favNow = navNow.querySelector('[data-act="fav"], [data-act="unfav"], .hero-fav, button[aria-label*="关注"]');
+    const favNext = navNext.querySelector('[data-act="fav"], [data-act="unfav"], .hero-fav, button[aria-label*="关注"]');
+    if (favNow && favNext && favNow.outerHTML !== favNext.outerHTML) favNow.replaceWith(favNext.cloneNode(true));
   }
+  const wx = (typeof matchWeatherType === 'function') ? matchWeatherType(x) : hero.getAttribute('data-weather');
+  if (wx && hero.getAttribute('data-weather') !== wx) hero.setAttribute('data-weather', wx);
+  const sticky = document.getElementById('match-sticky-' + id);
+  if (sticky) {
+    const sw = document.createElement('div');
+    sw.innerHTML = matchStickyHero(x, m, r);
+    const snext = sw.firstElementChild;
+    if (snext) {
+      const sMid = sticky.querySelector('.mid, .sticky-mid, .score, .hero-sticky-mid');
+      const sMidN = snext.querySelector('.mid, .sticky-mid, .score, .hero-sticky-mid');
+      if (sMid && sMidN && sMid.innerHTML !== sMidN.innerHTML) sMid.innerHTML = sMidN.innerHTML;
+      else {
+        // Fall back to text-only score nodes so the sticky weather plate is not remounted.
+        const sScore = sticky.querySelector('.score');
+        const nScore = snext.querySelector('.score');
+        if (sScore && nScore && sScore.innerHTML !== nScore.innerHTML) sScore.innerHTML = nScore.innerHTML;
+      }
+      if (wx && sticky.getAttribute('data-weather') !== wx) sticky.setAttribute('data-weather', wx);
+    }
+  }
+  return true;
 }
 
 function stopMatchStatusPoll() {
