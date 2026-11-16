@@ -3433,6 +3433,15 @@ button.pl-card{cursor:pointer;text-align:left;width:100%;font:inherit;color:inhe
 }
 .sm-switch button.on { background: #1c2434; color: #fff; }
 .sm-form-list[hidden] { display: none !important; }
+/* preview 382: in-page form slot swap — freeze without unhiding a prebuilt list. */
+.sm-form-mount.slot-teardown,
+.slot-teardown {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  animation: none !important;
+  will-change: auto !important;
+}
 .sm-kit .ps-row {
   display: grid; grid-template-columns: 32px 28px 1fr auto; gap: 8px; align-items: center;
   padding: 8px; margin-bottom: 6px; border-radius: 12px;

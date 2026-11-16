@@ -11,12 +11,12 @@ const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 const liveJs = fs.readFileSync(path.join(root, 'lib/live-scores.js'), 'utf8');
 const smJs = fs.readFileSync(path.join(root, 'lib/sm-live-scores.js'), 'utf8');
 
-assert.ok(/216lu32/.test(index), 'cache 216lu32');
-assert.ok(!/216lu31/.test(index), 'no stale 216lu31');
-assert.ok(/app\.js\?v=216lu32/.test(index), 'app.js cache-busted');
-assert.ok(/style\.css\?v=216lu32/.test(index), 'style cache-busted');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.381\}"/.test(apkSh), 'apk default 2.1.5.381');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-381\}"/.test(apkSh), 'apk default 381');
+assert.ok(/216lu33/.test(index), 'cache 216lu33');
+assert.ok(!/216lu32/.test(index), 'no stale 216lu32');
+assert.ok(/app\.js\?v=216lu33/.test(index), 'app.js cache-busted');
+assert.ok(/style\.css\?v=216lu33/.test(index), 'style cache-busted');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.382\}"/.test(apkSh), 'apk default 2.1.5.382');
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-382\}"/.test(apkSh), 'apk default 382');
 
 assert.ok(/function fromSm/.test(smJs) && /function mergeSmOverlay/.test(smJs), 'SM live helpers');
 assert.ok(/isSafeSmFixtureId/.test(smJs), 'SM id clash guard');
@@ -81,4 +81,4 @@ assert.ok(/该侧留空/.test(clock), 'empty side is annotated, not hidden as a 
 const procFmt = extractNamed(appJs, 'processMetricFmt');
 assert.ok(/n < 0/.test(procFmt), 'processMetricFmt rejects negative percents');
 
-console.log('ui-379-test OK', { version: '2.1.5.381', cache: '216lu32' });
+console.log('ui-379-test OK', { version: '2.1.5.382', cache: '216lu33' });

@@ -2860,31 +2860,91 @@ function swapOverlayHtml(el, html, opts) {
   const epoch = bumpOverlayEpoch(el);
   const after = opts && opts.after;
   const onShow = opts && opts.onShow;
-  const visible = !el.classList.contains('hidden') && !el.classList.contains('overlay-teardown');
+  const onIdle = opts && opts.onIdle;
+  /* preview 382: first show of a hidden overlay (详细对照) must also wait
+     before writing and wait again before removing .hidden / unfreezing.
+     Measurement (bindRadarBoardFit) runs only after the reveal is idle. */
   const reveal = () => {
     if (epoch !== currentOverlayEpoch(el)) return;
-    try { el.classList.remove('hidden'); } catch (_) {}
-    const show = () => {
+    afterCompositorIdle(() => {
       if (epoch !== currentOverlayEpoch(el)) return;
+      try { el.classList.remove('hidden'); } catch (_) {}
       unfreezeOverlayEl(el);
       try { el.setAttribute('aria-hidden', 'false'); } catch (_) {}
       try { if (typeof onShow === 'function') onShow(el); } catch (_) {}
-      try { if (typeof after === 'function') after(el); } catch (_) {}
       try { syncSheetScrollLock(); } catch (_) {}
       syncOverlayWeatherPause();
-    };
-    try { requestAnimationFrame(show); } catch (_) { show(); }
+      afterCompositorIdle(() => {
+        if (epoch !== currentOverlayEpoch(el)) return;
+        try { if (typeof onIdle === 'function') onIdle(el); } catch (_) {}
+        try { if (typeof after === 'function') after(el); } catch (_) {}
+      }, OVERLAY_TEARDOWN_MS);
+    }, OVERLAY_TEARDOWN_MS);
   };
   const writeOffscreen = () => {
     if (epoch !== currentOverlayEpoch(el)) return;
     try { el.classList.add('hidden'); } catch (_) {}
     try { el.innerHTML = html == null ? '' : html; } catch (_) {}
-    try { requestAnimationFrame(reveal); } catch (_) { reveal(); }
+    reveal();
   };
   freezeOverlayEl(el);
   syncOverlayWeatherPause();
-  if (visible) afterCompositorIdle(writeOffscreen, OVERLAY_TEARDOWN_MS);
-  else writeOffscreen();
+  afterCompositorIdle(writeOffscreen, OVERLAY_TEARDOWN_MS);
+}
+
+const _slotEpochCur = new WeakMap();
+function bumpSlotEpoch(el) {
+  const n = (_slotEpochCur.get(el) || 0) + 1;
+  _slotEpochCur.set(el, n);
+  return n;
+}
+function currentSlotEpoch(el) {
+  return _slotEpochCur.get(el) || 0;
+}
+function freezeSlotEl(el) {
+  if (!el) return;
+  try { el.classList.add('slot-teardown'); } catch (_) {}
+  try { el.style.pointerEvents = 'none'; } catch (_) {}
+}
+function unfreezeSlotEl(el) {
+  if (!el) return;
+  try { el.classList.remove('slot-teardown'); } catch (_) {}
+  try { el.style.pointerEvents = ''; } catch (_) {}
+  try { el.hidden = false; } catch (_) {}
+}
+/* preview 382: in-page slot swap (赛前近况 team tab). Hide/freeze, wait,
+   write only while display:none, wait, then show. Never unhide a prebuilt
+   photo list that was sitting in the tree with [hidden]. */
+function swapSlotHtml(el, html, opts) {
+  if (!el) return;
+  const epoch = bumpSlotEpoch(el);
+  const after = opts && opts.after;
+  const onShow = opts && opts.onShow;
+  const onIdle = opts && opts.onIdle;
+  const reveal = () => {
+    if (epoch !== currentSlotEpoch(el)) return;
+    afterCompositorIdle(() => {
+      if (epoch !== currentSlotEpoch(el)) return;
+      try { el.hidden = false; } catch (_) {}
+      try { el.classList.remove('hidden'); } catch (_) {}
+      unfreezeSlotEl(el);
+      try { if (typeof onShow === 'function') onShow(el); } catch (_) {}
+      afterCompositorIdle(() => {
+        if (epoch !== currentSlotEpoch(el)) return;
+        try { if (typeof onIdle === 'function') onIdle(el); } catch (_) {}
+        try { if (typeof after === 'function') after(el); } catch (_) {}
+      }, OVERLAY_TEARDOWN_MS);
+    }, OVERLAY_TEARDOWN_MS);
+  };
+  const writeOffscreen = () => {
+    if (epoch !== currentSlotEpoch(el)) return;
+    try { el.hidden = true; } catch (_) {}
+    try { el.classList.add('hidden'); } catch (_) {}
+    try { el.innerHTML = html == null ? '' : html; } catch (_) {}
+    reveal();
+  };
+  freezeSlotEl(el);
+  afterCompositorIdle(writeOffscreen, OVERLAY_TEARDOWN_MS);
 }
 function teardownOverlayEl(el, onDone) {
   if (!el) { try { if (typeof onDone === 'function') onDone(); } catch (_) {} return; }
@@ -12088,7 +12148,11 @@ function renderRadarExpand() {
       try { root.scrollTop = 0; } catch (_) {}
       const body = root.querySelector('.rk-body');
       if (body) try { body.scrollTop = 0; } catch (_) {}
+    },
+    onIdle: function (root) {
+      /* preview 382: never measure/observe in the reveal frame. */
       try { bindRadarBoardFit(root); } catch (_) {}
+      const body = root.querySelector('.rk-body');
       if (st.axis != null && st.axis !== '') {
         const target = root.querySelector('#rk-dim-' + Number(st.axis));
         const scroller = body || root;
@@ -17407,9 +17471,14 @@ document.addEventListener('click', async e => {
     case 'smFormSide': {
       const box = el.closest('.sm-form');
       if (!box) return;
-      const side = el.dataset.side || 'home';
+      const side = el.dataset.side === 'away' ? 'away' : 'home';
       box.querySelectorAll('[data-act="smFormSide"]').forEach(b => b.classList.toggle('on', b.dataset.side === side));
-      box.querySelectorAll('.sm-form-list').forEach(n => { n.hidden = n.getAttribute('data-for') !== side; });
+      if (box.getAttribute('data-side') === side) return;
+      box.setAttribute('data-side', side);
+      const mount = box.querySelector('.sm-form-mount');
+      const tpl = box.querySelector('template.sm-form-src[data-for="' + side + '"]');
+      const html = tpl ? String(tpl.innerHTML || '') : '';
+      if (mount) swapSlotHtml(mount, html);
       return;
     }
     case 'openMvSheet':

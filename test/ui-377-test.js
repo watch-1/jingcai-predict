@@ -12,14 +12,14 @@ const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 const serverJs = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const clientWx = fs.readFileSync(path.join(root, 'public/js/match-weather.js'), 'utf8');
 
-assert.ok(/216lu32/.test(index), 'cache 216lu32');
-assert.ok(!/216lu31/.test(index), 'no stale 216lu31');
-assert.ok(/js\/nt-flags\.js\?v=216lu32/.test(index), 'nt-flags.js is loaded');
-assert.ok(/data-center-boot-slices\.js\?v=216lu32/.test(index), 'boot slices cache-busted');
-assert.ok(/js\/match-weather\.js\?v=216lu32/.test(index), 'match-weather cache-busted');
-assert.ok(/style\.css\?v=216lu32/.test(index), 'style cache-busted');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.381\}"/.test(apkSh), 'apk default 2.1.5.381');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-381\}"/.test(apkSh), 'apk default 381');
+assert.ok(/216lu33/.test(index), 'cache 216lu33');
+assert.ok(!/216lu32/.test(index), 'no stale 216lu32');
+assert.ok(/js\/nt-flags\.js\?v=216lu33/.test(index), 'nt-flags.js is loaded');
+assert.ok(/data-center-boot-slices\.js\?v=216lu33/.test(index), 'boot slices cache-busted');
+assert.ok(/js\/match-weather\.js\?v=216lu33/.test(index), 'match-weather cache-busted');
+assert.ok(/style\.css\?v=216lu33/.test(index), 'style cache-busted');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.382\}"/.test(apkSh), 'apk default 2.1.5.382');
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-382\}"/.test(apkSh), 'apk default 382');
 
 assert.ok(/preview 370/.test(css), '370 css (sky/rain) left in place');
 assert.ok(/preview 376/.test(css), '376 sunny split is kept');
