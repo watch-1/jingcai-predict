@@ -11,12 +11,12 @@ const index = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 const gen377 = fs.readFileSync(path.join(root, 'tools/gen-weather-377.py'), 'utf8');
 
-assert.ok(/216lu31/.test(index), 'cache 216lu31');
-assert.ok(!/216lu30/.test(index), 'no stale 216lu30');
-assert.ok(/app\.js\?v=216lu31/.test(index), 'app.js cache-busted');
-assert.ok(/style\.css\?v=216lu31/.test(index), 'style cache-busted');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.380\}"/.test(apkSh), 'apk default 2.1.5.380');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-380\}"/.test(apkSh), 'apk default 380');
+assert.ok(/216lu32/.test(index), 'cache 216lu32');
+assert.ok(!/216lu31/.test(index), 'no stale 216lu31');
+assert.ok(/app\.js\?v=216lu32/.test(index), 'app.js cache-busted');
+assert.ok(/style\.css\?v=216lu32/.test(index), 'style cache-busted');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.381\}"/.test(apkSh), 'apk default 2.1.5.381');
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-381\}"/.test(apkSh), 'apk default 381');
 
 assert.ok(/preview 380/.test(css), '380 weather notes are in CSS');
 assert.ok(/@keyframes wx-pan-sky/.test(css) && /translate3d\(-50%/.test(css), 'transform pan fallback is kept');
@@ -95,4 +95,4 @@ assert.strictEqual(wx.mapWmo(82).type, 'rain');
 assert.strictEqual(wx.mapWmo(95).type, 'storm');
 assert.strictEqual(wx.mapWmo(96).type, 'storm');
 
-console.log('ui-380-test OK', { version: '2.1.5.380', cache: '216lu31' });
+console.log('ui-380-test OK', { version: '2.1.5.381', cache: '216lu32' });

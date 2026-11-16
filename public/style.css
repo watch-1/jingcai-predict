@@ -9147,13 +9147,56 @@ html:not([data-theme="pitch"]) .view.sub.md-wrap .intel-scoop-hd h3 {
 
 /* preview 379: stacked 身价/六围/近况 overlays — drop backdrop-filter on
    Android WebView, which has crashed some devices when closing the stack. */
-#sheet .sheet,
+/* preview 381: also kill filters on the mask/dialog chrome themselves, and
+   freeze compositing during teardown (opacity/visibility) before display:none
+   and innerHTML clear/swap. Do not touch weather-layer filters here. */
+#sheet,
+#sheet.sheet-mask,
+#dialog,
+#dialog.dialog-mask,
 #radar-expand,
+#sheet .sheet,
 .rk-page,
 .sm-player-sheet,
-.mv-sheet {
+.mv-sheet,
+.rk-pick-sheet,
+.sheet-mask,
+.dialog-mask {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  filter: none;
+  -webkit-filter: none;
+}
+#sheet .sheet,
+#radar-expand,
+.rk-page {
+  -webkit-overflow-scrolling: auto;
+}
+#sheet.overlay-teardown,
+#dialog.overlay-teardown,
+#radar-expand.overlay-teardown {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  animation: none !important;
+  filter: none !important;
+  -webkit-filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  will-change: auto !important;
+}
+#sheet.overlay-teardown .sheet,
+#dialog.overlay-teardown .dialog,
+#radar-expand.overlay-teardown,
+#radar-expand.overlay-teardown .rk-body {
+  animation: none !important;
+  transition: none !important;
+  will-change: auto !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  overflow: hidden !important;
+  -webkit-overflow-scrolling: auto !important;
 }
 
 /* ---------- preview 365: bundled league plate, weather card, live tab, sticky hero ---------- */

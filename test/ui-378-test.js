@@ -11,15 +11,15 @@ const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 const cfgSrc = fs.readFileSync(path.join(root, 'public/config.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'public/assets/crests/manifest.json'), 'utf8'));
 
-assert.ok(/216lu31/.test(index), 'cache 216lu31');
-assert.ok(!/216lu30/.test(index), 'no stale 216lu30');
-assert.ok(/js\/nt-flags\.js\?v=216lu31/.test(index), 'nt-flags.js is loaded');
-assert.ok(/data-center-boot-slices\.js\?v=216lu31/.test(index), 'boot slices cache-busted');
-assert.ok(/js\/match-weather\.js\?v=216lu31/.test(index), 'match-weather cache-busted');
-assert.ok(/style\.css\?v=216lu31/.test(index), 'style cache-busted');
-assert.ok(/app\.js\?v=216lu31/.test(index), 'app.js cache-busted');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.380\}"/.test(apkSh), 'apk default 2.1.5.380');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-380\}"/.test(apkSh), 'apk default 380');
+assert.ok(/216lu32/.test(index), 'cache 216lu32');
+assert.ok(!/216lu31/.test(index), 'no stale 216lu31');
+assert.ok(/js\/nt-flags\.js\?v=216lu32/.test(index), 'nt-flags.js is loaded');
+assert.ok(/data-center-boot-slices\.js\?v=216lu32/.test(index), 'boot slices cache-busted');
+assert.ok(/js\/match-weather\.js\?v=216lu32/.test(index), 'match-weather cache-busted');
+assert.ok(/style\.css\?v=216lu32/.test(index), 'style cache-busted');
+assert.ok(/app\.js\?v=216lu32/.test(index), 'app.js cache-busted');
+assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.381\}"/.test(apkSh), 'apk default 2.1.5.381');
+assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-381\}"/.test(apkSh), 'apk default 381');
 
 assert.ok(/CFG\.bundledCrestIds/.test(appJs), 'CFG.bundledCrestIds seeds the packed set');
 assert.ok(/function isJingcaiOrSportteryLogo/.test(appJs), 'sporttery/jingcai logo guard');
@@ -203,4 +203,4 @@ assert.ok(/data-bundled/.test(badgeFn), 'badge writes data-bundled');
 assert.ok(/triedBundled/.test(badgeFn), 'onerror retries packed crest');
 assert.ok(/if\(bundled\)\{if\(cur\.indexOf\(bundled\)<0\)\{img\.src=bundled;\}return;\}/.test(badgeFn.replace(/\s+/g, '')), 'failed remote does not clear a good bundled image');
 
-console.log('ui-378-test OK', { crests: cfgIds.length, version: '2.1.5.380', cache: '216lu31' });
+console.log('ui-378-test OK', { crests: cfgIds.length, version: '2.1.5.381', cache: '216lu32' });

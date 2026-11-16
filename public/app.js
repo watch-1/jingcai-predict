@@ -1142,11 +1142,28 @@ const lgTag = m => homeTheme() === 'pitch'
   : `<span class="tag" style="background:${esc(m.leagueColor || '#2F6FED')}">${esc(m.league)}</span>`;
 function toast(t, ms = 1800) { const el = $('#toast'); el.textContent = t; el.classList.remove('hidden'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.add('hidden'), ms); }
 try { window.toast = toast; } catch (_) {}
+function closeDialog() {
+  try {
+    const d = document.getElementById('dialog') || (typeof $ === 'function' && $('#dialog'));
+    if (!d) return;
+    try { d.onclick = null; } catch (_) {}
+    teardownOverlayEl(d);
+  } catch (_) {}
+}
 function confirmDlg(title, body, okText = '确定', danger = false) {
   return new Promise(res => {
-    const d = $('#dialog'); d.classList.remove('hidden');
-    d.innerHTML = `<div class="dialog"><div class="dt">${esc(title)}</div><div class="db">${body}</div><div class="da"><button data-r="0">取消</button><button data-r="1" class="ok ${danger ? 'danger' : ''}">${esc(okText)}</button></div></div>`;
-    d.onclick = e => { const b = e.target.closest('[data-r]'); if (!b && e.target !== d) return; e.stopPropagation(); d.classList.add('hidden'); d.onclick = null; res(b ? b.dataset.r === '1' : false); };
+    const d = document.getElementById('dialog') || (typeof $ === 'function' && $('#dialog'));
+    if (!d) { res(false); return; }
+    const html = `<div class="dialog"><div class="dt">${esc(title)}</div><div class="db">${body}</div><div class="da"><button data-r="0">取消</button><button data-r="1" class="ok ${danger ? 'danger' : ''}">${esc(okText)}</button></div></div>`;
+    d.onclick = e => {
+      const b = e.target.closest('[data-r]');
+      if (!b && e.target !== d) return;
+      try { e.stopPropagation(); } catch (_) {}
+      try { d.onclick = null; } catch (_) {}
+      closeDialog();
+      res(b ? b.dataset.r === '1' : false);
+    };
+    swapOverlayHtml(d, html);
   });
 }
 try { window.confirmDlg = confirmDlg; } catch (_) {}
@@ -2741,8 +2758,8 @@ function renderPlanBar() {
 function openPlanSheet() {
   const sm = selMatches(); if (!sm.length) return closeSheet();
   S.mult = clampCalcMult(S.mult);
-  const c = calc(); const sh = $('#sheet'); sh.classList.remove('hidden');
-  sh.innerHTML = `<div class="sheet"><h3><span>方案预览</span><button class="x" data-act="closeSheet">✕</button></h3>
+  const c = calc();
+  openSheetHtml(`<div class="sheet"><h3><span>方案预览</span><button class="x" data-act="closeSheet">✕</button></h3>
     ${sm.map(x => `<div class="pk"><div class="n">${esc(x.m.num)} ${esc(x.m.home)} vs ${esc(x.m.away)}</div><div class="s">${esc(x.m.league)} · ${esc(x.m.date.slice(5))} ${esc(x.m.time)}</div>
       <div class="items">${x.keys.map((k, i) => `<span>${LBL[k.slice(0, -1)][k.slice(-1)]}${k.startsWith('hhad') ? '(' + esc(x.m.hhad.goalLine) + ')' : ''} @${x.odds[i].toFixed(2)}</span>`).join('')}</div></div>`).join('')}
     <div class="calc-combo-block">
@@ -2753,37 +2770,185 @@ function openPlanSheet() {
     <div class="calc-row"><span>组合数</span><span class="num">${c.bets} 注（按每注2元计 ${c.cost} 元）</span></div>
     <div class="calc-row"><span>理论奖金</span><span class="num"><b>${c.min.toFixed(2)}</b> ~ <b>${c.max.toFixed(2)}</b> 元</span></div>
     <p class="note">理论奖金 = 2元 × 赔率乘积 × 倍数，未计税与官方封顶。方案只作为个人记录保存${loggedIn() ? '并同步到你的账号' : '在本机'}，不会提交到任何第三方。</p>
-    <button class="btn pri block" data-act="savePlan">保存方案</button></div>`;
+    <button class="btn pri block" data-act="savePlan">保存方案</button></div>`);
+}
+/* preview 381: Huawei WebView can native-crash (闪退) when a visible
+   composited overlay is innerHTML-replaced or torn down in the same frame
+   as animations / scrolling layers. Freeze (opacity/visibility) first,
+   wait two animation frames plus ~80ms, then display:none and clear or
+   swap the tree offscreen. Epoch tokens cancel a stale clear if a new
+   sheet opens. Weather rAF pauses while any overlay is busy. */
+const OVERLAY_TEARDOWN_MS = 80;
+const _overlayEpoch = { sheet: 0, radar: 0, dialog: 0 };
+function overlayKeyFor(el) {
+  if (!el) return '';
+  if (el.id === 'sheet') return 'sheet';
+  if (el.id === 'radar-expand') return 'radar';
+  if (el.id === 'dialog') return 'dialog';
+  return el.id || 'anon';
+}
+function bumpOverlayEpoch(el) {
+  const k = overlayKeyFor(el) || 'anon';
+  _overlayEpoch[k] = (_overlayEpoch[k] || 0) + 1;
+  return _overlayEpoch[k];
+}
+function currentOverlayEpoch(el) {
+  const k = overlayKeyFor(el) || 'anon';
+  return _overlayEpoch[k] || 0;
+}
+function afterCompositorIdle(fn, ms) {
+  const wait = ms == null ? OVERLAY_TEARDOWN_MS : ms;
+  const run = () => { try { fn(); } catch (_) {} };
+  const kick = () => {
+    if (wait > 0) setTimeout(run, wait);
+    else run();
+  };
+  try {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        try { requestAnimationFrame(kick); } catch (_) { kick(); }
+      });
+      return;
+    }
+  } catch (_) {}
+  setTimeout(kick, 16 + Math.max(0, wait));
+}
+function freezeOverlayEl(el) {
+  if (!el) return;
+  try { el.classList.add('overlay-teardown'); } catch (_) {}
+  try { el.style.pointerEvents = 'none'; } catch (_) {}
+  try {
+    const nodes = el.querySelectorAll('.sheet, .rk-body, .dialog');
+    for (let i = 0; i < nodes.length; i++) {
+      try { nodes[i].scrollTop = 0; } catch (_) {}
+    }
+    el.scrollTop = 0;
+  } catch (_) {}
+}
+function unfreezeOverlayEl(el) {
+  if (!el) return;
+  try { el.classList.remove('overlay-teardown'); } catch (_) {}
+  try { el.style.pointerEvents = ''; } catch (_) {}
+}
+function overlayElBusy(el) {
+  if (!el) return false;
+  try {
+    if (el.classList.contains('overlay-teardown')) return true;
+    if (!el.classList.contains('hidden')) return true;
+  } catch (_) {}
+  return false;
+}
+function isRadarExpandOpen() {
+  try {
+    if (typeof S !== 'undefined' && S && S.radarExpand) return true;
+    return overlayElBusy(document.getElementById('radar-expand'));
+  } catch (_) { return false; }
+}
+function overlayBusy() {
+  try {
+    if (overlayElBusy(document.getElementById('sheet'))) return true;
+    if (overlayElBusy(document.getElementById('dialog'))) return true;
+    if (isRadarExpandOpen()) return true;
+  } catch (_) {}
+  return false;
+}
+function syncOverlayWeatherPause() {
+  try { if (typeof syncHeroWeatherMotion === 'function') syncHeroWeatherMotion(); } catch (_) {}
+}
+function swapOverlayHtml(el, html, opts) {
+  if (!el) return;
+  const epoch = bumpOverlayEpoch(el);
+  const after = opts && opts.after;
+  const onShow = opts && opts.onShow;
+  const visible = !el.classList.contains('hidden') && !el.classList.contains('overlay-teardown');
+  const reveal = () => {
+    if (epoch !== currentOverlayEpoch(el)) return;
+    try { el.classList.remove('hidden'); } catch (_) {}
+    const show = () => {
+      if (epoch !== currentOverlayEpoch(el)) return;
+      unfreezeOverlayEl(el);
+      try { el.setAttribute('aria-hidden', 'false'); } catch (_) {}
+      try { if (typeof onShow === 'function') onShow(el); } catch (_) {}
+      try { if (typeof after === 'function') after(el); } catch (_) {}
+      try { syncSheetScrollLock(); } catch (_) {}
+      syncOverlayWeatherPause();
+    };
+    try { requestAnimationFrame(show); } catch (_) { show(); }
+  };
+  const writeOffscreen = () => {
+    if (epoch !== currentOverlayEpoch(el)) return;
+    try { el.classList.add('hidden'); } catch (_) {}
+    try { el.innerHTML = html == null ? '' : html; } catch (_) {}
+    try { requestAnimationFrame(reveal); } catch (_) { reveal(); }
+  };
+  freezeOverlayEl(el);
+  syncOverlayWeatherPause();
+  if (visible) afterCompositorIdle(writeOffscreen, OVERLAY_TEARDOWN_MS);
+  else writeOffscreen();
+}
+function teardownOverlayEl(el, onDone) {
+  if (!el) { try { if (typeof onDone === 'function') onDone(); } catch (_) {} return; }
+  const epoch = bumpOverlayEpoch(el);
+  freezeOverlayEl(el);
+  try { el.setAttribute('aria-hidden', 'true'); } catch (_) {}
+  syncOverlayWeatherPause();
+  afterCompositorIdle(() => {
+    if (epoch !== currentOverlayEpoch(el)) return;
+    try { el.classList.add('hidden'); } catch (_) {}
+    const clear = () => {
+      if (epoch !== currentOverlayEpoch(el)) return;
+      try { if (el.classList.contains('hidden')) el.innerHTML = ''; } catch (_) {}
+      unfreezeOverlayEl(el);
+      try { if (typeof onDone === 'function') onDone(); } catch (_) {}
+      syncOverlayWeatherPause();
+    };
+    try { requestAnimationFrame(clear); } catch (_) { clear(); }
+  }, OVERLAY_TEARDOWN_MS);
 }
 function syncSheetScrollLock() {
-  const sh = $('#sheet');
-  const on = sh && !sh.classList.contains('hidden');
-  document.body.classList.toggle('sheet-on', !!on);
-  const view = $('#view');
-  if (view) view.classList.toggle('sheet-lock', !!on);
+  const sh = document.getElementById('sheet') || (typeof $ === 'function' && $('#sheet'));
+  const on = !!(sh && overlayElBusy(sh));
+  try { document.body.classList.toggle('sheet-on', !!on); } catch (_) {}
+  const view = document.getElementById('view') || (typeof $ === 'function' && $('#view'));
+  if (view) try { view.classList.toggle('sheet-lock', !!on); } catch (_) {}
 }
 function closeSheet() {
   try {
-    const sh = document.getElementById('sheet') || $('#sheet');
+    const sh = document.getElementById('sheet') || (typeof $ === 'function' && $('#sheet'));
     if (!sh) return;
-    sh.classList.add('hidden');
-    sh.classList.remove('bonus-opt-mask');
-    // Hide first; clear on the next frame so WebView is not compositing a torn-down tree.
-    const clear = () => { try { if (sh.classList.contains('hidden')) sh.innerHTML = ''; } catch (_) {} };
-    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(clear);
-    else setTimeout(clear, 0);
-    syncSheetScrollLock();
+    try { sh.classList.remove('bonus-opt-mask'); } catch (_) {}
+    teardownOverlayEl(sh, () => { try { syncSheetScrollLock(); } catch (_) {} });
+    try { syncSheetScrollLock(); } catch (_) {}
   } catch (_) {
     try { syncSheetScrollLock(); } catch (__) {}
+    try { syncOverlayWeatherPause(); } catch (__) {}
   }
 }
 globalThis.closeSheet = closeSheet;
-function openSheetHtml(html) {
-  const sh = $('#sheet');
-  sh.classList.remove('hidden');
-  sh.innerHTML = html;
-  syncSheetScrollLock();
+function openSheetHtml(html, opts) {
+  try {
+    const sh = document.getElementById('sheet') || (typeof $ === 'function' && $('#sheet'));
+    if (!sh) return;
+    const maskClass = opts && opts.maskClass;
+    const after = opts && opts.after;
+    if (!maskClass) {
+      try { sh.classList.remove('bonus-opt-mask'); } catch (_) {}
+    }
+    swapOverlayHtml(sh, html, {
+      onShow: function (el) {
+        if (maskClass) {
+          try { el.classList.add(maskClass); } catch (_) {}
+        }
+        try { syncSheetScrollLock(); } catch (_) {}
+        try { if (typeof after === 'function') after(el); } catch (_) {}
+      }
+    });
+  } catch (_) {
+    try { syncSheetScrollLock(); } catch (__) {}
+    try { syncOverlayWeatherPause(); } catch (__) {}
+  }
 }
+globalThis.openSheetHtml = openSheetHtml;
 
 // ----- sm-surface 球员明细（与 UI kit 对齐的环形率 + 网格） -----
 function smPlayerPhotoUrl(image) {
@@ -2946,13 +3111,13 @@ function navNote(h) {
 function isSheetOpen() {
   try {
     const sh = document.getElementById('sheet') || (typeof $ === 'function' && $('#sheet'));
-    return !!(sh && !sh.classList.contains('hidden'));
+    return overlayElBusy(sh);
   } catch (_) { return false; }
 }
 function isDialogOpen() {
   try {
     const d = document.getElementById('dialog') || (typeof $ === 'function' && $('#dialog'));
-    return !!(d && !d.classList.contains('hidden'));
+    return overlayElBusy(d);
   } catch (_) { return false; }
 }
 function closeTopOverlay() {
@@ -3239,8 +3404,7 @@ let schCalViewMonth = null;
 /** Ignore one mask click right after opening calendar (same-gesture safety). */
 let schSheetDismissGuardUntil = 0;
 function renderSchDateCalendarSheet() {
-  const sh = $('#sheet');
-  if (!sh || sh.classList.contains('hidden') || !schCalViewMonth) return;
+  if (!schCalViewMonth) return;
   const sel = S.schDate || bjDate(0);
   const todayStr = bjDate(0);
   const y = schCalViewMonth.getUTCFullYear();
@@ -3272,7 +3436,7 @@ function renderSchDateCalendarSheet() {
     if (cellDate === sel) cls.push('selected');
     cells += `<button type="button" class="${cls.join(' ')}" data-act="schCalPick" data-date="${esc(cellDate)}">${dayNum}</button>`;
   }
-  sh.innerHTML = `<div class="sch-date-cal-sheet" role="dialog" aria-label="选择日期">
+  openSheetHtml(`<div class="sch-date-cal-sheet" role="dialog" aria-label="选择日期">
     <div class="sch-date-cal-head">
       <div class="sch-date-cal-title">${y}年${m + 1}月</div>
       <div class="sch-date-cal-nav">
@@ -3286,15 +3450,13 @@ function renderSchDateCalendarSheet() {
       <button type="button" data-act="schCalCancel">取消</button>
       <button type="button" data-act="schCalToday">今天</button>
     </div>
-  </div>`;
+  </div>`);
 }
 function openSchDateCalendar() {
   const sel = S.schDate || bjDate(0);
   const p = sel.split('-').map(Number);
   schCalViewMonth = new Date(Date.UTC(p[0], p[1] - 1, 1));
-  const sh = $('#sheet');
   schSheetDismissGuardUntil = Date.now() + 400;
-  sh.classList.remove('hidden');
   renderSchDateCalendarSheet();
 }
 function rebuildSchDateSpindle(wrap, state) {
@@ -5956,11 +6118,10 @@ function openCalcMultSheet(src) {
 }
 function refreshCalcMultSheet() {
   if (!S._calcMultSrc) return;
-  const sh = $('#sheet');
-  if (!sh || sh.classList.contains('hidden')) return;
-  const el = sh.querySelector('.calc-mult-sheet');
-  if (!el) return;
-  el.outerHTML = calcMultSheetHtml(S._calcMultDraft || '1', calcMultContextCost(S._calcMultSrc), S._calcMultSrc);
+  const sh = document.getElementById('sheet') || (typeof $ === 'function' && $('#sheet'));
+  if (!sh || !overlayElBusy(sh)) return;
+  if (!sh.querySelector('.calc-mult-sheet')) return;
+  openSheetHtml(calcMultSheetHtml(S._calcMultDraft || '1', calcMultContextCost(S._calcMultSrc), S._calcMultSrc));
 }
 function commitCalcMultFromDraft() {
   const v = clampCalcMult(parseInt(S._calcMultDraft || '1', 10) || 1);
@@ -6080,9 +6241,7 @@ function renderBonusOptSheet(lines) {
   const mults = bo.mults || [];
   const totals = bonusOptTotals(lines, mults);
   const optUnits = bonusOptUnitsFromAmount(bo.amount);
-  const sh = $('#sheet');
-  sh.classList.remove('hidden');
-  sh.classList.add('bonus-opt-mask');
+  const sh = document.getElementById('sheet') || (typeof $ === 'function' && $('#sheet'));
   const modeBtns = modes.map(m => `<button type="button" class="bonus-opt-tab${mode === m.id ? ' on' : ''}" data-act="bonusOptMode" data-mode="${m.id}">${m.label}</button>`).join('');
   const rows = lines.map((line, i) => {
     const m = mults[i] || 0;
@@ -6096,7 +6255,7 @@ function renderBonusOptSheet(lines) {
       <div class="bonus-opt-prize">${prize.toFixed(2)}</div>
     </div>`;
   }).join('');
-  sh.innerHTML = `<div class="sheet bonus-opt-page">
+  openSheetHtml(`<div class="sheet bonus-opt-page">
     <header class="bonus-opt-hd">
       <button type="button" class="bonus-opt-back" data-act="bonusOptBack" aria-label="返回">‹</button>
       <span class="bonus-opt-title">奖金优化</span>
@@ -6134,8 +6293,7 @@ function renderBonusOptSheet(lines) {
       </div>
       <p class="calc-edu-note bonus-opt-disclaimer">串关试算工具，仅供学习参考，非投注下单。</p>
     </footer>
-  </div>`;
-  syncSheetScrollLock();
+  </div>`, { maskClass: 'bonus-opt-mask' });
 }
 function closeBonusOptSheet() {
   const sh = $('#sheet');
@@ -6485,8 +6643,7 @@ function valuePanelHtml(v) {
   return `<div class="ve-box">${head}${items ? `<div class="ve-list">${items}</div>` : ''}</div>`;
 }
 async function openModelCheck() {
-  const sh = $('#sheet'); sh.classList.remove('hidden');
-  sh.innerHTML = `<div class="sheet"><h3><span>模型体检</span><button class="x" data-act="closeSheet">✕</button></h3><div class="spinner"></div></div>`;
+  openSheetHtml(`<div class="sheet"><h3><span>模型体检</span><button class="x" data-act="closeSheet">✕</button></h3><div class="spinner"></div></div>`);
   let j = null;
   try { j = await api('/calibration', { timeout: 8000 }); } catch (_) {}
   if (!j || !j.ok) { sh.querySelector('.sheet').innerHTML += '<p class="note">暂不可用</p>'; return; }
@@ -6501,13 +6658,13 @@ async function openModelCheck() {
       <tr><td>同批改选热门</td><td>${edge.favOnEdgeTest && edge.favOnEdgeTest.n >= 30 ? edge.favOnEdgeTest.hit + '%' : '样本不足'}</td><td>${edge.favOnEdgeTest && edge.favOnEdgeTest.roi != null ? edge.favOnEdgeTest.roi + '%' : '—'}</td><td>${edge.favOnEdgeTest ? edge.favOnEdgeTest.n : 0}</td></tr>
       <tr><td>全程热门对照</td><td>${edge.vsFavTest && edge.vsFavTest.n >= 30 ? edge.vsFavTest.hit + '%' : '—'}</td><td>${edge.vsFavTest && edge.vsFavTest.roi != null ? edge.vsFavTest.roi + '%' : '—'}</td><td>${edge.vsFavTest ? edge.vsFavTest.n : 0}</td></tr>
     </table></div>` : '';
-  sh.innerHTML = `<div class="sheet mc-sheet"><h3><span>模型体检</span><button class="x" data-act="closeSheet">✕</button></h3>
+  openSheetHtml(`<div class="sheet mc-sheet"><h3><span>模型体检</span><button class="x" data-act="closeSheet">✕</button></h3>
     <p class="note">历史回测 ${j.n} 场（${esc(j.range[0])} 至 ${esc(j.range[1])}），逐场只用赛前已知信息复算。</p>
     <div class="rl-chart">${bars}</div><div class="rl-key"><span><i class="p"></i>预测信心</span><span><i class="a"></i>实际命中</span></div>
     <table class="mc-tbl"><tr><th>类别</th><th>命中</th><th>样本</th></tr>${cat}</table>
     ${edgeBlock}
     <p class="note">样本少于 30 场的类别不显示百分比。优势关注不等于收益承诺。</p>
-    <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`;
+    <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`);
 }
 function isSpeakPr(pr) {
   if (!pr) return false;
@@ -9132,22 +9289,20 @@ async function openMatchHubSheet(matchId, jump) {
   const id = String(matchId || '');
   const x = findMatch(id) || (S.results || []).find(z => String(z.id) === id);
   if (!x) { toast('未找到比赛'); return; }
-  const sh = $('#sheet');
-  sh.classList.remove('hidden');
   const closeBtn = '<button type="button" class="x" data-act="closeSheet" aria-label="关闭">✕</button>';
 
   if (jump === 'rules') {
-    sh.innerHTML = `<div class="sheet hub-sheet"><h3><span>赛事规则</span>${closeBtn}</h3>
+    openSheetHtml(`<div class="sheet hub-sheet"><h3><span>赛事规则</span>${closeBtn}</h3>
       <div class="hub-body">
         <p>竞彩足球玩法以官方开售为准：胜平负、让球胜平负等。本页战绩/交锋/积分/预测均来自公开赛果与赔率推导。，不构成投注建议。</p>
         <p class="note">关闭本面板（点 ✕、点遮罩或系统返回）即可回到赛事详情，不会离开当前比赛。</p>
         <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button>
-      </div></div>`;
+      </div></div>`);
     return;
   }
 
   if (jump === 'future') {
-    sh.innerHTML = `<div class="sheet hub-sheet"><h3><span>未来比赛</span>${closeBtn}</h3><div class="spinner"></div><p class="note">加载后续赛程…</p></div>`;
+    openSheetHtml(`<div class="sheet hub-sheet"><h3><span>未来比赛</span>${closeBtn}</h3><div class="spinner"></div><p class="note">加载后续赛程…</p></div>`);
     let homeNext = [];
     let awayNext = [];
     let sourceZh = '综合赛程';
@@ -9175,23 +9330,23 @@ async function openMatchHubSheet(matchId, jump) {
       : '暂无该队后续场次';
     const block = (lab, list) => `<div class="hub-sec"><div class="form-h">${esc(lab)} · 未来比赛</div>
       ${list.length ? `<ul class="hub-fx-list">${list.map(row).join('')}</ul>` : `<p class="note">${emptyNote}</p>`}</div>`;
-    sh.innerHTML = `<div class="sheet hub-sheet"><h3><span>未来比赛</span>${closeBtn}</h3>
+    openSheetHtml(`<div class="sheet hub-sheet"><h3><span>未来比赛</span>${closeBtn}</h3>
       <p class="note" style="margin:0 0 10px">本场主队/客队后续赛程（联赛与杯赛 · ${esc(sourceZh)}）</p>
       ${block(x.home, homeNext)}
       ${block(x.away, awayNext)}
       <button type="button" class="btn ghost block" data-act="closeSheet" style="margin-top:12px">关闭</button>
-    </div>`;
+    </div>`);
     return;
   }
 
   if (jump === 'standings') {
     const key = leagueKeyFromMatch(x);
-    sh.innerHTML = `<div class="sheet hub-sheet"><h3><span>积分排名</span>${closeBtn}</h3><div class="spinner"></div><p class="note">加载积分榜…</p></div>`;
+    openSheetHtml(`<div class="sheet hub-sheet"><h3><span>积分排名</span>${closeBtn}</h3><div class="spinner"></div><p class="note">加载积分榜…</p></div>`);
     if (!key) {
-      sh.innerHTML = `<div class="sheet hub-sheet"><h3><span>积分排名</span>${closeBtn}</h3>
+      openSheetHtml(`<div class="sheet hub-sheet"><h3><span>积分排名</span>${closeBtn}</h3>
         <p>本场联赛「${esc(x.league || '')}」暂未接入数据中心积分榜。</p>
         <p class="note">关闭本面板即可返回赛事详情（不会跳转数据中心）。</p>
-        <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`;
+        <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`);
       return;
     }
     try {
@@ -9199,13 +9354,13 @@ async function openMatchHubSheet(matchId, jump) {
       const body = (j && j.ok !== false && (j.tables || []).length)
         ? renderStandingsTable(j)
         : `<p class="note">${esc((j && j.error) || '暂无积分榜数据')}</p>`;
-      sh.innerHTML = `<div class="sheet hub-sheet"><h3><span>积分排名 · ${esc((j && j.leagueZh) || x.league || key)}</span>${closeBtn}</h3>
+      openSheetHtml(`<div class="sheet hub-sheet"><h3><span>积分排名 · ${esc((j && j.leagueZh) || x.league || key)}</span>${closeBtn}</h3>
         <div class="hub-standings">${body}</div>
-        <button type="button" class="btn ghost block" data-act="closeSheet" style="margin-top:12px">关闭</button></div>`;
+        <button type="button" class="btn ghost block" data-act="closeSheet" style="margin-top:12px">关闭</button></div>`);
     } catch (e) {
-      sh.innerHTML = `<div class="sheet hub-sheet"><h3><span>积分排名</span>${closeBtn}</h3>
+      openSheetHtml(`<div class="sheet hub-sheet"><h3><span>积分排名</span>${closeBtn}</h3>
         <p class="note">积分榜加载失败，请稍后再试。</p>
-        <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`;
+        <button type="button" class="btn ghost block" data-act="closeSheet">关闭</button></div>`);
     }
     return;
   }
@@ -9215,7 +9370,7 @@ async function openMatchHubSheet(matchId, jump) {
   const title = sideAway ? '客队战绩' : '主队战绩';
   const label = sideAway ? x.away : x.home;
   const teamId = sideAway ? x.awayTeamId : x.homeTeamId;
-  sh.innerHTML = `<div class="sheet hub-sheet"><h3><span>${esc(title)} · ${esc(label)}</span>${closeBtn}</h3><div class="spinner"></div></div>`;
+  openSheetHtml(`<div class="sheet hub-sheet"><h3><span>${esc(title)} · ${esc(label)}</span>${closeBtn}</h3><div class="spinner"></div></div>`);
   // bust cache so limit=50 is honored
   const cacheKey = String(x.homeTeamId || '') + '|' + String(x.awayTeamId || '');
   if (S.statsCache && S.statsCache[cacheKey]) delete S.statsCache[cacheKey];
@@ -9246,11 +9401,11 @@ async function openMatchHubSheet(matchId, jump) {
   const more = all.length > shown
     ? `<button type="button" class="btn ghost block" data-act="hubFormMore" data-id="${esc(id)}" data-jump="${esc(jump)}" data-n="${shown + 15}">加载更多（还有 ${all.length - shown} 场）</button>`
     : (all.length ? `<p class="note" style="text-align:center">已显示全部 ${all.length} 场</p>` : '');
-  sh.innerHTML = `<div class="sheet hub-sheet"><h3><span>${esc(title)} · ${esc(label)}</span>${closeBtn}</h3>
+  openSheetHtml(`<div class="sheet hub-sheet"><h3><span>${esc(title)} · ${esc(label)}</span>${closeBtn}</h3>
     <div class="hub-form-meta">${esc(label)} · 共 ${all.length} 场 · ${s.w}胜${s.d}平${s.l}负</div>
     ${all.length ? `<ul class="hub-form-list">${rows}</ul>${more}` : '<p class="note">暂无战绩数据</p>'}
     <button type="button" class="btn ghost block" data-act="closeSheet" style="margin-top:8px">关闭</button>
-  </div>`;
+  </div>`);
 }
 
 function formAnalysisCard(x, stats, ui) {
@@ -11834,15 +11989,15 @@ function closeRadarExpand() {
   try {
     const el = document.getElementById('radar-expand');
     if (el) {
-      try { const body = el.querySelector('.rk-body'); if (body) body.scrollTop = 0; } catch (_) {}
-      el.classList.add('hidden');
-      el.scrollTop = 0;
-      const clear = () => { try { if (el.classList.contains('hidden')) el.innerHTML = ''; } catch (_) {} };
-      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(clear);
-      else setTimeout(clear, 0);
+      teardownOverlayEl(el, () => {
+        try { document.body.classList.remove('rk-lock'); } catch (_) {}
+      });
+    } else {
+      try { document.body.classList.remove('rk-lock'); } catch (_) {}
     }
-  } catch (_) {}
-  try { document.body.classList.remove('rk-lock'); } catch (_) {}
+  } catch (_) {
+    try { document.body.classList.remove('rk-lock'); } catch (__) {}
+  }
 }
 function radarPlayerIsDrawable(pack, smId) {
   if (!smId || !pack) return false;
@@ -11919,39 +12074,43 @@ function openRadarExpand(state) {
 function renderRadarExpand() {
   const st = S.radarExpand;
   const el = radarExpandRoot();
-  if (!st) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  if (!st) { closeRadarExpand(); return; }
   const pack = S.matchRadar && S.matchRadar[String(st.id)];
   const html = st.kind === 'team'
     ? radarTeamExpandHtml(pack, st.id)
     : radarPlayerExpandHtml(pack, st.id, st);
-  el.innerHTML = (typeof rewritePredictLogoHtml === 'function') ? rewritePredictLogoHtml(html) : html;
-  el.classList.remove('hidden');
-  el.setAttribute('aria-label', st.kind === 'team' ? '球队对照' : '球员对照');
-  document.body.classList.add('rk-lock');
-  el.scrollTop = 0;
-  const body = el.querySelector('.rk-body');
-  if (body) body.scrollTop = 0;
-  bindRadarBoardFit(el);
-  if (st.axis != null && st.axis !== '') {
-    const target = el.querySelector('#rk-dim-' + Number(st.axis));
-    const scroller = body || el;
-    if (target) setTimeout(() => {
-      try {
-        const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 8;
-        scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-      } catch (_) {
-        try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (__) {}
-      }
-    }, 40);
+  const out = (typeof rewritePredictLogoHtml === 'function') ? rewritePredictLogoHtml(html) : html;
+  try { unbindRadarBoardFit(); } catch (_) {}
+  swapOverlayHtml(el, out, {
+    onShow: function (root) {
+      try { root.setAttribute('aria-label', st.kind === 'team' ? '球队对照' : '球员对照'); } catch (_) {}
+      try { document.body.classList.add('rk-lock'); } catch (_) {}
+      try { root.scrollTop = 0; } catch (_) {}
+      const body = root.querySelector('.rk-body');
+      if (body) try { body.scrollTop = 0; } catch (_) {}
+      try { bindRadarBoardFit(root); } catch (_) {}
+      if (st.axis != null && st.axis !== '') {
+        const target = root.querySelector('#rk-dim-' + Number(st.axis));
+        const scroller = body || root;
+        if (target) setTimeout(() => {
+          try {
+            const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 8;
+            scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+          } catch (_) {
+            try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (__) {}
+          }
+        }, 40);
         st.axis = null;
-  } else if (st.scroll != null && Number.isFinite(Number(st.scroll))) {
-    const y = Math.max(0, Number(st.scroll));
-    st.scroll = null;
-    if (body) {
-      body.scrollTop = y;
-      try { requestAnimationFrame(() => { try { body.scrollTop = y; } catch (_) {} }); } catch (_) {}
+      } else if (st.scroll != null && Number.isFinite(Number(st.scroll))) {
+        const y = Math.max(0, Number(st.scroll));
+        st.scroll = null;
+        if (body) {
+          body.scrollTop = y;
+          try { requestAnimationFrame(() => { try { body.scrollTop = y; } catch (_) {} }); } catch (_) {}
+        }
+      }
     }
-  }
+  });
 }
 
 function radarPageHdr(title, right) {
@@ -13250,7 +13409,8 @@ function ensureWxPanLoop() {
   try { _wxPanRaf = requestAnimationFrame(tickWxPan); } catch (_) { _wxPanRaf = 0; }
 }
 function syncHeroWeatherMotion() {
-  const off = !!(document.hidden || (typeof route === 'function' && route().name !== 'match'));
+  const overlayOn = (typeof overlayBusy === 'function') && overlayBusy();
+  const off = !!(document.hidden || (typeof route === 'function' && route().name !== 'match') || overlayOn);
   try { document.documentElement.classList.toggle('wx-paused', off); } catch (_) {}
   if (!off) ensureWxPanLoop();
 }
@@ -15008,14 +15168,15 @@ async function flushKbSaveItemSheet(el) {
 
 function kbShowItemSheet({ packId, itemId, title, body, posX, posY }) {
   const isNew = !itemId;
-  const sh = $('#sheet');
-  sh.classList.remove('hidden');
-  sh.innerHTML = `<div class="sheet kb-item-sheet"><h3><span>${isNew ? '新建节点' : '编辑节点'}</span><button class="x" data-act="closeSheet">✕</button></h3>
+  openSheetHtml(`<div class="sheet kb-item-sheet"><h3><span>${isNew ? '新建节点' : '编辑节点'}</span><button class="x" data-act="closeSheet">✕</button></h3>
     <label>标题<input type="text" name="kbSheetTitle" maxlength="80" value="${esc(title || '')}" placeholder="简短标题"></label>
     <label>正文<textarea name="kbSheetBody" rows="6" maxlength="120000" placeholder="你的赛前依据、盘口观察等">${esc(body || '')}</textarea></label>
-    <button type="button" class="btn pri block" data-act="kbSaveItemSheet" data-pack="${esc(packId)}" data-id="${esc(itemId || '')}" data-posx="${posX != null && posX !== '' ? esc(String(posX)) : ''}" data-posy="${posY != null && posY !== '' ? esc(String(posY)) : ''}">保存</button></div>`;
-  const inp = sh.querySelector('input[name="kbSheetTitle"]');
-  if (inp) inp.focus();
+    <button type="button" class="btn pri block" data-act="kbSaveItemSheet" data-pack="${esc(packId)}" data-id="${esc(itemId || '')}" data-posx="${posX != null && posX !== '' ? esc(String(posX)) : ''}" data-posy="${posY != null && posY !== '' ? esc(String(posY)) : ''}">保存</button></div>`, {
+    after: function (sh) {
+      const inp = sh && sh.querySelector('input[name="kbSheetTitle"]');
+      if (inp) try { inp.focus(); } catch (_) {}
+    }
+  });
 }
 
 function mountKbPackCanvas(packId) {
@@ -16770,9 +16931,9 @@ function initBanner() {
 document.addEventListener('click', async e => {
   const doc = e.target.closest('a[data-doc]');
   if (doc) { // show 协议/隐私 in a sheet so the login/register form keeps its input
-    e.preventDefault(); const sh = $('#sheet'); sh.classList.remove('hidden');
+    e.preventDefault();
     const html = (doc.dataset.doc === 'terms' ? pageTerms : pagePrivacy)().replace(/^<header[\s\S]*?<\/header>/, '').replace(/<div class="foot">[\s\S]*$/, '');
-    sh.innerHTML = `<div class="sheet"><h3><span>${doc.dataset.doc === 'terms' ? '用户协议' : '隐私政策'}</span><button class="x" data-act="closeSheet">✕</button></h3>${html.replace('class="doc"', 'class="doc" style="margin:0;box-shadow:none;padding:0"')}</div>`;
+    openSheetHtml(`<div class="sheet"><h3><span>${doc.dataset.doc === 'terms' ? '用户协议' : '隐私政策'}</span><button class="x" data-act="closeSheet">✕</button></h3>${html.replace('class="doc"', 'class="doc" style="margin:0;box-shadow:none;padding:0"')}</div>`);
     return;
   }
   if (typeof JCTribeFeed !== 'undefined') {
