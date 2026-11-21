@@ -1,0 +1,12 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const indexHtml = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+const appJs = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+assert.ok(/216mf389|216mf390|216mf391|216mf392|216mf393|216mf394|216mf395|216mf397|216mf398|216mf399|216mf400|216mf401/.test(indexHtml), 'index.html cache stamp is 389+');
+assert.ok(!/216mf388/.test(indexHtml), 'index.html cache stamp moved off 388');
+const onloadLine = appJs.split(/\n/).find((l) => l.includes('onload="this.parentNode.classList.add'));
+assert.ok(onloadLine, 'crest onload line present');
+assert.doesNotThrow(() => new Function(onloadLine), 'crest onload line must parse so the app can boot');
+console.log('boot-parse-389-test ok');

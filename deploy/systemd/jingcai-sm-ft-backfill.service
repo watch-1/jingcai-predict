@@ -1,0 +1,19 @@
+[Unit]
+Description=Jingcai SportMonks 10-day finished-match backfill
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/jingcai
+EnvironmentFile=-/opt/jingcai/.env
+Environment=DATA_DIR=/opt/jingcai/data
+Environment=NODE_ENV=production
+ExecStart=/opt/jingcai/tools/sm-ft-backfill-daily.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+TimeoutStartSec=2400
+
+[Install]
+WantedBy=multi-user.target

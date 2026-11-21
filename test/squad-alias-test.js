@@ -24,10 +24,23 @@ function dec(u) {
   assert.strictEqual(sq.pinnedSmId('拜仁慕尼黑'), 503);
   assert.strictEqual(sq.pinnedSmId('Barcelona'), null);
   assert.strictEqual(sq.pinnedSmId('Aston Villa'), null);
+  // 巴竞技 is pinned by sporttery teamId 564 (Athletico Paranaense, SM 3432),
+  // not by the short name alone (must not collide with 米竞技 / 马竞).
+  assert.strictEqual(sq.pinnedSmId('564'), 3432);
+  assert.strictEqual(sq.pinnedSmId(564, '巴竞技'), 3432);
+  assert.strictEqual(sq.pinnedSmId('巴拉纳竞技'), 3432);
+  assert.strictEqual(sq.pinnedSmId('Athletico Paranaense'), 3432);
+  assert.strictEqual(sq.pinnedSmId('Club Athletico Paranaense'), 3432);
+  assert.strictEqual(sq.pinnedSmId('Atletico Paranaense'), 3432);
+  assert.strictEqual(sq.pinnedSmId('巴竞技'), null, 'short name 巴竞技 is not pinned without teamId');
+  assert.strictEqual(sq.pinnedSmId('马竞'), 7980);
+  assert.notStrictEqual(sq.pinnedSmId('564'), 7980);
+  assert.notStrictEqual(sq.pinnedSmId('564'), 3427, 'must not resolve to Atlético Mineiro');
 
   let n = 0;
   assert.strictEqual(await sq.resolveSm('x', 'Atlético Madrid', null, async () => { n += 1; return { data: [] }; }), 7980);
   assert.strictEqual(await sq.resolveSm('x', 'Bayern Munich', null, async () => { n += 1; return { data: [] }; }), 503);
+  assert.strictEqual(await sq.resolveSm(564, '巴竞技', null, async () => { n += 1; return { data: [] }; }), 3432);
   assert.strictEqual(n, 0, 'pinned clubs skip search');
   assert.strictEqual(await sq.resolveSm('bar', '巴塞罗那', 83, async () => { throw new Error('known id'); }), 83);
 

@@ -49,6 +49,41 @@ const liveOk = fb.acceptMatchPayload('results', live, null);
 assert.strictEqual(liveOk.source, 'live');
 assert.strictEqual(liveOk.data.length, 2);
 
+const recentLive = Object.assign({}, live, { fetchedAt: '2026-11-18T11:20:00.000Z' });
+const nowRecent = Date.parse('2026-11-18T11:25:00.000Z');
+const silent = fb.acceptMatchPayload('matches', null, recentLive, {
+  silentIfRecent: true,
+  now: nowRecent,
+  silentMs: fb.SILENT_STALE_MS,
+});
+assert.strictEqual(silent.source, 'live');
+assert.strictEqual(silent.silentStale, true);
+assert.ok(!silent.note, 'recent last-good on a client blip has no orange-banner note');
+assert.ok(fb.isRecentLiveCache(recentLive, nowRecent));
+
+const oldLive = Object.assign({}, live, { fetchedAt: '2026-11-18T10:00:00.000Z' });
+const nowOld = Date.parse('2026-11-18T11:25:00.000Z');
+const oldFb = fb.acceptMatchPayload('matches', null, oldLive, {
+  silentIfRecent: true,
+  now: nowOld,
+  silentMs: fb.SILENT_STALE_MS,
+});
+assert.ok(!oldFb.silentStale);
+assert.ok(/官方接口暂时不可达/.test(oldFb.note), 'old last-good still shows the official-unreachable note');
+
+const serverStale = Object.assign({}, live, {
+  stale: true,
+  fromCache: true,
+  note: '官方接口暂时不可达，已保留上次成功刷新的场次',
+  fetchedAt: '2026-11-18T11:20:00.000Z',
+});
+const fromServer = fb.acceptMatchPayload('matches', serverStale, recentLive, {
+  silentIfRecent: true,
+  now: nowRecent,
+});
+assert.strictEqual(fromServer.note, serverStale.note, 'explicit server stale+note is kept and shown');
+assert.ok(!fromServer.silentStale);
+
 // server.js must not merge sample into results archive
 const serverJs = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
 assert.ok(/liveFallbackPayload/.test(serverJs), 'refreshData uses liveFallbackPayload');

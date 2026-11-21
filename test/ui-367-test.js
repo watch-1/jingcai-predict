@@ -45,7 +45,7 @@ function bundledCrestPath(teamId) {
   if (['359','367','86'].includes(tid)) return 'assets/crests/' + tid + '.png';
   return '';
 }
-` + extract('isNationalFlagLogo') + extract('espnIdFromCrestLogo') + extract('bundledCrestFor') + extract('crestCacheKey') + extract('formatHeroRank');
+` + extract('isNationalFlagLogo') + extract('espnIdFromCrestLogo') + extract('isJingcaiOrSportteryLogo') + extract('bundledCrestFor') + extract('crestCacheKey') + extract('formatHeroRank');
 
 const fns = { bundledCrestPath() {}, isNationalFlagLogo() {}, espnIdFromCrestLogo() {}, bundledCrestFor() {}, crestCacheKey() {}, formatHeroRank() {} };
 // eslint-disable-next-line no-new-func

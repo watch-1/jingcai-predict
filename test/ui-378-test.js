@@ -112,10 +112,15 @@ const afBadge = 'https://media.api-sports.io/football/teams/42.png';
 
 assert.strictEqual(
   api.bundledCrestFor(arsenalTsdb, '359'),
-  'assets/crests/359.png',
-  'Arsenal TSDB logo + ESPN teamId 359 uses the packed crest, not /api/logo'
+  '',
+  'TSDB logo + bare teamId 359 is not treated as Arsenal (jingcai 359 = 亚美尼亚)'
 );
-assert.ok(!/api\/logo/.test(api.bundledCrestFor(arsenalTsdb, '359')), 'packed path is not a proxy URL');
+assert.strictEqual(
+  api.bundledCrestFor(arsenalTsdb, '359', { idNs: 'espn' }),
+  'assets/crests/359.png',
+  'Arsenal TSDB logo + explicit ESPN idNs 359 uses the packed crest, not /api/logo'
+);
+assert.ok(!/api\/logo/.test(api.bundledCrestFor(arsenalTsdb, '359', { idNs: 'espn' })), 'packed path is not a proxy URL');
 assert.strictEqual(
   api.bundledCrestFor(interEspn, '110'),
   'assets/crests/110.png',
@@ -174,8 +179,13 @@ assert.strictEqual(
 );
 assert.strictEqual(
   api.bundledCrestFor(afBadge, '359'),
+  '',
+  'api-sports badge + bare teamId 359 is not treated as an ESPN id'
+);
+assert.strictEqual(
+  api.bundledCrestFor(afBadge, '359', { idNs: 'espn' }),
   'assets/crests/359.png',
-  'api-sports club badge + packed ESPN teamId uses the packed file'
+  'api-sports club badge + explicit ESPN idNs uses the packed file'
 );
 assert.ok(api.isNationalFlagLogo(armFlag), 'Armenia mark is a national flag');
 assert.ok(!api.isEspnNamespaceClubLogo(armFlag), 'flags are not ESPN club logos');

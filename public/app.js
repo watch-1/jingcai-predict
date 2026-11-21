@@ -405,23 +405,63 @@ const BUNDLED_CREST_BASE = 'assets/crests/';
 let _crestDbP = null;
 const _crestMem = new Map();
 const _crestInflight = new Map();
+const _crestReady = new Set();
+const _crestWarmInfl = new Map();
+let _crestWarmActive = 0;
+const _crestWarmQ = [];
+const CREST_WARM_CONCUR = 8;
 let _bundledCrestIds = (CFG.bundledCrestIds && Array.isArray(CFG.bundledCrestIds))
   ? new Set(CFG.bundledCrestIds.map((id) => String(id)))
   : null;
+function normalizeSportteryCrestMap(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  const src = raw.map && typeof raw.map === 'object' && !Array.isArray(raw.map) ? raw.map : raw;
+  for (const key of Object.keys(src)) {
+    if (key === 'v' || key === 'syncedAt' || key === 'source' || key === 'teamIds') continue;
+    const tid = String(key || '').trim();
+    let file = String(src[key] || '').trim();
+    if (!tid || !file) continue;
+    if (/\.png$/i.test(file)) file = file.replace(/\.png$/i, '');
+    out[tid] = file;
+  }
+  return out;
+}
+let _sportteryCrests = normalizeSportteryCrestMap(CFG.sportteryCrests || CFG.bundledSportteryCrests);
+function applyBundledCrestManifest(j) {
+  const fromMan = (j && Array.isArray(j.teamIds) ? j.teamIds : []).map((id) => String(id));
+  if (fromMan.length) _bundledCrestIds = new Set(fromMan);
+  else if (_bundledCrestIds === null) _bundledCrestIds = new Set();
+  try { if (typeof warmBundledCrests === 'function') warmBundledCrests(); } catch (_) {}
+  const mapped = normalizeSportteryCrestMap(j && (j.sportteryCrests || j.map));
+  if (Object.keys(mapped).length) _sportteryCrests = mapped;
+}
+function refreshCrestViews() {
+  try {
+    const rn = route().name;
+    if (rn === 'data' || rn === 'tribe' || rn === 'tribe-club' || rn === 'home' || rn === 'match') render({ force: true });
+  } catch (_) {}
+}
 try {
   fetch(BUNDLED_CREST_BASE + 'manifest.json', { cache: 'force-cache' })
     .then((r) => (r && r.ok ? r.json() : null))
     .then((j) => {
-      const fromMan = (j && Array.isArray(j.teamIds) ? j.teamIds : []).map((id) => String(id));
-      if (fromMan.length) _bundledCrestIds = new Set(fromMan);
-      else if (_bundledCrestIds === null) _bundledCrestIds = new Set();
-      try {
-        const rn = route().name;
-        if (rn === 'data' || rn === 'tribe' || rn === 'tribe-club') render({ force: true });
-      } catch (_) {}
+      applyBundledCrestManifest(j);
+      refreshCrestViews();
     })
     .catch(() => { if (_bundledCrestIds === null) _bundledCrestIds = new Set(); });
+  fetch(BUNDLED_CREST_BASE + 'sporttery-map.json', { cache: 'force-cache' })
+    .then((r) => (r && r.ok ? r.json() : null))
+    .then((j) => {
+      const mapped = normalizeSportteryCrestMap(j && (j.map || j.sportteryCrests || j));
+      if (Object.keys(mapped).length) {
+        _sportteryCrests = mapped;
+        refreshCrestViews();
+      }
+    })
+    .catch(() => {});
 } catch (_) { if (_bundledCrestIds === null) _bundledCrestIds = new Set(); }
+try { if (typeof warmBundledCrests === 'function') warmBundledCrests(); } catch (_) {}
 
 /* ── Data-center player photos: APK-bundled assets (1.9.204+) ── */
 const BUNDLED_PLAYER_BASE = 'assets/players/';
@@ -878,7 +918,8 @@ function isCrestPlaceholderLogo(logo) {
 function officialStatusZh(s, fallback) {
   const raw = String(s == null ? '' : s).trim();
   if (/^selling$/i.test(raw)) return '在售';
-  if (/^define$/i.test(raw)) return '未开赛';
+  // 体彩 Define = 赛后核定期，不是未开赛；有比分/完场时走 fallback（完场）。
+  if (/^define$/i.test(raw)) return fallback || '完场';
   if (/^(payout|finished|ft)$/i.test(raw)) return '完场';
   if (!raw) return fallback || '';
   return raw;
@@ -904,18 +945,29 @@ function isEspnNamespaceClubLogo(logo) {
 }
 function bundledCrestFor(logo, teamId, opts) {
   if (isNationalFlagLogo(logo)) return '';
-  if (isJingcaiOrSportteryLogo(logo)) return '';
+  if (typeof isJingcaiOrSportteryLogo === 'function' && isJingcaiOrSportteryLogo(logo)) return '';
   const espnFromLogo = espnIdFromCrestLogo(logo);
   if (espnFromLogo) return bundledCrestPath(espnFromLogo);
   opts = opts || {};
   const explicit = opts.espnTeamId != null && String(opts.espnTeamId) !== '' ? String(opts.espnTeamId) : '';
-  const tid = explicit || (teamId != null && String(teamId) !== '' ? String(teamId) : '');
-  if (!tid) return '';
-  const nsOk = !!explicit || opts.idNs === 'espn';
-  const logoOk = isEspnNamespaceClubLogo(logo);
-  // Bare teamId is only trusted when the row is clearly ESPN-namespace.
-  if (!nsOk && !logoOk) return '';
-  return bundledCrestPath(tid);
+  if (explicit) return bundledCrestPath(explicit);
+  if (opts.idNs === 'espn') {
+    const espnTid = teamId != null && String(teamId) !== '' ? String(teamId) : '';
+    return espnTid ? bundledCrestPath(espnTid) : '';
+  }
+  // 体彩/sporttery teamId → mapped packed file (ESPN id or jc- prefix).
+  // Never treat unmapped bare jingcai ids as ESPN ids (359 = 亚美尼亚 vs Arsenal).
+  const jc = teamId != null && String(teamId) !== '' ? String(teamId) : '';
+  if (!jc) return '';
+  let mapped = '';
+  try {
+    if (typeof _sportteryCrests !== 'undefined' && _sportteryCrests) {
+      mapped = String(_sportteryCrests[jc] || '');
+    }
+  } catch (_) { mapped = ''; }
+  if (!mapped) return '';
+  if (/\.png$/i.test(mapped)) mapped = mapped.replace(/\.png$/i, '');
+  return bundledCrestPath(mapped);
 }
 
 function crestCacheKey(logo, teamId) {
@@ -1022,18 +1074,133 @@ async function crestCacheFromRemote(logo, teamId) {
   try { return await job; } finally { _crestInflight.delete(key); }
 }
 
+function crestMarkReady(imgOrSrc, key) {
+  try {
+    let src = '';
+    let k = key || '';
+    if (typeof imgOrSrc === 'string') src = imgOrSrc;
+    else if (imgOrSrc) {
+      src = imgOrSrc.currentSrc || imgOrSrc.src || (imgOrSrc.getAttribute && imgOrSrc.getAttribute('src')) || '';
+      const p = imgOrSrc.parentNode;
+      if (!k && p && p.getAttribute) k = p.getAttribute('data-crest-key') || '';
+    }
+    if (src) _crestReady.add(src);
+    if (k) _crestReady.add(k);
+  } catch (_) {}
+}
+try { window.crestMarkReady = crestMarkReady; } catch (_) {}
+
+function crestIsReady(src, key) {
+  if (key && _crestReady.has(key)) return true;
+  if (src && _crestReady.has(src)) return true;
+  return false;
+}
+
+function crestWarmDecode(src, key) {
+  if (!src) return Promise.resolve(false);
+  if (crestIsReady(src, key)) return Promise.resolve(true);
+  const hit = _crestWarmInfl.get(src);
+  if (hit) return hit;
+  const job = new Promise((resolve) => {
+    const run = () => {
+      _crestWarmActive += 1;
+      let settled = false;
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        _crestWarmActive -= 1;
+        if (ok) crestMarkReady(src, key);
+        const next = _crestWarmQ.shift();
+        if (next) next();
+        resolve(!!ok);
+      };
+      try {
+        const im = new Image();
+        im.onload = () => {
+          if (typeof im.decode === 'function') {
+            im.decode().then(() => finish(im.naturalWidth > 0)).catch(() => finish(im.naturalWidth > 0));
+          } else finish(im.naturalWidth > 0);
+        };
+        im.onerror = () => finish(false);
+        im.src = src;
+        if (im.complete && im.naturalWidth > 0) {
+          if (typeof im.decode === 'function') {
+            im.decode().then(() => finish(true)).catch(() => finish(true));
+          } else finish(true);
+        }
+      } catch (_) { finish(false); }
+    };
+    if (_crestWarmActive < CREST_WARM_CONCUR) run();
+    else _crestWarmQ.push(run);
+  });
+  _crestWarmInfl.set(src, job);
+  return job;
+}
+
+function warmBundledCrests() {
+  try {
+    const ids = _bundledCrestIds;
+    if (!ids || typeof ids.forEach !== 'function') return;
+    ids.forEach((id) => {
+      const src = bundledCrestPath(id);
+      if (src) crestWarmDecode(src);
+    });
+  } catch (_) {}
+}
+
 async function warmCrestCacheForTeams(teams) {
   try {
     if (!Array.isArray(teams) || !teams.length) return;
-    const slice = teams.filter((t) => t && t.logo).slice(0, 120);
+    const seen = new Set();
+    const slice = [];
+    for (const t of teams) {
+      if (!t || !t.logo) continue;
+      const key = crestCacheKey(t.logo, t.teamId);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      slice.push(t);
+      if (slice.length >= 120) break;
+    }
+    let remotes = 0;
     await Promise.all(slice.map(async (t) => {
       const key = crestCacheKey(t.logo, t.teamId);
-      if (!key || _crestMem.has(key)) return;
+      if (!key) return;
       try {
+        const bundled = typeof bundledCrestFor === 'function' ? bundledCrestFor(t.logo, t.teamId) : '';
+        if (bundled) {
+          await crestWarmDecode(bundled, key);
+          return;
+        }
+        if (_crestMem.has(key)) {
+          await crestWarmDecode(_crestMem.get(key), key);
+          return;
+        }
         const blob = await crestIdbGet(key);
-        if (blob instanceof Blob && blob.size > 0) crestRemember(key, blob);
+        if (blob instanceof Blob && blob.size > 0) {
+          const u = crestRemember(key, blob);
+          if (u) await crestWarmDecode(u, key);
+          return;
+        }
+        /* preview 392: first launch has no IDB yet — prefetch /api/logo so
+           赛程「明天」unbundled crests are ready when that tab paints. */
+        if (remotes >= 40) return;
+        remotes += 1;
+        const saved = await crestCacheFromRemote(t.logo, t.teamId);
+        if (saved) await crestWarmDecode(saved, key);
       } catch (_) {}
     }));
+  } catch (_) {}
+}
+
+function markCrestsLoaded(scope) {
+  try {
+    const root = scope || document;
+    root.querySelectorAll('.badge.crest:not(.flag) img').forEach((img) => {
+      if (img.complete && img.naturalWidth > 0 && img.parentNode) {
+        img.parentNode.classList.add('is-loaded');
+        crestMarkReady(img);
+      }
+    });
   } catch (_) {}
 }
 
@@ -1041,6 +1208,7 @@ function hydrateTribeCrests(root) {
   // 1.9.202: never block paint — bundled src is already in DOM; IDB/remote overlay in background only
   try {
     const scope = root || document;
+    markCrestsLoaded(scope);
     const nodes = scope.querySelectorAll('.badge.crest[data-crest-key]');
     const jobs = [];
     nodes.forEach((wrap) => {
@@ -1073,10 +1241,18 @@ function hydrateTribeCrests(root) {
             const saved = await crestCacheFromRemote(logo, tid);
             if (saved && img.getAttribute('src') !== saved) img.setAttribute('src', saved);
           }
+          if (img.complete && img.naturalWidth > 0 && img.parentNode) {
+            img.parentNode.classList.add('is-loaded');
+            crestMarkReady(img);
+          }
         } catch (_) {}
       })());
     });
-    if (jobs.length) Promise.all(jobs).catch(() => {});
+    const settle = () => { try { markCrestsLoaded(scope); } catch (_) {} };
+    if (jobs.length) Promise.all(jobs).then(settle).catch(settle);
+    else settle();
+    setTimeout(settle, 600);
+
   } catch (_) {}
 }
 
@@ -1114,14 +1290,22 @@ function badge(name, cls = '', logo, opts) {
   } else if (bundled) {
     fbAttr = ` data-bundled="${esc(bundled)}"`;
   }
-  const lazyAttr = (opts && opts.eager) ? '' : ' loading="lazy"';
+  const already = !isFlag && crestIsReady(srcUrl, ckey);
+  const lazyAttr = (already || (opts && opts.eager)) ? '' : ' loading="lazy"';
   const dataAttrs = ` data-crest-key="${esc(ckey)}" data-crest-logo="${esc(logo)}"${tid ? ` data-team-id="${esc(tid)}"` : ''}${iso2 ? ` data-flag-iso="${esc(iso2)}"` : ''}`;
   const onerr = "var img=this,p=img.parentNode;if(!p)return;var bundled=img.getAttribute('data-bundled')||'';var cur=img.getAttribute('src')||'';if(bundled&&cur.indexOf(bundled)<0&&!img.dataset.triedBundled){img.dataset.triedBundled=1;img.src=bundled;return;}var fb=img.getAttribute('data-fb');if(fb&&!img.dataset.triedFb){img.dataset.triedFb=1;img.src=fb;return;}var fb2=img.getAttribute('data-fb2');if(fb2&&!img.dataset.triedFb2){img.dataset.triedFb2=1;img.src=fb2;return;}if(bundled){if(cur.indexOf(bundled)<0){img.src=bundled;}return;}if(p.dataset.fell)return;p.dataset.fell=1;p.className='badge letter " + cls + "';p.style.background='" + bg + "';p.textContent=p.dataset.letter||'';img.remove()";
   const corsAttr = /^https?:/i.test(srcUrl) ? ' crossorigin="anonymous"' : '';
   const flagCls = isFlag ? ' flag' : '';
   // 377: do not force a 3:2 HTML aspect on every flag (CH is square, SCT is 5:3).
   const wh = isFlag ? 'width="160"' : 'width="160" height="160"';
-  return `<span class="badge crest${flagCls} ${cls}" data-letter="${letter}"${dataAttrs}><img alt="" ${wh} decoding="async"${lazyAttr}${fbAttr}${corsAttr} src="${src}" onerror="${onerr}"></span>`;
+  // 397: once a crest has decoded, paint it directly (no letter cover) so date
+  // and forum tab switches do not flash the placeholder. Cold / pending remote
+  // logos still keep the 387 letter cover until onload (avoids a blank hole).
+  const onload = isFlag ? '' : ` onload="this.parentNode.classList.add('is-loaded');try{crestMarkReady(this)}catch(e){}"`;
+  const ph = (isFlag || already) ? '' : `<span class="badge-ph" aria-hidden="true" style="background:${bg}">${letter}</span>`;
+  const bgAttr = (isFlag || already) ? '' : ` style="background:${bg}"`;
+  const loadedCls = already ? ' is-loaded' : '';
+  return `<span class="badge crest${flagCls} ${cls}${loadedCls}"${bgAttr} data-letter="${letter}"${dataAttrs}>${ph}<img alt="" ${wh} decoding="async"${lazyAttr}${fbAttr}${corsAttr} src="${src}"${onload} onerror="${onerr}"></span>`;
 }
 function matchTeamBadge(m, side, cls, extra) {
   if (!m) return badge('', cls || '');
@@ -1330,10 +1514,32 @@ function sessionExpired() { if (!S.token) return; clearSession(); toast('登录�
 function isUsableLiveCache(c) {
   return !!(c && c.source === 'live' && Array.isArray(c.data) && c.data.length);
 }
-function acceptMatchPayload(kind, incoming, cachedLive) {
+const SILENT_STALE_MS = 30 * 60 * 1000;
+function cacheFetchedAtMs(payload) {
+  if (!payload || typeof payload !== 'object') return 0;
+  const iso = payload.fetchedAt;
+  const t = iso ? Date.parse(iso) : NaN;
+  if (Number.isFinite(t) && t > 0) return t;
+  const at = Number(payload.at || payload._cachedAt || payload._at);
+  return Number.isFinite(at) && at > 0 ? at : 0;
+}
+function isRecentLiveCache(payload, now, maxAgeMs) {
+  if (!isUsableLiveCache(payload)) return false;
+  const at = cacheFetchedAtMs(payload);
+  if (!at) return false;
+  const age = (now != null ? now : Date.now()) - at;
+  return age >= 0 && age <= (maxAgeMs != null ? maxAgeMs : SILENT_STALE_MS);
+}
+function acceptMatchPayload(kind, incoming, cachedLive, opts) {
   const j = incoming && typeof incoming === 'object' ? incoming : null;
   if (j && j.source === 'live' && Array.isArray(j.data)) return j;
   if (isUsableLiveCache(cachedLive)) {
+    const silent = !!(opts && opts.silentIfRecent)
+      && !(j && j.stale && j.note && /官方接口暂时不可达/.test(String(j.note)))
+      && isRecentLiveCache(cachedLive, opts.now, opts.silentMs);
+    if (silent) {
+      return Object.assign({}, cachedLive, { fromCache: true, stale: true, silentStale: true });
+    }
     return Object.assign({}, cachedLive, {
       fromCache: true,
       stale: true,
@@ -1347,16 +1553,34 @@ function acceptMatchPayload(kind, incoming, cachedLive) {
   return { source: 'empty', local: true, note: '无法刷新，暂无场次', fetchedAt: new Date().toISOString(), data: [] };
 }
 async function loadData(kind, force) {
-  let j;
+  let j = null;
   const cachedLive = LS.get('jc_cache_' + kind, null);
-  try {
-    j = await api('/' + kind + (force ? '?t=' + Date.now() : ''), { timeout: 10000 });
-    if (!j || !Array.isArray(j.data)) throw new Error('格式错误');
-    j = acceptMatchPayload(kind, j, cachedLive);
-    if (j.source === 'live' && !j.stale && !j.fromCache) LS.set('jc_cache_' + kind, j);
-  } catch (e) {
-    j = acceptMatchPayload(kind, null, cachedLive);
+  // 386: ~8s budget with 1–2 quick retries so a 1–3s restart (connection refused)
+  // is invisible. The server now serves disk last-good immediately after listen.
+  const budget = 8000;
+  const t0 = Date.now();
+  for (let i = 0; i < 3; i++) {
+    const left = budget - (Date.now() - t0);
+    if (left < 500 && i > 0) break;
+    const isLast = i === 2;
+    const timeout = isLast ? Math.max(800, left) : Math.min(3000, Math.max(800, left - 500));
+    try {
+      const got = await api('/' + kind + (force ? '?t=' + Date.now() : ''), { timeout });
+      if (got && Array.isArray(got.data)) { j = got; break; }
+    } catch (_) { /* retry */ }
+    if (i < 2) {
+      const gap = 400;
+      if (Date.now() - t0 + gap >= budget) break;
+      await new Promise((r) => setTimeout(r, gap));
+    }
   }
+  const serverNote = !!(j && j.stale && j.note && /官方接口暂时不可达/.test(String(j.note)));
+  j = acceptMatchPayload(kind, j, cachedLive, {
+    silentIfRecent: !serverNote,
+    now: Date.now(),
+    silentMs: SILENT_STALE_MS,
+  });
+  if (j.source === 'live' && !j.stale && !j.fromCache) LS.set('jc_cache_' + kind, j);
   if (kind === 'matches') { S.matches = j.data; S.msrc = j; try { warmupMatchWeather(j.data); } catch (_) {} try { warmupMatchOddsAndReports(j.data); } catch (_) {} }
   else if (kind === 'schedule') { S.schedule = j.data; S.ssrc = j; }
   else { S.results = j.data; S.rsrc = j; }
@@ -2274,12 +2498,13 @@ function tickClock() {
     const lab = el.querySelector('.clab'); if (lab && lab.textContent !== label) lab.textContent = label;
     const clk = el.querySelector('.clk'); if (clk && clk.textContent !== t) clk.textContent = t;
   });
+  try { if (typeof tickAnimLiveCountdown === 'function') tickAnimLiveCountdown(); } catch (_) {}
 }
 function sourceWarnHtml(src) {
   if (!src) return '';
   if (src.source === 'sample') return `<div class="warn-bar">⚠️ <b>示例数据</b>：${esc(src.note || '官方接口暂不可达')}。以下赛事与赔率仅作演示，<b>非真实数据</b>。</div>`;
   if (src.source === 'empty') return `<div class="warn-bar">${esc(src.note || '无法刷新，暂无场次')}</div>`;
-  if (src.stale) return `<div class="warn-bar">${esc(src.note || '场次刷新未成功，已保留上次数据')}</div>`;
+  if (src.stale && !src.silentStale) return `<div class="warn-bar">${esc(src.note || '场次刷新未成功，已保留上次数据')}</div>`;
   return '';
 }
 function warnBar() {
@@ -2784,6 +3009,7 @@ function overlayKeyFor(el) {
   if (!el) return '';
   if (el.id === 'sheet') return 'sheet';
   if (el.id === 'radar-expand') return 'radar';
+  if (el.id === 'mf-fullview') return 'mf';
   if (el.id === 'dialog') return 'dialog';
   return el.id || 'anon';
 }
@@ -2828,12 +3054,14 @@ function freezeOverlayEl(el) {
 function unfreezeOverlayEl(el) {
   if (!el) return;
   try { el.classList.remove('overlay-teardown'); } catch (_) {}
+  try { el.classList.remove('overlay-closing'); } catch (_) {}
   try { el.style.pointerEvents = ''; } catch (_) {}
 }
 function overlayElBusy(el) {
   if (!el) return false;
   try {
     if (el.classList.contains('overlay-teardown')) return true;
+    if (el.classList.contains('overlay-closing')) return true;
     if (!el.classList.contains('hidden')) return true;
   } catch (_) {}
   return false;
@@ -2849,11 +3077,14 @@ function overlayBusy() {
     if (overlayElBusy(document.getElementById('sheet'))) return true;
     if (overlayElBusy(document.getElementById('dialog'))) return true;
     if (isRadarExpandOpen()) return true;
+    if (overlayElBusy(document.getElementById('mf-fullview'))) return true;
+    if (overlayElBusy(document.getElementById('anim-live-land'))) return true;
   } catch (_) {}
   return false;
 }
 function syncOverlayWeatherPause() {
   try { if (typeof syncHeroWeatherMotion === 'function') syncHeroWeatherMotion(); } catch (_) {}
+  try { if (typeof syncPitchLiveMotion === 'function') syncPitchLiveMotion(); } catch (_) {}
 }
 function swapOverlayHtml(el, html, opts) {
   if (!el) return;
@@ -2861,9 +3092,13 @@ function swapOverlayHtml(el, html, opts) {
   const after = opts && opts.after;
   const onShow = opts && opts.onShow;
   const onIdle = opts && opts.onIdle;
+  let alreadyOpen = false;
+  try { alreadyOpen = !el.classList.contains('hidden'); } catch (_) {}
   /* preview 382: first show of a hidden overlay (详细对照) must also wait
      before writing and wait again before removing .hidden / unfreezing.
-     Measurement (bindRadarBoardFit) runs only after the reveal is idle. */
+     Measurement (bindRadarBoardFit) runs only after the reveal is idle.
+     preview 390: if the overlay is already open, do not hide the mask
+     (that flashed the page underneath). Freeze only the inner chrome. */
   const reveal = () => {
     if (epoch !== currentOverlayEpoch(el)) return;
     afterCompositorIdle(() => {
@@ -2879,18 +3114,36 @@ function swapOverlayHtml(el, html, opts) {
         try { if (typeof onIdle === 'function') onIdle(el); } catch (_) {}
         try { if (typeof after === 'function') after(el); } catch (_) {}
       }, OVERLAY_TEARDOWN_MS);
-    }, OVERLAY_TEARDOWN_MS);
+    }, alreadyOpen ? 0 : OVERLAY_TEARDOWN_MS);
   };
   const writeOffscreen = () => {
     if (epoch !== currentOverlayEpoch(el)) return;
-    try { el.classList.add('hidden'); } catch (_) {}
+    if (!alreadyOpen) {
+      try { el.classList.add('hidden'); } catch (_) {}
+    }
     try { el.innerHTML = html == null ? '' : html; } catch (_) {}
     reveal();
   };
-  freezeOverlayEl(el);
+  if (alreadyOpen) {
+    try {
+      el.classList.remove('overlay-teardown');
+      el.style.pointerEvents = 'none';
+      const inners = el.querySelectorAll('.sheet, .rk-body, .rk-page, .dialog, .fv-body');
+      for (let i = 0; i < inners.length; i++) {
+        try {
+          inners[i].classList.add('overlay-inner-swap');
+          inners[i].style.pointerEvents = 'none';
+        } catch (_) {}
+      }
+    } catch (_) {}
+  } else {
+    freezeOverlayEl(el);
+  }
   syncOverlayWeatherPause();
+  try { syncSheetScrollLock(); } catch (_) {}
   afterCompositorIdle(writeOffscreen, OVERLAY_TEARDOWN_MS);
 }
+
 
 const _slotEpochCur = new WeakMap();
 function bumpSlotEpoch(el) {
@@ -2949,28 +3202,97 @@ function swapSlotHtml(el, html, opts) {
 function teardownOverlayEl(el, onDone) {
   if (!el) { try { if (typeof onDone === 'function') onDone(); } catch (_) {} return; }
   const epoch = bumpOverlayEpoch(el);
-  freezeOverlayEl(el);
+  /* preview 391: do not put overlay-teardown on the root. That faded the
+     whole mask (opacity 0) while SVG gauges / radar / photos were still
+     composited, which native-crashed some Huawei WebViews when closing
+     详细对照 or a player sheet. Keep the root covering the page, freeze
+     only inner chrome, wait, display:none, wait again, then clear. */
+  try { el.style.pointerEvents = 'none'; } catch (_) {}
   try { el.setAttribute('aria-hidden', 'true'); } catch (_) {}
+  try { el.classList.remove('overlay-teardown'); } catch (_) {}
+  try { el.classList.add('overlay-closing'); } catch (_) {}
+  try {
+    const inners = el.querySelectorAll('.sheet, .rk-hdr, .rk-body, .rk-page, .dialog, .fv-bar, .fv-body, .sm-player-sheet');
+    for (let i = 0; i < inners.length; i++) {
+      try {
+        inners[i].classList.add('overlay-inner-swap');
+        inners[i].style.pointerEvents = 'none';
+      } catch (_) {}
+    }
+  } catch (_) {}
   syncOverlayWeatherPause();
+  try { syncSheetScrollLock(); } catch (_) {}
   afterCompositorIdle(() => {
     if (epoch !== currentOverlayEpoch(el)) return;
     try { el.classList.add('hidden'); } catch (_) {}
-    const clear = () => {
+    afterCompositorIdle(() => {
       if (epoch !== currentOverlayEpoch(el)) return;
       try { if (el.classList.contains('hidden')) el.innerHTML = ''; } catch (_) {}
+      try { el = recycleOverlayEl(el) || el; } catch (_) {}
       unfreezeOverlayEl(el);
       try { if (typeof onDone === 'function') onDone(); } catch (_) {}
       syncOverlayWeatherPause();
-    };
-    try { requestAnimationFrame(clear); } catch (_) { clear(); }
+      try { syncSheetScrollLock(); } catch (_) {}
+    }, OVERLAY_TEARDOWN_MS);
   }, OVERLAY_TEARDOWN_MS);
 }
+function overlayHostEls() {
+  const ids = ['sheet', 'dialog', 'radar-expand', 'mf-fullview', 'anim-live-land'];
+  const out = [];
+  for (let i = 0; i < ids.length; i++) {
+    try {
+      const el = document.getElementById(ids[i]);
+      if (el) out.push(el);
+    } catch (_) {}
+  }
+  return out;
+}
+function anyOverlayBusy() {
+  const els = overlayHostEls();
+  for (let i = 0; i < els.length; i++) {
+    if (overlayElBusy(els[i])) return true;
+  }
+  return false;
+}
+function ensureOverlayScrollGuard() {
+  let g = document.getElementById('overlay-scroll-guard');
+  if (g) return g;
+  g = document.createElement('div');
+  g.id = 'overlay-scroll-guard';
+  g.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(g);
+  return g;
+}
 function syncSheetScrollLock() {
-  const sh = document.getElementById('sheet') || (typeof $ === 'function' && $('#sheet'));
-  const on = !!(sh && overlayElBusy(sh));
+  const on = anyOverlayBusy();
   try { document.body.classList.toggle('sheet-on', !!on); } catch (_) {}
-  const view = document.getElementById('view') || (typeof $ === 'function' && $('#view'));
-  if (view) try { view.classList.toggle('sheet-lock', !!on); } catch (_) {}
+  /* preview 393: never toggle #view overflow; a leftover sheet-lock class
+     would still flip the scroll layer if old CSS were cached. */
+  try {
+    const view = document.getElementById('view') || (typeof $ === 'function' && $('#view'));
+    if (view) view.classList.remove('sheet-lock');
+  } catch (_) {}
+  try {
+    const g = ensureOverlayScrollGuard();
+    if (on) g.classList.add('is-on');
+    else g.classList.remove('is-on');
+  } catch (_) {}
+}
+function recycleOverlayEl(el) {
+  if (!el || !el.parentNode) return el;
+  try {
+    const fresh = el.cloneNode(false);
+    try { fresh.removeAttribute('style'); } catch (_) {}
+    try { fresh.classList.remove('overlay-teardown', 'overlay-closing'); } catch (_) {}
+    try { fresh.classList.add('hidden'); } catch (_) {}
+    try { fresh.setAttribute('aria-hidden', 'true'); } catch (_) {}
+    try { fresh.innerHTML = ''; } catch (_) {}
+    el.parentNode.replaceChild(fresh, el);
+    return fresh;
+  } catch (_) {
+    try { el.innerHTML = ''; } catch (__) {}
+    return el;
+  }
 }
 function closeSheet() {
   try {
@@ -3182,6 +3504,9 @@ function isDialogOpen() {
 }
 function closeTopOverlay() {
   try {
+    if (typeof closeAnimLiveLandscape === 'function' && closeAnimLiveLandscape()) return true;
+  } catch (_) {}
+  try {
     if (isDialogOpen()) {
       const d = document.getElementById('dialog') || $('#dialog');
       const btn = d && d.querySelector('[data-r="0"], [data-act="closeDialog"], .x');
@@ -3205,6 +3530,9 @@ function closeTopOverlay() {
   try {
     if (S.radarExpand) { closeRadarExpand(); return true; }
   } catch (_) { try { closeRadarExpand(); return true; } catch (__) {} }
+  try {
+    if (S.mfFullview || overlayElBusy(document.getElementById('mf-fullview'))) { closeMfFullview(); return true; }
+  } catch (_) { try { closeMfFullview(); return true; } catch (__) {} }
   return false;
 }
 function back() {
@@ -3228,6 +3556,7 @@ function back() {
 window.addEventListener('hashchange', () => {
   try { navNote(location.hash || '#/home'); } catch (_) {}
   try { closeRadarExpand(); } catch (_) {}
+  try { closeMfFullview(); } catch (_) {}
   try { closeSheet(); } catch (_) {}
   try { closeMeDrawer(); } catch (_) {}
   try {
@@ -4022,7 +4351,9 @@ function homeFocusBuckets() {
   const ranked = ms.map(m => ({ m, row: classifyScoreRow(m) }));
   const sortLive = (a, b) => prio(a.m.league) - prio(b.m.league) || kickoff(a.m) - kickoff(b.m);
   const sortRecent = (a, b) => prio(a.m.league) - prio(b.m.league) || kickoff(b.m) - kickoff(a.m);
-  const sortUp = (a, b) => prio(a.m.league) - prio(b.m.league) || kickoff(a.m) - kickoff(b.m);
+  /* preview 392: upcoming home cards are the soonest kickoffs, not the
+     highest-priority league (that put later 西甲·德甲 ahead of tonight's 巴甲). */
+  const sortUp = (a, b) => kickoff(a.m) - kickoff(b.m) || prio(a.m.league) - prio(b.m.league);
   const live = ranked.filter(x => x.row._kind === 'live').sort(sortLive);
   const recent = ranked.filter(x => {
     if (x.row._kind === 'ft' || x.row._kind === 'live') return false;
@@ -4153,9 +4484,9 @@ function focusCardCompact(m) {
   }
   return `<button type="button" class="focus-card" data-go="#/match/${encodeURIComponent(m.id)}">
     <div class="fc-teams">
-      <div class="fc-side"><span class="fc-name">${esc(m.home)}</span>${matchTeamBadge(m, 'home', 'sm')}</div>
+      <div class="fc-side"><span class="fc-name">${esc(m.home)}</span>${matchTeamBadge(m, 'home', 'sm', { eager: true })}</div>
       <div class="fc-mid"><span class="fc-score num">${mid}</span><small>${meta}</small></div>
-      <div class="fc-side r"><span class="fc-name">${esc(m.away)}</span>${matchTeamBadge(m, 'away', 'sm')}</div>
+      <div class="fc-side r"><span class="fc-name">${esc(m.away)}</span>${matchTeamBadge(m, 'away', 'sm', { eager: true })}</div>
     </div>
   </button>`;
 }
@@ -4172,11 +4503,11 @@ function focusCardPitch(m) {
     center = esc((m.time || '') || '—');
   }
   return `<button type="button" class="focus-bar" data-go="#/match/${encodeURIComponent(m.id)}">
-    ${matchTeamBadge(m, 'home', 'sm')}
+    ${matchTeamBadge(m, 'home', 'sm', { eager: true })}
     <span class="fb-name">${esc(m.home)}</span>
     <span class="fb-time num">${center}</span>
     <span class="fb-name r">${esc(m.away)}</span>
-    ${matchTeamBadge(m, 'away', 'sm')}
+    ${matchTeamBadge(m, 'away', 'sm', { eager: true })}
   </button>`;
 }
 /** 1.9.139: home 「比赛态度」 — same column_posts as match 态度 tab (平台简报). */
@@ -5088,24 +5419,62 @@ function leagueChips(list, cur, key, { strong = false } = {}) {
   return h + `</div>`;
 }
 
+/** Official in-play clock from already-fetched live-stats (same source as the detail hero). */
+function officialClockFromLiveStats(det) {
+  if (!det || !det.ok) return null;
+  const st = det.status || {};
+  const short = String(st.short || '');
+  const mapZh = { '1H': '上半场', HT: '中场', '2H': '下半场', ET: '加时', BT: '加时休息', P: '点球', LIVE: '进行中', FT: '完场', AET: '加时完场', PEN: '点球结束' };
+  const minute = st.elapsed != null ? Number(st.elapsed) : null;
+  const extra = st.extra != null ? Number(st.extra) : null;
+  const phaseZh = mapZh[short] || null;
+  if (!phaseZh && !Number.isFinite(minute)) return null;
+  return {
+    phase: short || null,
+    phaseZh,
+    minute: Number.isFinite(minute) ? minute : null,
+    minuteExtra: Number.isFinite(extra) && extra > 0 ? extra : null,
+  };
+}
+
+/** True when a reported minute is just wall-clock elapsed since kickoff (includes HT). */
+function looksLikeKickoffWallMinute(minute, phaseZh, kickoffMs, now) {
+  if (minute == null || !Number.isFinite(Number(minute)) || !Number.isFinite(Number(kickoffMs))) return false;
+  const wall = Math.round((Number(now != null ? now : Date.now()) - Number(kickoffMs)) / 60000);
+  if (!Number.isFinite(wall)) return false;
+  if (Math.abs(Number(minute) - wall) > 2) return false;
+  const ph = String(phaseZh || '');
+  /* 2H official minutes almost never equal wall-clock past 90, because HT is ~15 minutes. */
+  if ((ph === '下半场' || ph === '2H' || ph === '进行中' || ph === 'LIVE' || !ph)
+    && wall >= 60 && Number(minute) >= 90) return true;
+  return false;
+}
+
 /** Merge schedule/result row with /api/live-scores entry → { kind: live|ns|ft, ... } */
-function classifyScoreRow(x) {
+function classifyScoreRow(x, nowMs) {
   const id = String(x.id);
   let live = (S.liveScores && S.liveScores[id]) || null;
   // Prefer in-memory detail stats (incl. FT) when list poll still holds stale/empty sporttery
   const det = S.liveStatsCache && S.liveStatsCache[id];
+  const officialEarly = officialClockFromLiveStats(det);
   if (det && det.ok && det.score && det.score.home != null) {
     const dh = Number(det.score.home), da = Number(det.score.away);
     const detFin = !!det.finished || /^(FT|AET|PEN)$/i.test(String((det.status && det.status.short) || ''));
+    const clockMismatch = !!(officialEarly && live && (
+      (officialEarly.minute != null && Number(live.minute) !== Number(officialEarly.minute))
+      || (officialEarly.phase && live.phase && officialEarly.phase !== live.phase)
+      || (officialEarly.phaseZh && live.phaseZh && officialEarly.phaseZh !== live.phaseZh)
+    ));
     const needSync = !live || live.homeScore == null || live.homeScore !== dh || live.awayScore !== da
-      || (detFin && !live.finished) || (!!det.live && !live.live);
+      || (detFin && !live.finished) || (!!det.live && !live.live) || clockMismatch;
     if (needSync) {
       syncLiveScoreFromStats(id, det);
       live = S.liveScores[id];
     }
   }
+  const official = officialClockFromLiveStats(det);
   const ko = kickoff(x);
-  const now = Date.now();
+  const now = nowMs != null ? Number(nowMs) : Date.now();
   const fromResult = x._t === 'r' || !!x.full;
   const statusFin = !!(x.status && /完场|已结束|Finished|Payout|已完成/i.test(String(x.status)));
   let homeScore = null, awayScore = null, half = '', full = '';
@@ -5133,15 +5502,29 @@ function classifyScoreRow(x) {
     if (homeScore != null) { kind = 'ft'; phaseZh = '完场'; liveFlag = false; }
     else { kind = 'ns'; phaseZh = '待开奖'; }
   } else if (live && live.live) {
-    kind = 'live'; phaseZh = live.phaseZh || '进行中';
-    minute = live.minute; minuteExtra = live.minuteExtra; liveFlag = true;
+    kind = 'live';
+    phaseZh = (official && official.phaseZh) || live.phaseZh || '进行中';
+    minute = official && official.minute != null ? official.minute : live.minute;
+    minuteExtra = official && official.minuteExtra != null ? official.minuteExtra : live.minuteExtra;
+    if (!official && looksLikeKickoffWallMinute(minute, phaseZh, ko, now)) {
+      minute = null;
+      minuteExtra = null;
+    }
+    liveFlag = true;
   } else if (homeScore != null && now >= ko + 2.5 * 3600e3) {
     // Score + well past KO window → treat as FT (sporttery may omit finished flag)
     kind = 'ft'; phaseZh = '完场';
   } else if (homeScore != null && now >= ko) {
     // Score appeared after kickoff but not marked finished — treat as live
-    kind = 'live'; phaseZh = (live && live.phaseZh) || '进行中';
-    minute = live && live.minute; minuteExtra = live && live.minuteExtra; liveFlag = true;
+    kind = 'live';
+    phaseZh = (official && official.phaseZh) || (live && live.phaseZh) || '进行中';
+    minute = official && official.minute != null ? official.minute : (live && live.minute);
+    minuteExtra = official && official.minuteExtra != null ? official.minuteExtra : (live && live.minuteExtra);
+    if (!official && looksLikeKickoffWallMinute(minute, phaseZh, ko, now)) {
+      minute = null;
+      minuteExtra = null;
+    }
+    liveFlag = true;
   } else if (now >= ko + 2 * 3600e3 && homeScore == null) {
     // Long past kickoff, no score yet — still show as upcoming/pending rather than invent FT
     kind = 'ns'; phaseZh = '待开奖';
@@ -5206,6 +5589,11 @@ function scoreMinuteLab(row) {
     if (phaseZh === '中场' && pastHt) phaseZh = '下半场';
     if (phaseZh === '中场') return '中场';
     if (row._minute != null) {
+      let koMs = null;
+      try { koMs = typeof kickoff === 'function' ? kickoff(row) : null; } catch (_) { koMs = null; }
+      if (looksLikeKickoffWallMinute(row._minute, phaseZh, koMs, Date.now())) {
+        return phaseZh;
+      }
       const min = formatLiveClockMinute(phaseZh, row._minute, row._minuteExtra);
       if (phaseZh === '上半场' || phaseZh === '下半场' || phaseZh === '加时' || phaseZh === '进行中') {
         return phaseZh + ' ' + min;
@@ -5233,9 +5621,9 @@ function scoreCard(row) {
   return `<button type="button" class="ls-row ${statusCls}" data-go="#/match/${encodeURIComponent(row.id)}">
     ${matchCardMeta(row, { favSize: 14 })}
     <div class="ls-body">
-      <div class="ls-side h">${matchTeamBadge(row, 'home', 'sm')}<span class="nm" title="${esc(row.home)}">${esc(row.home)}</span></div>
+      <div class="ls-side h">${matchTeamBadge(row, 'home', 'sm', { eager: true })}<span class="nm" title="${esc(row.home)}">${esc(row.home)}</span></div>
       <div class="ls-mid">${midInner}</div>
-      <div class="ls-side a"><span class="nm" title="${esc(row.away)}">${esc(row.away)}</span>${matchTeamBadge(row, 'away', 'sm')}</div>
+      <div class="ls-side a"><span class="nm" title="${esc(row.away)}">${esc(row.away)}</span>${matchTeamBadge(row, 'away', 'sm', { eager: true })}</div>
     </div>
     ${cards}
   </button>`;
@@ -6411,15 +6799,63 @@ function calcMoreSheetShell(m, body) {
     <button type="button" class="calc-more-ok" data-act="calcMoreOk">确定</button>
   </div>`;
 }
+function calcMoreLoadBudgetMs() { return 14000; }
+function calcMoreSheetEl() {
+  try {
+    const sh = document.getElementById('sheet') || (typeof $ === 'function' && $('#sheet'));
+    if (sh) {
+      const inner = sh.querySelector && sh.querySelector('.calc-more-sheet');
+      if (inner) return inner;
+      if (sh.classList && sh.classList.contains('calc-more-sheet')) return sh;
+    }
+    return document.querySelector('.calc-more-sheet');
+  } catch (_) { return null; }
+}
+function calcMoreListSnap(m) {
+  if (!m || !(m.had || m.hhad)) return null;
+  const pools = {};
+  if (m.had) pools.had = m.had;
+  if (m.hhad) pools.hhad = m.hhad;
+  return { ok: true, pools: pools, _mode: 'list' };
+}
+function paintCalcMoreSheet(mid, m, snap, pending) {
+  let body;
+  const hasList = !!(m && (m.had || m.hhad));
+  const hasPools = !!(snap && snap.pools);
+  if (pending && !hasList && !hasPools) {
+    body = '<div class="spinner"></div><p class="note">加载更多玩法…</p>';
+  } else {
+    try { body = renderCalcMorePickables(mid, snap, m); }
+    catch (_) { body = '<p class="note">暂无更多玩法数据，请稍后重试。</p>'; }
+  }
+  const shell = calcMoreSheetShell(m, body);
+  const wrap = `<div class="sheet calc-more-sheet calc-more-sheet--official">${shell}</div>`;
+  const root = calcMoreSheetEl();
+  if (root) {
+    root.innerHTML = shell;
+    return;
+  }
+  openSheetHtml(wrap);
+}
 async function openCalcMoreSheet(mid) {
   const m = findMatch(mid);
   if (!m) return;
   if (calcMatchClosed(m)) return toast('该场已开赛，不可再选');
-  openSheetHtml(`<div class="sheet calc-more-sheet calc-more-sheet--official">${calcMoreSheetShell(m, '<div class="spinner"></div><p class="note">加载更多玩法…</p>')}</div>`);
-  const snap = await loadOddsSnapshot(mid, m.date, m);
-  const inner = document.querySelector('.calc-more-sheet');
-  if (!inner) return;
-  inner.innerHTML = calcMoreSheetShell(m, renderCalcMorePickables(mid, snap, m));
+  const seq = (openCalcMoreSheet._seq = (openCalcMoreSheet._seq || 0) + 1);
+  const seed = calcMoreListSnap(m);
+  paintCalcMoreSheet(mid, m, seed, !seed);
+  let snap = null;
+  try {
+    snap = await settleWithTimeout(loadOddsSnapshot(mid, m.date, m), calcMoreLoadBudgetMs(), function () { return null; });
+  } catch (_) { snap = null; }
+  if (seq !== openCalcMoreSheet._seq) return;
+  try {
+    paintCalcMoreSheet(mid, m, snap || seed, false);
+  } catch (_) {
+    const root = calcMoreSheetEl();
+    if (root) root.innerHTML = calcMoreSheetShell(m, '<p class="note">暂无更多玩法数据，请稍后重试。</p>');
+    else openSheetHtml(`<div class="sheet calc-more-sheet calc-more-sheet--official">${calcMoreSheetShell(m, '<p class="note">暂无更多玩法数据，请稍后重试。</p>')}</div>`);
+  }
 }
 
 function pageSchedule() {
@@ -8428,41 +8864,66 @@ function luCrestUrl(x, side) {
   return raw ? logoProxy(raw) : '';
 }
 function luPitchLinesSvg() {
-  return `<svg class="lu-lines" viewBox="0 0 68 105" preserveAspectRatio="none" aria-hidden="true">
-    <defs>
-      <linearGradient id="luEdgeFade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#071F18" stop-opacity=".28"/>
-        <stop offset=".08" stop-color="#071F18" stop-opacity="0"/>
-        <stop offset=".92" stop-color="#071F18" stop-opacity="0"/>
-        <stop offset="1" stop-color="#071F18" stop-opacity=".28"/>
-      </linearGradient>
-    </defs>
-    <rect width="68" height="105" fill="#0A2E24"/>
-    <rect y="0" width="68" height="11.667" fill="#0C3A2C"/>
-    <rect y="11.667" width="68" height="11.667" fill="#0A3327"/>
-    <rect y="23.333" width="68" height="11.667" fill="#0C3A2C"/>
-    <rect y="35" width="68" height="11.667" fill="#0A3327"/>
-    <rect y="46.667" width="68" height="11.667" fill="#0C3A2C"/>
-    <rect y="58.333" width="68" height="11.667" fill="#0A3327"/>
-    <rect y="70" width="68" height="11.667" fill="#0C3A2C"/>
-    <rect y="81.667" width="68" height="11.667" fill="#0A3327"/>
-    <rect y="93.333" width="68" height="11.667" fill="#0C3A2C"/>
-    <rect width="68" height="105" fill="url(#luEdgeFade)"/>
-    <rect x="0.4" y="0.4" width="67.2" height="104.2" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <line x1="0" y1="52.5" x2="68" y2="52.5" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <circle cx="34" cy="52.5" r="9.15" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <circle cx="34" cy="52.5" r=".45" fill="rgba(213,224,208,.55)"/>
-    <rect x="13.84" y="0.4" width="40.32" height="16.5" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <rect x="24.84" y="0.4" width="18.32" height="5.5" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <rect x="13.84" y="88.1" width="40.32" height="16.5" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <rect x="24.84" y="99.1" width="18.32" height="5.5" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <path d="M 26.69 16.9 A 9.15 9.15 0 0 0 41.31 16.9" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <path d="M 26.69 88.1 A 9.15 9.15 0 0 1 41.31 88.1" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <path d="M 0.4 1.4 A 1 1 0 0 1 1.4 0.4" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <path d="M 66.6 0.4 A 1 1 0 0 1 67.6 1.4" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <path d="M 67.6 103.6 A 1 1 0 0 1 66.6 104.6" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
-    <path d="M 1.4 104.6 A 1 1 0 0 1 0.4 103.6" fill="none" stroke="rgba(213,224,208,.55)" stroke-width=".45"/>
+  // FIFA 105m × 68m, plus a 3m apron at each end so the goal frames sit
+  // just outside the goal line. 10 units = 1m.
+  return `<svg class="lu-lines" viewBox="0 0 680 1110" preserveAspectRatio="none" aria-hidden="true">
+    <g fill="none" stroke="rgba(208,214,230,.42)" stroke-width="1.6" vector-effect="non-scaling-stroke">
+      <rect class="lu-touch" x="8" y="30" width="664" height="1050"></rect>
+      <line x1="8" y1="555" x2="672" y2="555"></line>
+      <circle cx="340" cy="555" r="91.5"></circle>
+      <circle cx="340" cy="555" r="3.5" fill="rgba(208,214,230,.45)" stroke="none"></circle>
+      <rect class="lu-box" x="138.4" y="30" width="403.2" height="165"></rect>
+      <rect class="lu-six" x="248.4" y="30" width="183.2" height="55"></rect>
+      <circle cx="340" cy="140" r="3.5" fill="rgba(208,214,230,.45)" stroke="none"></circle>
+      <path d="M266.87 195 A91.5 91.5 0 0 1 413.13 195"></path>
+      <rect class="lu-box" x="138.4" y="915" width="403.2" height="165"></rect>
+      <rect class="lu-six" x="248.4" y="915" width="183.2" height="55"></rect>
+      <circle cx="340" cy="970" r="3.5" fill="rgba(208,214,230,.45)" stroke="none"></circle>
+      <path d="M266.87 915 A91.5 91.5 0 0 0 413.13 915"></path>
+      <path d="M8 40 A10 10 0 0 0 18 30"></path>
+      <path d="M672 40 A10 10 0 0 1 662 30"></path>
+      <path d="M8 1070 A10 10 0 0 1 18 1080"></path>
+      <path d="M672 1070 A10 10 0 0 0 662 1080"></path>
+    </g>
+    <g class="lu-goal" fill="none" stroke="rgba(232,235,243,.75)" stroke-width="2.2" vector-effect="non-scaling-stroke">
+      <rect x="303.4" y="8" width="73.2" height="22"></rect>
+      <rect x="303.4" y="1080" width="73.2" height="22"></rect>
+    </g>
   </svg>`;
+}
+function luPrefetchPhotos(L) {
+  if (!L) return;
+  const seen = new Set();
+  const urls = [];
+  for (const side of [L.home, L.away, L.prevHome, L.prevAway]) {
+    if (!side) continue;
+    for (const p of [...(side.starters || []), ...(side.bench || [])]) {
+      const raw = luPhotoUrl(p);
+      if (!raw) continue;
+      const src = logoProxy(raw);
+      if (!src || seen.has(src)) continue;
+      seen.add(src);
+      urls.push(src);
+    }
+  }
+  urls.slice(0, 40).forEach((src) => {
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = src;
+  });
+}
+function luRevealPhotos(root) {
+  if (!root) return;
+  root.querySelectorAll('.lu-ph img').forEach((img) => {
+    if (img.complete && img.naturalWidth) img.classList.add('on');
+  });
+}
+function paintLineupBox(x, L) {
+  if (!x) return;
+  const box = document.getElementById('lineup-box-' + x.id);
+  if (!box) return;
+  box.innerHTML = lineupHtml(x, L);
+  luRevealPhotos(box);
 }
 function luFace(p) {
   const disp = p.nameZh || p.name || '?';
@@ -8483,10 +8944,8 @@ function luPlayerHtml(pl) {
 function luBoardHtml(x, homeSide, awaySide) {
   const lay = luLayout();
   const place = typeof lay.placeSide === 'function' ? lay.placeSide : function () { return []; };
-  const linkFn = typeof lay.linkPaths === 'function' ? lay.linkPaths : function () { return []; };
   const homePl = place(homeSide, 'home');
   const awayPl = place(awaySide, 'away');
-  const pathD = linkFn(homePl, awayPl).map((d) => `<path d="${d}"/>`).join('');
   const homeCrest = luCrestUrl(x, 'home');
   const awayCrest = luCrestUrl(x, 'away');
   const homeForm = (homeSide && homeSide.formation) ? homeSide.formation : '';
@@ -8498,11 +8957,10 @@ function luBoardHtml(x, homeSide, awaySide) {
     ${awayCrest ? `<img class="lu-wm away" src="${esc(awayCrest)}" alt="">` : ''}
     ${homeCrest ? `<img class="lu-wm home" src="${esc(homeCrest)}" alt="">` : ''}
     <div class="lu-grain"></div>
-    <div class="lu-mid"></div>
+    ${luPitchLinesSvg()}
     <div class="lu-tlab away">客 · ${esc(x.away)}${awayForm ? ' ' + esc(awayForm) : ''}</div>
     <div class="lu-tlab home">主 · ${esc(x.home)}${homeForm ? ' ' + esc(homeForm) : ''}</div>
     <div class="lu-form">
-      <svg class="lu-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><g fill="none" stroke="#c0b4ea" stroke-width="0.38" stroke-opacity="0.4">${pathD}</g></svg>
       ${awayPl.map(luPlayerHtml).join('')}
       ${homePl.map(luPlayerHtml).join('')}
     </div>
@@ -8599,12 +9057,7 @@ function lineupHtml(x, L) {
     <button type="button" class="${view === 'list' ? 'on' : ''}" data-act="luView" data-id="${esc(x.id)}" data-view="list">名单</button>
   </div>`;
   let h = '';
-  if (!real) {
-    const pend = L.state === 'pending' ? '首发未公布（通常赛前约1小时）' : L.state === 'no-event' ? '未收录本场，无法获取本场首发' : '暂无本场阵容数据';
-    h += `<div class="warn-bar">${esc(pend)}</div>`;
-    if (!homeSide && !awaySide) return h + luInjHtml(x, L);
-    h += `<p class="note">下面是上一场实际首发，不是本场。</p>`;
-  }
+  if (!real && !homeSide && !awaySide) return luInjHtml(x, L);
   h += `<div class="lu-toolbar"><div class="h">首发阵型</div>${seg}</div>`;
   h += `<p class="lu-hint">半场对半场 · 点「替补」查看双方替补</p>`;
   const body = view === 'list'
@@ -8634,11 +9087,9 @@ async function ensureLineup(x) {
   try { L = await api('/lineup?' + q.join('&'), { timeout: 45000 }); } catch (e) { L = { ok: false, error: e.message || '加载失败' }; }
   L._at = Date.now();
   S.lineupCache[x.id] = L;
-  const paint = () => {
-    const box = document.getElementById('lineup-box-' + x.id);
-    if (box) box.innerHTML = lineupHtml(x, L);
-  };
+  const paint = () => { paintLineupBox(x, L); };
   paint();
+  luPrefetchPhotos(L);
   const ko = matchKickoffMs(x);
   if (Number.isFinite(ko) && Date.now() >= ko) {
     try { await loadLiveStats(x); } catch (_) {}
@@ -8647,7 +9098,7 @@ async function ensureLineup(x) {
 }
 async function ensureSquad(x) {
   if (!x) return;
-  ensureLineup(x);
+  return ensureLineup(x);
 }
 async function ensureSmSurface(x) {
   if (!x || !x.id) return;
@@ -8689,6 +9140,68 @@ async function ensureSmSurface(x) {
   S.smSurface[key] = pack;
   paintSmSurface(key, pack);
 }
+function readTemplateHtml(tpl, fallback) {
+  if (!tpl) return fallback || '';
+  try {
+    if (tpl.content) {
+      const d = document.createElement('div');
+      d.appendChild(tpl.content.cloneNode(true));
+      const html = d.innerHTML;
+      if (html) return html;
+    }
+  } catch (_) {}
+  try {
+    const html = String(tpl.innerHTML || '');
+    if (html) return html;
+  } catch (_) {}
+  return fallback || '';
+}
+function applySmFormSide(box, side) {
+  if (!box) return;
+  side = side === 'away' ? 'away' : 'home';
+  try {
+    box.querySelectorAll('[data-act="smFormSide"]').forEach((b) => {
+      b.classList.toggle('on', b.dataset.side === side);
+    });
+  } catch (_) {}
+  if (box.getAttribute('data-side') === side && box.querySelector('.sm-form-pane')) return;
+  try { box.setAttribute('data-side', side); } catch (_) {}
+  if (!box.querySelector('.sm-form-pane')) normalizeSmForm(box);
+  if (box.querySelector('.sm-form-pane')) return;
+  /* fallback for a pack that still used 382 <template> + mount */
+  const mount = box.querySelector('.sm-form-mount');
+  const tpl = box.querySelector('template.sm-form-src[data-for="' + side + '"]');
+  const html = readTemplateHtml(tpl, '');
+  if (mount && html) swapSlotHtml(mount, html);
+}
+function normalizeSmForm(root) {
+  if (!root) return;
+  const box = root.querySelector ? (root.querySelector('.sm-form') || (root.classList && root.classList.contains('sm-form') ? root : null)) : null;
+  if (!box || box.querySelector('.sm-form-pane')) return;
+  const mount = box.querySelector('.sm-form-mount');
+  const tHome = box.querySelector('template.sm-form-src[data-for="home"]');
+  const tAway = box.querySelector('template.sm-form-src[data-for="away"]');
+  const listHome = box.querySelector('.sm-form-list[data-for="home"]');
+  const listAway = box.querySelector('.sm-form-list[data-for="away"]');
+  let home = '';
+  let away = '';
+  if (tHome || tAway || mount) {
+    home = readTemplateHtml(tHome, mount ? mount.innerHTML : '');
+    away = readTemplateHtml(tAway, '');
+  }
+  if (!home && listHome) home = listHome.innerHTML || '';
+  if (!away && listAway) away = listAway.innerHTML || '';
+  if (!home && !away) return;
+  const panes = document.createElement('div');
+  panes.className = 'sm-form-panes';
+  panes.innerHTML = '<div class="sm-form-pane" data-for="home">' + home + '</div><div class="sm-form-pane" data-for="away">' + away + '</div>';
+  try {
+    const anchor = mount || listHome || listAway;
+    if (anchor) anchor.replaceWith(panes);
+    else box.appendChild(panes);
+    box.querySelectorAll('template.sm-form-src, .sm-form-mount, .sm-form-list').forEach((n) => n.remove());
+  } catch (_) {}
+}
 function paintSmSurface(id, pack) {
   const form = document.getElementById('sm-form-' + id);
   const bars = document.getElementById('sm-bars-' + id);
@@ -8724,7 +9237,15 @@ function paintSmSurface(id, pack) {
     if (liveBox) liveBox.innerHTML = note;
     return;
   }
-  if (form && pack.formHtml) form.innerHTML = rewritePredictLogoHtml(pack.formHtml);
+  if (form && pack.formHtml) {
+    form.innerHTML = rewritePredictLogoHtml(pack.formHtml);
+    normalizeSmForm(form);
+    const saved = S.smFormSide && S.smFormSide[id];
+    if (saved) {
+      const box = form.querySelector('.sm-form') || form;
+      applySmFormSide(box, saved);
+    }
+  }
   if (bars && pack.barsHtml) bars.innerHTML = rewritePredictLogoHtml(pack.barsHtml);
   if (pos && pack.posHtml) pos.innerHTML = rewritePredictLogoHtml(pack.posHtml);
   if (growth && pack.growthHtml) growth.innerHTML = rewritePredictLogoHtml(pack.growthHtml);
@@ -8877,7 +9398,7 @@ const DETAIL_TABS_BASE = [['attitude', '态度'], ['intel', '情报'], ['odds', 
 function isMatchFinished(x) {
   if (!x) return false;
   if (x._t === 'r' || x.full) return true;
-  if (x.status && /完场|已结束|Payout|Finished/i.test(String(x.status))) return true;
+  if (x.status && /完场|已结束|已完成|Payout|Finished/i.test(String(x.status))) return true;
   const id = String(x.id || '');
   const live = S.liveStatsCache && S.liveStatsCache[id];
   if (live && live.ok) {
@@ -10017,10 +10538,12 @@ function predTabHtml(m) {
   if (!m || !m.id) {
     return `<div class="dsec reason"><h3>预测分析</h3><p class="note">暂无可用的场次信息。</p></div>`;
   }
-  // 358: 预测 tab keeps 赛前参考 + 个人知识库 only. Still call loadPredictReport
-  // so 赛前参考 can use model/oddsEdge; do not inject the old pr-report body
-  // (including the post-kickoff 赛前快照 report).
-  let h = prematchRefHtml(m);
+  // 385: 赛前参考 = 竞彩盘口 + SportMonks 预测. Local oddsEdge model is not shown.
+  // 386: paint 盘口 + 预测 together. While SM/odds are still loading, show a
+  // single stable shell — never 盘口-only then a late 预测 jump.
+  // 个人知识库预测 stays. Do not inject the old pr-report body.
+  const mid = esc(String(m.id));
+  let h = `<div id="pred-ref-${mid}">${predRefBodyHtml(m)}</div>`;
   h += `<div class="dsec kb-match-entry">
     <h3>个人知识库预测</h3>
     <p class="note" style="margin:0 0 10px">仅在你主动选择知识条目后，按你的笔记调整参考概率。</p>
@@ -10181,6 +10704,638 @@ function intelBuildSelected(x, m, stats, rep) {
     body,
   });
 }
+
+function mfPackOf(id) {
+  return (S.smMatchfacts && S.smMatchfacts[String(id)]) || null;
+}
+function mfFmt(v, kind) {
+  if (v == null || v === '' || !Number.isFinite(Number(v))) return '—';
+  const n = Number(v);
+  if (kind === '%') return Math.round(n) + '%';
+  if (kind === '2') return (Math.round(n * 100) / 100).toFixed(2);
+  if (kind === '1') return (Math.round(n * 10) / 10).toFixed(1);
+  if (Math.abs(n - Math.round(n)) < 0.05) return String(Math.round(n));
+  return (Math.round(n * 10) / 10).toFixed(1);
+}
+function mfTagClass(tag) {
+  return ({ '很高': 'vh', '偏高': 'h', '正常': 'n', '偏低': 'l', '很低': 'vl' })[tag] || 'n';
+}
+function mfLast(arr) {
+  if (!arr) return null;
+  for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null && Number.isFinite(Number(arr[i]))) return Number(arr[i]);
+  return null;
+}
+function mfDualRow(name, hv, av, kind, hTag, aTag, hMean, aMean) {
+  const nums = [hv, av, hMean, aMean].map(Number).filter(Number.isFinite);
+  const scale = Math.max(0.01, ...(nums.length ? nums : [0.01])) * 1.12;
+  const track = (val, side, mean, showLabel) => {
+    const pct = Math.max(0, Math.min(100, ((Number(val) || 0) / scale) * 100));
+    let tick = '';
+    if (mean != null && Number.isFinite(Number(mean))) {
+      const mp = Math.max(0, Math.min(100, (Number(mean) / scale) * 100));
+      const pos = side === 'a' ? ('right:' + mp.toFixed(1) + '%') : ('left:' + mp.toFixed(1) + '%');
+      const lab = showLabel ? ('<span>' + esc(mfFmt(mean, kind)) + '</span>') : '';
+      tick = '<i class="mn" style="' + pos + '">' + lab + '</i>';
+    }
+    return '<div class="mf-track ' + side + '">' + tick + '<em style="width:' + pct.toFixed(1) + '%"></em></div>';
+  };
+  const val = (v, side, tag) => {
+    const t = tag ? '<span class="mf-tag ' + mfTagClass(tag) + '">' + esc(tag) + '</span>' : '';
+    return '<div class="mf-val ' + side + '"><b class="' + side + '">' + esc(mfFmt(v, kind)) + '</b>' + t + '</div>';
+  };
+  const sameMean = hMean != null && aMean != null && Number(hMean) === Number(aMean);
+  return '<div class="mf-cmp-row"><div class="mf-cmp-name">' + esc(name) + '</div><div class="mf-cmp-line">'
+    + val(hv, 'h', hTag) + '<div class="mf-bars">' + track(hv, 'h', hMean, true) + track(av, 'a', aMean, !sameMean) + '</div>' + val(av, 'a', aTag)
+    + '</div></div>';
+}
+function mfLegend(pack, opts) {
+  const h = (pack && pack.home && (pack.home.nameZh || pack.home.name)) || '主队';
+  const a = (pack && pack.away && (pack.away.nameZh || pack.away.name)) || '客队';
+  const hs = (opts && opts.homeSuffix) || '';
+  const as = (opts && opts.awaySuffix) || '';
+  const mean = (opts && opts.mean) ? '<span><i class="mn"></i>' + esc(opts.mean) + '</span>' : '';
+  return '<div class="mf-leg"><span><i class="h"></i>' + esc(h + hs) + '</span><span><i class="a"></i>' + esc(a + as) + '</span>' + mean + '</div>';
+}
+function mfStreaksHtml(pack) {
+  const rows = (pack && pack.streaks) || [];
+  if (!rows.length) return '';
+  const lg = (pack.leagueZh || '');
+  const items = rows.map((s) => (
+    '<div class="mf-st ' + (s.side === 'away' ? 'a' : 'h') + '"><div class="num">' + esc(s.num) + '</div>'
+    + '<div class="l1">' + esc(s.line1 || '') + '</div><div class="l2">' + esc(s.line2 || '') + '</div></div>'
+  )).join('');
+  const small = lg ? (lg + '近况，不含本场') : '不含本场';
+  return '<div class="mf-card"><div class="mf-hd"><h2>连续形态</h2><small>' + esc(small) + '</small></div><div class="mf-streaks">' + items + '</div></div>';
+}
+function mfLast5Html(pack) {
+  const rows = (pack && pack.last5) || [];
+  if (!rows.length) return '';
+  const lg = pack.leagueZh || '';
+  const title = lg ? ('近 5 场' + lg + '对照') : '近 5 场对照';
+  const body = rows.map((r) => mfDualRow(r.name, r.home, r.away, r.kind)).join('');
+  return '<div class="mf-card"><div class="mf-hd"><h2>' + esc(title) + '</h2></div>' + mfLegend(pack)
+    + '<div class="mf-cmp">' + body + '</div><p class="mf-note">每项单独对照，互不共用同一个刻度。</p></div>';
+}
+function mfSeasonHtml(pack) {
+  const rows = (pack && pack.season) || [];
+  if (!rows.length) return '';
+  const lg = pack.leagueZh || '联赛';
+  const body = rows.map((r) => mfDualRow(r.name, r.home, r.away, '1', r.homeTag, r.awayTag, r.mean, r.mean)).join('');
+  return '<div class="mf-card"><div class="mf-hd"><h2>赛季场均对照</h2><small>短线为' + esc(lg) + '均值</small></div>'
+    + mfLegend(pack, { mean: lg + '均值' }) + '<div class="mf-cmp">' + body + '</div></div>';
+}
+function mfLive90Html(pack, cls) {
+  const rows = (pack && pack.live90) || [];
+  if (!rows.length) return '';
+  const body = rows.map((r) => mfDualRow(r.name, r.home, r.away, '', r.homeTag, r.awayTag, r.homeMean, r.awayMean)).join('');
+  const h = (pack.home && pack.home.nameZh) || '主队';
+  const a = (pack.away && pack.away.nameZh) || '客队';
+  const wrap = cls || 'mf-card';
+  return '<div class="' + wrap + '"><div class="mf-hd"><h2>本场第 90 分钟对照</h2><small>按主 / 客场分别对照联赛场均</small></div>'
+    + mfLegend(pack, { homeSuffix: '本场', awaySuffix: '本场', mean: '主客场均值' })
+    + '<div class="mf-cmp">' + body + '</div></div>';
+}
+function mfPlayersHtml(pack) {
+  const rows = (pack && pack.players) || [];
+  if (!rows.length) return '';
+  const home = rows.filter((p) => p.side === 'home');
+  const away = rows.filter((p) => p.side === 'away');
+  const ordered = [];
+  if (home[0]) ordered.push(home[0]);
+  if (away[0]) ordered.push(away[0]);
+  if (home[1]) ordered.push(home[1]);
+  if (away[1]) ordered.push(away[1]);
+  const items = ordered.map((p) => {
+    const nm = p.nameZh || p.name || '';
+    const letter = (Array.from(String(nm))[0] || '?');
+    let src = '';
+    if (p.image && typeof smPlayerPhotoUrl === 'function') src = smPlayerPhotoUrl(p.image) || '';
+    if (!src && p.playerId && typeof bundledPlayerPath === 'function') src = bundledPlayerPath(p.playerId) || '';
+    const img = src
+      ? ('<img src="' + esc(src) + '" alt="" data-pid="' + esc(String(p.playerId || '')) + '" onerror="this.style.display=\'none\';var s=this.nextElementSibling;if(s)s.style.display=\'grid\'"/>')
+      : '';
+    return '<div class="mf-pl ' + (p.side === 'away' ? 'a' : 'h') + '">'
+      + '<div class="mf-pl-top"><div class="mf-pl-av">' + img + '<i>' + esc(letter) + '</i></div>'
+      + '<div class="mf-pl-meta"><div class="k">' + esc((p.team || '') + ' · ' + (p.metric || '')) + '</div>'
+      + '<div class="n">' + esc(nm) + '</div></div></div>'
+      + '<div class="v num">' + esc(mfFmt(p.value, '2')) + '</div></div>';
+  }).join('');
+  return '<div class="mf-card"><div class="mf-hd"><h2>近 10 场球员领袖</h2></div>'
+    + '<p class="mf-note" style="margin:0 0 8px">各队场均 xG / xGOT 最高的球员，是赛前对照，不是本场个人数据。</p>'
+    + '<div class="mf-players">' + items + '</div></div>';
+}
+function mfBulletsHtml(pack) {
+  const rows = (pack && pack.bullets) || [];
+  if (!rows.length) return '';
+  const items = rows.map((t) => '<li><i></i><span>' + esc(t) + '</span></li>').join('');
+  return '<div class="mf-card"><div class="mf-hd"><h2>赛前要点</h2></div><ul class="mf-ins">' + items + '</ul></div>';
+}
+function mfNiceTicks(ymin, ymax) {
+  const span = ymax - ymin;
+  const steps = [1, 2, 5, 10, 20, 25, 50, 100, 150, 200, 250, 500];
+  let step = 5;
+  for (let i = 0; i < steps.length; i++) {
+    if (span / steps[i] <= 5 && span / steps[i] >= 2) { step = steps[i]; break; }
+  }
+  const start = Math.ceil(ymin / step) * step;
+  const vals = [];
+  if (ymin < start - 1e-6) vals.push(ymin);
+  for (let v = start; v <= ymax + 1e-6; v += step) vals.push(v);
+  if (!vals.length) vals.push(ymin, ymax);
+  return vals;
+}
+function mfLineChartSvg(minutes, yw, yp, opts) {
+  const o = opts || {};
+  const start = o.start || 0;
+  const unit = o.unit || '';
+  const w = 342, h = o.height || 172;
+  const padL = 28, padR = 40, padT = 8, padB = 22;
+  const xs = minutes.slice(start);
+  const y1 = yw.slice(start);
+  const y2 = yp.slice(start);
+  if (!xs.length) return '';
+  let ymin = o.ymin, ymax = o.ymax;
+  const observed = y1.concat(y2).concat((o.dash1 || []).slice(start)).concat((o.dash2 || []).slice(start)).filter((v) => v != null && Number.isFinite(Number(v))).map(Number);
+  if (ymin == null || ymax == null) {
+    if (!observed.length) return '';
+    const lo = Math.min.apply(null, observed);
+    const hi = Math.max.apply(null, observed);
+    if (unit === '%') {
+      ymin = ymin == null ? Math.min(20, Math.max(0, Math.floor(lo / 5) * 5 - 5)) : ymin;
+      ymax = ymax == null ? Math.max(80, Math.min(100, Math.ceil(hi / 5) * 5 + 5)) : ymax;
+    } else {
+      ymin = ymin == null ? 0 : ymin;
+      const pad = hi <= 4 ? 1 : hi * 0.12;
+      ymax = ymax == null ? Math.max(4, Math.ceil(hi + pad)) : ymax;
+    }
+  }
+  if (ymax <= ymin) ymax = ymin + 1;
+  const xmin = xs[0], xmax = xs[xs.length - 1] || (xmin + 1);
+  const cw = w - padL - padR, ch = h - padT - padB;
+  const sx = (x) => padL + ((x - xmin) / Math.max(0.001, xmax - xmin)) * cw;
+  const sy = (y) => padT + (1 - ((y == null ? ymin : y) - ymin) / (ymax - ymin)) * ch;
+  const pathOf = (vals, closeArea) => {
+    const pts = [];
+    for (let i = 0; i < xs.length; i++) {
+      if (vals[i] == null || !Number.isFinite(Number(vals[i]))) continue;
+      pts.push([sx(xs[i]), sy(Number(vals[i]))]);
+    }
+    if (!pts.length) return '';
+    let d = 'M ' + pts.map((p) => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L ');
+    if (closeArea) {
+      const by = sy(ymin);
+      d += ' L ' + pts[pts.length - 1][0].toFixed(1) + ' ' + by.toFixed(1) + ' L ' + pts[0][0].toFixed(1) + ' ' + by.toFixed(1) + ' Z';
+    }
+    return d;
+  };
+  const parts = ['<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="' + h + '" class="mf-chart" role="img">'];
+  mfNiceTicks(ymin, ymax).forEach((val) => {
+    const y = sy(val);
+    const lab = unit === '%' ? String(Math.round(val)) : (val >= 100 || Math.abs(val - Math.round(val)) < 0.05 ? String(Math.round(val)) : String(val));
+    parts.push('<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (w - padR) + '" y2="' + y.toFixed(1) + '" stroke="#E6EBF3" stroke-width="1"/>');
+    parts.push('<text x="' + (padL - 4) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" class="ax">' + lab + '</text>');
+  });
+  [0, 15, 30, 45, 60, 75, 90].forEach((m) => {
+    if (m < xmin || m > xmax) return;
+    parts.push('<text x="' + sx(m).toFixed(1) + '" y="' + (h - 6) + '" text-anchor="middle" class="ax">' + m + '</text>');
+  });
+  if (45 >= xmin && 45 <= xmax) {
+    parts.push('<line x1="' + sx(45).toFixed(1) + '" y1="' + padT + '" x2="' + sx(45).toFixed(1) + '" y2="' + (h - padB) + '" stroke="#D3DAE6" stroke-width="1" stroke-dasharray="3 3"/>');
+  }
+  (o.events || []).forEach((ev) => {
+    const m = Number(ev.minute) + (Number(ev.extra) || 0);
+    if (!Number.isFinite(m) || m < xmin || m > xmax) return;
+    const col = ev.side === 'away' ? '#FF4D7A' : '#5B7CFA';
+    if (ev.kind === 'red') {
+      parts.push('<line x1="' + sx(m).toFixed(1) + '" y1="' + padT + '" x2="' + sx(m).toFixed(1) + '" y2="' + (h - padB) + '" stroke="' + col + '" stroke-width="1.2" stroke-dasharray="3 2.5" opacity=".7"/>');
+    } else if (ev.kind === 'goal') {
+      parts.push('<line x1="' + sx(m).toFixed(1) + '" y1="' + padT + '" x2="' + sx(m).toFixed(1) + '" y2="' + (h - padB) + '" stroke="' + col + '" stroke-width="1" opacity=".35"/>');
+    }
+  });
+  const p1 = pathOf(y1, true), p2 = pathOf(y2, true);
+  if (p1) parts.push('<path d="' + p1 + '" fill="#5B7CFA" opacity=".10"/>');
+  if (p2) parts.push('<path d="' + p2 + '" fill="#FF4D7A" opacity=".10"/>');
+  const l1 = pathOf(y1, false), l2 = pathOf(y2, false);
+  if (l1) parts.push('<path d="' + l1 + '" fill="none" stroke="#5B7CFA" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>');
+  if (l2) parts.push('<path d="' + l2 + '" fill="none" stroke="#FF4D7A" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>');
+  if (o.dash1 && o.dash2) {
+    const d1 = pathOf(o.dash1.slice(start), false);
+    const d2 = pathOf(o.dash2.slice(start), false);
+    if (d1) parts.push('<path d="' + d1 + '" fill="none" stroke="#5B7CFA" stroke-width="1.6" stroke-dasharray="4 3" stroke-linecap="round"/>');
+    if (d2) parts.push('<path d="' + d2 + '" fill="none" stroke="#FF4D7A" stroke-width="1.6" stroke-dasharray="4 3" stroke-linecap="round"/>');
+  }
+  const endLab = (vals, color) => {
+    for (let i = vals.length - 1; i >= 0; i--) {
+      if (vals[i] == null || !Number.isFinite(Number(vals[i]))) continue;
+      const y = Number(vals[i]);
+      const lab = unit === '%' ? (Math.round(y) + '%') : String(Math.round(y));
+      const tx = Math.min(sx(xs[i]) + 4, w - 2);
+      return '<text x="' + tx.toFixed(1) + '" y="' + (sy(y) + 3).toFixed(1) + '" class="end" fill="' + color + '">' + lab + '</text>';
+    }
+    return '';
+  };
+  parts.push(endLab(y1, '#5B7CFA'));
+  parts.push(endLab(y2, '#FF4D7A'));
+  parts.push('</svg>');
+  return parts.join('');
+}
+function mfGoalBarsSvg(bins, hv, pv, line) {
+  if (!bins || !bins.length) return '';
+  const w = 342, h = 168, padL = 22, padR = 8, padT = 10, padB = 24;
+  const cw = w - padL - padR, ch = h - padT - padB;
+  const rawMax = Math.max.apply(null, hv.concat(pv).concat([1]));
+  const ymax = rawMax <= 4 ? Math.max(4, rawMax) : Math.ceil(rawMax * 1.15);
+  const n = bins.length, gap = cw / n, bw = gap * 0.32;
+  const parts = ['<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="' + h + '" class="mf-chart" role="img">'];
+  const stroke = line || '#E6EBF3';
+  for (let val = 0; val <= ymax; val++) {
+    const y = padT + (1 - val / ymax) * ch;
+    parts.push('<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (w - padR) + '" y2="' + y.toFixed(1) + '" stroke="' + stroke + '" stroke-width="1"/>');
+    parts.push('<text x="' + (padL - 4) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" class="ax">' + val + '</text>');
+  }
+  bins.forEach((b, i) => {
+    const cx = padL + gap * (i + 0.5);
+    const bar = (x, val, color) => {
+      const bh = (Number(val) / ymax) * ch;
+      const y = padT + ch - bh;
+      return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(0, bh).toFixed(1) + '" rx="3" fill="' + color + '"/>';
+    };
+    parts.push(bar(cx - bw - 1, hv[i] || 0, '#5B7CFA'));
+    parts.push(bar(cx + 1, pv[i] || 0, '#FF4D7A'));
+    parts.push('<text x="' + cx.toFixed(1) + '" y="' + (h - 7) + '" text-anchor="middle" class="ax">' + esc(b) + '</text>');
+  });
+  parts.push('</svg>');
+  return parts.join('');
+}
+function mfGoalBinsHtml(pack, dark) {
+  const g = pack && pack.goalBins;
+  if (!g || !g.labels) return '';
+  const lg = pack.leagueZh || '';
+  const small = lg ? (lg + '，不含本场') : '不含本场';
+  const svg = mfGoalBarsSvg(g.labels, g.home || [], g.away || [], dark ? '#2A3344' : '#E6EBF3');
+  return '<div class="mf-card"><div class="mf-hd"><h2>近 5 场进球时间段</h2><small>' + esc(small) + '</small></div>'
+    + mfLegend(pack) + svg + '</div>';
+}
+function mfEventsOf(x, pack) {
+  if (pack && pack.events && pack.events.length) return pack.events;
+  const live = (S.liveStatsCache && S.liveStatsCache[String(x && x.id || '')]) || null;
+  const evs = (live && (live.events || live.important || [])) || [];
+  if (!evs.length) return [];
+  const out = [];
+  let hs = 0, as_ = 0;
+  evs.slice().sort((a, b) => (Number(a.elapsed) - Number(b.elapsed)) || 0).forEach((e) => {
+    const kind = e.kind === 'goal' ? 'goal' : (e.kind === 'red' ? 'red' : '');
+    if (!kind) return;
+    const minute = Number(e.elapsed);
+    if (!Number.isFinite(minute)) return;
+    let score = null;
+    if (kind === 'goal') {
+      if (e.side === 'home') hs += 1;
+      else if (e.side === 'away') as_ += 1;
+      score = hs + '-' + as_;
+    }
+    out.push({ minute, extra: Number(e.extra) || 0, side: e.side || null, kind, score, player: e.playerZh || e.player || '' });
+  });
+  return out;
+}
+function mfScoreOf(x, pack) {
+  if (pack && pack.score && Number.isFinite(Number(pack.score.home)) && Number.isFinite(Number(pack.score.away))) {
+    return { home: Number(pack.score.home), away: Number(pack.score.away) };
+  }
+  try {
+    const row = typeof classifyScoreRow === 'function' ? classifyScoreRow(x) : null;
+    if (row && row.homeScore != null && row.awayScore != null && Number.isFinite(Number(row.homeScore))) {
+      return { home: Number(row.homeScore), away: Number(row.awayScore) };
+    }
+  } catch (_) {}
+  return { home: null, away: null };
+}
+function mfMinLab(ev) {
+  const extra = ev && ev.extra ? ('+' + ev.extra) : '';
+  return (ev.minute + extra) + '′';
+}
+function mfChipsHtml(events) {
+  if (!events || !events.length) return '';
+  return '<div class="mf-chips">' + events.map((ev) => {
+    const side = ev.side === 'away' ? 'a' : (ev.side === 'home' ? 'h' : '');
+    const text = ev.kind === 'red' ? (mfMinLab(ev) + ' 红牌') : (mfMinLab(ev) + (ev.score ? (' ' + String(ev.score).replace(/-/g, '–')) : ''));
+    return '<span class="mf-chip ' + side + '">' + esc(text) + '</span>';
+  }).join('') + '</div>';
+}
+function mfTrendsHtml(x, pack) {
+  const tr = pack && pack.trends;
+  if (!tr || !tr.series) return '';
+  const ev = mfEventsOf(x, pack);
+  const red = ev.filter((e) => e.kind === 'red');
+  const hName = (pack.home && pack.home.nameZh) || '主队';
+  const aName = (pack.away && pack.away.nameZh) || '客队';
+  const minutes = tr.minutes || [];
+  const s = tr.series;
+  const start = Number.isFinite(Number(tr.posStart)) ? Number(tr.posStart) : 0;
+  const posH = mfLast(s.pos && s.pos.home), posA = mfLast(s.pos && s.pos.away);
+  const pasH = mfLast(s.pas && s.pas.home), pasA = mfLast(s.pas && s.pas.away);
+  const shH = mfLast(s.sh && s.sh.home), shA = mfLast(s.sh && s.sh.away);
+  const sotH = mfLast(s.sot && s.sot.home), sotA = mfLast(s.sot && s.sot.away);
+  let redNote = '';
+  if (red.length) redNote = '，点线为 ' + red.map((e) => mfMinLab(e) + ' 红牌').join('、');
+  const posSvg = s.pos ? mfLineChartSvg(minutes, s.pos.home || [], s.pos.away || [], { start, unit: '%', events: ev }) : '';
+  const pasSvg = s.pas ? mfLineChartSvg(minutes, s.pas.home || [], s.pas.away || [], { start: 0, events: ev }) : '';
+  const shSvg = s.sh ? mfLineChartSvg(minutes, s.sh.home || [], s.sh.away || [], {
+    start: 0, events: ev, dash1: (s.sot && s.sot.home) || [], dash2: (s.sot && s.sot.away) || [],
+  }) : '';
+  const atSvg = s.at ? mfLineChartSvg(minutes, s.at.home || [], s.at.away || [], {
+    start: 0, events: ev, dash1: (s.da && s.da.home) || [], dash2: (s.da && s.da.away) || [],
+  }) : '';
+  let h = '<div class="mf-card"><div class="mf-hd"><h2>过程走势</h2><small>按分钟累计 · 竖线为进球</small></div>';
+  h += mfChipsHtml(ev);
+  if (posSvg) {
+    h += '<div class="mf-subhd"><h3>控球率走势</h3><small>终场 ' + esc((posH != null ? Math.round(posH) + '%' : '—') + ' – ' + (posA != null ? Math.round(posA) + '%' : '—')) + '</small></div>';
+    h += '<div class="mf-chart-leg"><span><i class="h"></i>' + esc(hName) + '</span><span><i class="a"></i>' + esc(aName) + '</span><span>彩色竖线为进球' + esc(redNote) + '</span></div>';
+    h += posSvg;
+  }
+  if (pasSvg) {
+    h += '<div class="mf-subhd"><h3>传球累计</h3><small>终场 ' + esc((pasH != null ? Math.round(pasH) : '—') + ' – ' + (pasA != null ? Math.round(pasA) : '—')) + '</small></div>';
+    h += pasSvg;
+  }
+  if (shSvg) {
+    h += '<div class="mf-subhd"><h3>射门 / 射正累计</h3><small>实线射门，虚线射正 · '
+      + esc((shH != null ? Math.round(shH) : '—') + ' / ' + (sotH != null ? Math.round(sotH) : '—') + ' 与 ' + (shA != null ? Math.round(shA) : '—') + ' / ' + (sotA != null ? Math.round(sotA) : '—'))
+      + '</small></div>';
+    h += '<div class="mf-chart-leg"><span><i class="h"></i>' + esc(hName) + '射门</span><span><i class="d h"></i>' + esc(hName) + '射正</span>'
+      + '<span><i class="a"></i>' + esc(aName) + '射门</span><span><i class="d a"></i>' + esc(aName) + '射正</span></div>';
+    h += shSvg;
+  }
+  if (atSvg) {
+    h += '<div class="mf-subhd"><h3>进攻 / 危险进攻累计</h3><small>实线进攻，虚线危险进攻</small></div>';
+    h += atSvg;
+  }
+  h += '</div>';
+  return h;
+}
+function mfFullBtnHtml(id) {
+  return '<button type="button" class="mf-full-btn" data-act="openMfFullview" data-id="' + esc(String(id || '')) + '">'
+    + '<span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></span>'
+    + '<span class="txt"><b>全屏查看情报整合</b><small>赛前对照、连续形态与要点集中一屏</small></span>'
+    + '<span class="go">›</span></button>';
+}
+function mfReasonNote(pack) {
+  if (!pack || pack._loading) return '正在读取比赛事实…';
+  const r = String(pack.reason || '');
+  if (r === 'no-fixture' || r === 'no-team') return '本场暂无比赛事实';
+  if (r === 'no-coverage') return '本场暂无比赛事实';
+  if (r === 'no-token') return '本场暂无比赛事实';
+  if (pack.error && /[\u4e00-\u9fff]/.test(String(pack.error))) return pack.error;
+  if (pack.ok === false) return '比赛事实暂时不可用';
+  return '本场暂无比赛事实';
+}
+function mfIntelSlotHtml(x, pack) {
+  if (!pack || pack._loading) {
+    return '<p class="mf-empty">' + esc(pack && pack._loading ? '正在读取比赛事实…' : '正在读取比赛事实…') + '</p>';
+  }
+  const has = !!(pack.hasFacts || (pack.streaks && pack.streaks.length) || (pack.last5 && pack.last5.length));
+  if (!has) return '<p class="mf-empty">' + esc(mfReasonNote(pack)) + '</p>';
+  return mfFullBtnHtml(x && x.id) + mfStreaksHtml(pack) + mfLast5Html(pack) + mfSeasonHtml(pack)
+    + mfGoalBinsHtml(pack) + mfPlayersHtml(pack) + mfBulletsHtml(pack);
+}
+function mfLiveSlotHtml(x, pack) {
+  if (!pack || pack._loading) return '<p class="mf-empty">正在读取走势数据…</p>';
+  const trends = mfTrendsHtml(x, pack);
+  const live90 = mfLive90Html(pack);
+  if (!trends && !live90) return '<p class="mf-empty">本场暂无走势数据</p>';
+  return trends + live90;
+}
+function mfDonutSvg(cats, total, dark) {
+  const size = 120, cx = size / 2, cy = size / 2, r = 38, sw = 16;
+  const circ = 2 * Math.PI * r;
+  let acc = 0;
+  const parts = ['<svg viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '" class="donut">'];
+  parts.push('<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + (dark ? '#1F2633' : '#EEF1F6') + '" stroke-width="' + sw + '"/>');
+  (cats || []).forEach((c) => {
+    if (!c.count || !total) return;
+    const dash = c.count / total * circ;
+    const gap = circ - dash;
+    const rot = -90 + acc / total * 360;
+    parts.push('<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + esc(c.color) + '" stroke-width="' + sw + '" stroke-dasharray="' + dash.toFixed(2) + ' ' + gap.toFixed(2) + '" transform="rotate(' + rot.toFixed(2) + ' ' + cx + ' ' + cy + ')"/>');
+    acc += c.count;
+  });
+  parts.push('<text x="' + cx + '" y="' + (cy - 4) + '" text-anchor="middle" font-size="20" font-weight="700" fill="#E8EDF5" font-family="-apple-system,sans-serif">' + esc(String(total || 0)) + '</text>');
+  parts.push('<text x="' + cx + '" y="' + (cy + 14) + '" text-anchor="middle" font-size="9" fill="#8B95A8" font-family="-apple-system,sans-serif">条洞察</text>');
+  parts.push('</svg>');
+  return parts.join('');
+}
+function mfCloseSvg() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+}
+function mfScoreText(pack, x) {
+  const sc = mfScoreOf(x, pack);
+  const h = (pack && pack.home && pack.home.nameZh) || (x && x.home) || '主队';
+  const a = (pack && pack.away && pack.away.nameZh) || (x && x.away) || '客队';
+  if (sc.home == null || sc.away == null) return { html: '<b>' + esc(h) + '</b> vs <em>' + esc(a) + '</em>', wide: '<b>' + esc(h) + '</b> vs <em>' + esc(a) + '</em>', known: false };
+  return {
+    html: '<b>' + esc(h) + '</b> ' + sc.home + '-' + sc.away + ' <em>' + esc(a) + '</em>',
+    wide: '<b>' + esc(h) + '</b> ' + sc.home + ' – ' + sc.away + ' <em>' + esc(a) + '</em>',
+    known: true,
+  };
+}
+function mfFullviewHtml(x, pack) {
+  const sc = mfScoreText(pack, x);
+  const st = (pack && pack.state && pack.state.nameZh) || '';
+  const lg = (pack && pack.leagueZh) || '';
+  const when = (x && x.date && x.time) ? (String(x.date).replace(/-/g, '/') + ' ' + String(x.time).slice(0, 5) + ' 北京时间') : '';
+  const issue = (x && (x.num || x.issueNo || x.matchNo || x.no)) ? String(x.num || x.issueNo || x.matchNo || x.no) : '';
+  const sub = [lg, issue, when, st].filter(Boolean).join(' · ');
+  const cats = (pack && pack.insightCats) || [];
+  const total = (pack && pack.insightTotal) || 0;
+  const legend = cats.map((c) => '<span><i style="background:' + esc(c.color) + '"></i>' + esc(c.name) + ' ' + esc(String(c.count)) + '</span>').join('');
+  const donut = total ? ('<div class="fv-card fv-donut"><div class="fv-hd"><h2>洞察构成</h2><small>本场 ' + total + ' 条</small></div><div class="mix"><div class="donut-wrap">' + mfDonutSvg(cats, total, true) + '</div><div class="leg">' + legend + '</div></div></div>') : '';
+  const streaks = mfStreaksHtml(pack).replace(/class="mf-card"/g, 'class="fv-card fv-streaks"');
+  const last5 = mfLast5Html(pack).replace(/class="mf-card"/g, 'class="fv-card fv-last5"');
+  const season = mfSeasonHtml(pack).replace(/class="mf-card"/g, 'class="fv-card fv-season"');
+  const live90 = mfLive90Html(pack, 'fv-card fv-live90');
+  const goals = mfGoalBinsHtml(pack, true).replace(/class="mf-card"/g, 'class="fv-card fv-goals"');
+  const players = mfPlayersHtml(pack).replace(/class="mf-card"/, 'class="fv-card fv-players"').replace('各队场均 xG / xGOT 最高的球员，是赛前对照，不是本场个人数据。', '赛前对照，不是本场个人数据。');
+  const bullets = mfBulletsHtml(pack).replace(/class="mf-card"/g, 'class="fv-card fv-bullets"');
+  const empty = (!donut && !streaks && !last5 && !season && !live90 && !goals && !players && !bullets)
+    ? '<p class="mf-empty" style="margin:12px">本场暂无比赛事实</p>' : '';
+  const row1 = (donut || last5 || streaks) ? ('<div class="fv-row fv-row1">' + donut + last5 + streaks + '</div>') : '';
+  const row2 = (season || live90) ? ('<div class="fv-row fv-row2">' + season + live90 + '</div>') : '';
+  const row3 = (goals || players || bullets) ? ('<div class="fv-row fv-row3">' + goals + players + bullets + '</div>') : '';
+  return '<div class="fv-wide-hd">'
+    + '<div><div class="fv-wide-kicker">云足球 · 情报整合</div><h1 class="fv-wide-title">' + sc.wide + '</h1></div>'
+    + '<div class="fv-wide-meta">' + esc(sub) + (total ? ('<br>本场 ' + total + ' 条洞察') : '') + '</div>'
+    + '<button type="button" class="fv-wide-close" data-act="closeMfFullview" aria-label="关闭">' + mfCloseSvg() + '</button>'
+    + '</div>'
+    + '<div class="fv-bar">'
+    + '<button type="button" class="fv-close" data-act="closeMfFullview" aria-label="关闭">' + mfCloseSvg() + '</button>'
+    + '<div class="fv-title">情报整合</div>'
+    + '<div class="fv-score num">' + sc.html + '</div>'
+    + '</div>'
+    + (sub ? '<div class="fv-sub">' + esc(sub) + '</div>' : '')
+    + '<div class="fv-body">'
+    + row1 + row2 + row3
+    + empty
+    + '</div>';
+}
+function mfFreshMs(pack) {
+  const st = String((pack && pack.state && pack.state.short) || '').toUpperCase();
+  if (/INPLAY|LIVE|^HT$|^BREAK$|^ET/.test(st)) return 25 * 1000;
+  if (/^(FT|AET|FT_PEN|PEN_FT|AFTER_ET|AFTER_PEN|ENDED|FULL_?TIME)$/.test(st)) return 30 * 60 * 1000;
+  return 10 * 60 * 1000;
+}
+async function ensureSmMatchfacts(x) {
+  if (!x || !x.id) return;
+  S.smMatchfacts = S.smMatchfacts || {};
+  const key = String(x.id);
+  const hit = S.smMatchfacts[key];
+  const age = hit && hit._at ? Date.now() - hit._at : Infinity;
+  const stillFresh = hit && !hit._loading && (
+    (hit.ok && age < mfFreshMs(hit))
+    || (hit.ok === false && age < 90 * 1000)
+  );
+  if (stillFresh) { paintSmMatchfacts(key, hit); return hit; }
+  if (hit && hit._loading) return;
+  const prevGood = hit && hit.ok !== false && !hit._loading ? hit : null;
+  if (prevGood) paintSmMatchfacts(key, prevGood);
+  const q = [
+    'matchId=' + encodeURIComponent(key),
+    'date=' + encodeURIComponent(x.date || ''),
+    'time=' + encodeURIComponent(x.time || ''),
+    'homeTeamId=' + encodeURIComponent(x.homeTeamId || ''),
+    'awayTeamId=' + encodeURIComponent(x.awayTeamId || ''),
+    'home=' + encodeURIComponent(x.home || ''),
+    'away=' + encodeURIComponent(x.away || ''),
+    'league=' + encodeURIComponent(x.league || x.leagueName || ''),
+  ];
+  const loadingPack = prevGood
+    ? Object.assign({}, prevGood, { _loading: true, _refreshing: true })
+    : { ok: true, _loading: true, _at: Date.now(), hasFacts: false, hasTrends: false };
+  S.smMatchfacts[key] = loadingPack;
+  if (!prevGood) paintSmMatchfacts(key, loadingPack);
+  let pack;
+  try { pack = await api('/sm-matchfacts?' + q.join('&'), { timeout: 60000 }); }
+  catch (e) { pack = { ok: false, error: '比赛事实暂时不可用' }; }
+  pack._at = Date.now();
+  if (pack && pack.ok === false && prevGood) {
+    prevGood._at = Date.now();
+    S.smMatchfacts[key] = prevGood;
+    paintSmMatchfacts(key, prevGood);
+    return prevGood;
+  }
+  S.smMatchfacts[key] = pack;
+  paintSmMatchfacts(key, pack);
+  return pack;
+}
+
+async function prefetchSmMatchfacts(ms, { concurrency = 3 } = {}) {
+  const list = (ms || []).filter((m) => m && m.id && Date.now() < kickoff(m) + 2 * 3600e3);
+  if (!list.length) return;
+  S.smMatchfacts = S.smMatchfacts || {};
+  S._mfPrefetch = S._mfPrefetch || { running: false, gen: 0 };
+  const gen = ++S._mfPrefetch.gen;
+  S._mfPrefetch.running = true;
+  let i = 0;
+  const worker = async () => {
+    while (i < list.length && S._mfPrefetch.gen === gen) {
+      const m = list[i++];
+      const id = String(m.id);
+      const hit = S.smMatchfacts[id];
+      if (hit && !hit._loading && hit.ok && hit._at && (Date.now() - hit._at) < mfFreshMs(hit)) continue;
+      try { await ensureSmMatchfacts(m); } catch (_) {}
+    }
+  };
+  const n = Math.max(1, Math.min(concurrency, list.length));
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  if (S._mfPrefetch.gen === gen) S._mfPrefetch.running = false;
+}
+function paintSmMatchfacts(id, pack) {
+  const key = String(id || '');
+  const x = (typeof findMatch === 'function' && findMatch(key))
+    || ((S.results || []).find((z) => String(z.id) === key))
+    || (typeof loadFxShell === 'function' && loadFxShell(key))
+    || { id: key };
+  const p = pack || mfPackOf(key);
+  const intel = document.getElementById('intel-mf-' + key);
+  if (intel) {
+    const html = mfIntelSlotHtml(x, p);
+    const sig = String((p && (p.fetchedAt || p._at)) || '') + (p && p._loading ? 'L' : '') + (p && p.ok === false ? 'E' : 'K');
+    if (intel.dataset.mfSig !== sig) {
+      intel.dataset.mfSig = sig;
+      if (intel.dataset.mfReady === '1' && typeof swapSlotHtml === 'function') swapSlotHtml(intel, html);
+      else { intel.innerHTML = html; intel.dataset.mfReady = '1'; }
+    }
+  }
+  const live = document.getElementById('live-mf-' + key);
+  if (live) {
+    const html = mfLiveSlotHtml(x, p);
+    const sig = String((p && (p.fetchedAt || p._at)) || '') + (p && p._loading ? 'L' : '') + (p && p.ok === false ? 'E' : 'K') + 'live';
+    if (live.dataset.mfSig !== sig) {
+      live.dataset.mfSig = sig;
+      if (live.dataset.mfReady === '1' && typeof swapSlotHtml === 'function') swapSlotHtml(live, html);
+      else { live.innerHTML = html; live.dataset.mfReady = '1'; }
+    }
+  }
+  try { if (S.mfFullview && String(S.mfFullview.id) === key) renderMfFullview(); } catch (_) {}
+}
+function mfFullviewRoot() {
+  let el = document.getElementById('mf-fullview');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'mf-fullview';
+    el.className = 'hidden';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-label', '情报整合');
+    document.body.appendChild(el);
+  } else if (el.parentElement && el.parentElement !== document.body) {
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function closeMfFullview() {
+  try { S.mfFullview = null; } catch (_) {}
+  try {
+    const el = document.getElementById('mf-fullview');
+    if (el) {
+      teardownOverlayEl(el, () => {
+        try { document.body.classList.remove('mf-lock'); } catch (_) {}
+        try { syncSheetScrollLock(); } catch (_) {}
+      });
+    } else {
+      try { document.body.classList.remove('mf-lock'); } catch (_) {}
+    }
+  } catch (_) {
+    try { document.body.classList.remove('mf-lock'); } catch (__) {}
+  }
+}
+function openMfFullview(id) {
+  const key = String(id || '');
+  if (!key) return;
+  const pack = mfPackOf(key);
+  if (!pack || pack._loading) { try { toast('比赛事实还在整理'); } catch (_) {} return; }
+  S.mfFullview = { id: key };
+  renderMfFullview();
+}
+function renderMfFullview() {
+  const st = S.mfFullview;
+  const el = mfFullviewRoot();
+  if (!st) { closeMfFullview(); return; }
+  const x = (typeof findMatch === 'function' && findMatch(st.id))
+    || ((S.results || []).find((z) => String(z.id) === String(st.id)))
+    || (typeof loadFxShell === 'function' && loadFxShell(st.id))
+    || { id: st.id };
+  const pack = mfPackOf(st.id);
+  const html = mfFullviewHtml(x, pack);
+  swapOverlayHtml(el, html, {
+    onShow: function (root) {
+      try { root.setAttribute('aria-hidden', 'false'); } catch (_) {}
+      try { document.body.classList.add('mf-lock'); } catch (_) {}
+      try { root.scrollTop = 0; } catch (_) {}
+      const body = root.querySelector('.fv-body');
+      if (body) try { body.scrollTop = 0; } catch (_) {}
+    },
+  });
+}
+
 function intelQuickLinks(x) {
   const mid = esc(String(x && x.id || ''));
   return `<div class="intel-hub" aria-label="数据快捷入口">
@@ -10199,6 +11354,7 @@ function intelTabHtml(x, m, stats) {
   const rep = (S.predictCache && S.predictCache[String(x.id)]) || null;
   let h = `<div class="intel-aoke">`;
   h += intelQuickLinks(x);
+  h += `<div id="intel-mf-${esc(String(x.id || ''))}" class="intel-mf-slot">${mfIntelSlotHtml(x, mfPackOf(x.id))}</div>`;
   if (!rep || !rep.ok) {
     h += `<div class="intel-scoop loading"><div class="intel-scoop-hd"><i class="intel-bar"></i><h3>绝密情报</h3></div><div class="spinner"></div><p class="note">正在汇总伤停/战绩/交锋情报…</p></div>`;
   } else {
@@ -10209,25 +11365,9 @@ function intelTabHtml(x, m, stats) {
   // Secondary analysis (kept for depth; 澳客 ref is scoop-first)
   h += h2hBlock(stats && stats.h2h, x.home, x.away, { n: ui.h2hN, matchId: x.id, h2hSource: stats && stats.h2hSource });
   h += formAnalysisCard(x, stats, ui);
-  h += processStatsCard(x, stats);
   h += bracketBlock(x);
   h += nextFixturesCard(x);
-  if (m) h += oddsCompareBlock(m);
-  const qHome = encodeURIComponent(x.home || '');
-  const qAway = encodeURIComponent(x.away || '');
-  h += `<div class="ana-card"><div class="ana-hd"><h3>相关资讯</h3></div>
-    <div class="news-match-links">
-      <button type="button" class="btn ghost sm" data-go="#/news?q=${qHome}">${esc(x.home)} 资讯</button>
-      <button type="button" class="btn ghost sm" data-go="#/news?q=${qAway}">${esc(x.away)} 资讯</button>
-      <button type="button" class="btn ghost sm" data-go="#/news">全部资讯</button>
-    </div>
-    <p class="note" style="margin:8px 0 0">根据队名在公开 RSS 中筛选，英文源对中文队名会自动映射常见别名。</p>
-  </div>`;
   h += votePanelHtml(x.id);
-  if (m) {
-    h += oddsSection('胜平负', m, 'had', implied(m.had), true);
-    h += oddsSection(`让球胜平负 <small>主队 ${esc(m.hhad?.goalLine || '-')}</small>`, m, 'hhad', implied(m.hhad), true);
-  }
   return h;
 }
 
@@ -10255,24 +11395,175 @@ function eventGoalKind(e) {
   if (e && e.goalKind) return e.goalKind;
   const d = String((e && e.detail) || '');
   if (/own\s*goal/i.test(d) || /乌龙/.test(d)) return 'own';
-  if (/missed\s*penalty/i.test(d)) return 'missed_pen';
+  if (/shootout/i.test(d) && /miss/i.test(d)) return 'shootout_miss';
+  if (/shootout/i.test(d)) return 'shootout';
+  if (/missed\s*penalty/i.test(d) || /点球未进/.test(d)) return 'missed_pen';
   if (/penalty/i.test(d) || /点球/.test(d)) return 'pen';
   return 'goal';
 }
 function eventIconHtml(e) {
-  const kind = e.kind || 'other';
-  if (kind === 'goal') {
+  const kind = (e && e.kind) || 'other';
+  if (kind === 'goal' || kind === 'pen_shootout_goal' || kind === 'pen_shootout_miss') {
     const gk = eventGoalKind(e);
-    if (gk === 'own') return '<span class="ev-ico own" title="乌龙"><span class="ev-ball">⚽</span><b>OG</b></span>';
+    if (gk === 'own') return '<span class="ev-ico own" title="乌龙球"><span class="ev-ball">⚽</span><b>OG</b></span>';
     if (gk === 'pen') return '<span class="ev-ico pen" title="点球"><span class="ev-ball">⚽</span><b>P</b></span>';
     if (gk === 'missed_pen') return '<span class="ev-ico missed" title="点球未进">○</span>';
+    if (gk === 'shootout' || kind === 'pen_shootout_goal') return '<span class="ev-ico pen shootout" title="点球大战进球"><span class="ev-ball">⚽</span><b>PS</b></span>';
+    if (gk === 'shootout_miss' || kind === 'pen_shootout_miss') return '<span class="ev-ico missed shootout" title="点球大战未进">○</span>';
     return '<span class="ev-ico goal" title="进球"><span class="ev-ball">⚽</span></span>';
   }
   if (kind === 'yellow') return '<span class="ev-ico yellow" title="黄牌"></span>';
+  if (kind === 'second_yellow') return '<span class="ev-ico second-yellow" title="两黄变红"><i class="y"></i><i class="r"></i></span>';
   if (kind === 'red') return '<span class="ev-ico red" title="红牌"></span>';
-  if (kind === 'subst') return '<span class="ev-ico subst" title="换人"><b class="up">↑</b><b class="dn">↓</b></span>';
+  if (kind === 'subst') {
+    const inj = !!(e && e.injurySub);
+    return '<span class="ev-ico subst' + (inj ? ' is-injury' : '') + '" title="' + (inj ? '受伤换人' : '换人') + '"><b class="up">↑</b><b class="dn">↓</b></span>';
+  }
   if (kind === 'var') return '<span class="ev-ico var" title="VAR">VAR</span>';
+  if (kind === 'corner') return '<span class="ev-ico corner" title="角球">⚑</span>';
+  if (kind === 'shot_on') return '<span class="ev-ico shot-on" title="射正"><span class="ev-ball">⚽</span></span>';
+  if (kind === 'shot_off') return '<span class="ev-ico shot-off" title="射偏"><span class="ev-ball">⚽</span></span>';
+  if (kind === 'offside') return '<span class="ev-ico offside" title="越位">▲</span>';
+  if (kind === 'woodwork') return '<span class="ev-ico woodwork" title="击中门框">▭</span>';
+  if (kind === 'assist') return '<span class="ev-ico assist" title="助攻">👟</span>';
+  if (kind === 'period' || kind === 'whistle') return '<span class="ev-ico whistle" title="哨声">♪</span>';
   return '<span class="ev-ico other">•</span>';
+}
+function eventTimeKey(e) {
+  const el = e && e.elapsed != null && e.elapsed !== '' ? Number(e.elapsed) : (e && e.kind === 'period' && e.periodKind === 'kickoff' ? -1 : 999);
+  const ex = e && e.extra ? Number(e.extra) : 0;
+  const bias = e && e.periodBias != null ? Number(e.periodBias) : 0;
+  return (Number.isFinite(el) ? el : 999) + (Number.isFinite(ex) ? ex / 100 : 0) + bias;
+}
+function eventOrdinalLab(e, unit) {
+  const n = e && e.ordinal != null ? Number(e.ordinal) : null;
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return '第' + n + (unit || '个');
+}
+function eventGoalBodyZh(e) {
+  const info = String((e && (e.info || e.detail)) || '');
+  if (/right\s*foot/i.test(info) || /右脚/.test(info)) return '右脚';
+  if (/left\s*foot/i.test(info) || /左脚/.test(info)) return '左脚';
+  if (/header/i.test(info) || /头球/.test(info)) return '头球';
+  if (/free\s*kick/i.test(info) || /任意球/.test(info)) return '任意球';
+  return '';
+}
+function liveEventDedupeToken(e) {
+  return String((e && (e.playerZh || e.player)) || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[·・.\s\-'_]/g, '');
+}
+function liveEventFingerprint(e) {
+  if (!e) return '';
+  const kind = String(e.kind || '');
+  if (!kind || kind === 'period') return '';
+  const gk = kind === 'goal' ? String((typeof eventGoalKind === 'function' ? eventGoalKind(e) : e.goalKind) || 'goal') : '';
+  const el = e.elapsed != null && e.elapsed !== '' ? Number(e.elapsed) : '';
+  const ex = e.extra != null && Number(e.extra) > 0 ? Number(e.extra) : 0;
+  const side = e.side || (e.teamId != null ? String(e.teamId) : '');
+  return [kind, gk, el, ex, side, liveEventDedupeToken(e)].join('|');
+}
+function preferRicherLiveEvent(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const score = (e) => (e.smId != null ? 4 : 0) + (e.playerZh ? 2 : 0) + (e.info ? 1 : 0)
+    + (e.addition ? 1 : 0) + (e.assist ? 1 : 0) + (e.detail ? 1 : 0);
+  return score(b) > score(a) ? b : a;
+}
+/** Collapse duplicate provider rows (events + timeline, or same strike twice) without dropping distinct kinds. */
+function dedupeLiveEvents(events) {
+  const list = Array.isArray(events) ? events.filter(Boolean) : [];
+  const out = [];
+  const byId = new Map();
+  const byFp = new Map();
+  for (const e of list) {
+    const idKey = e.smId != null ? 'sm:' + String(e.smId)
+      : (e.id != null && String(e.id) !== '' ? 'id:' + String(e.id) : '');
+    if (idKey && byId.has(idKey)) {
+      const i = byId.get(idKey);
+      out[i] = preferRicherLiveEvent(out[i], e);
+      continue;
+    }
+    const fp = liveEventFingerprint(e);
+    if (fp && byFp.has(fp)) {
+      const i = byFp.get(fp);
+      out[i] = preferRicherLiveEvent(out[i], e);
+      if (idKey) byId.set(idKey, i);
+      continue;
+    }
+    const idx = out.length;
+    out.push(e);
+    if (idKey) byId.set(idKey, idx);
+    if (fp) byFp.set(fp, idx);
+  }
+  return out;
+}
+function assignCountedOrdinals(list) {
+  const counts = Object.create(null);
+  const chrono = (list || []).slice().sort((a, b) => eventTimeKey(a) - eventTimeKey(b));
+  for (let i = 0; i < chrono.length; i++) {
+    const e = chrono[i];
+    if (!e || e.ordinal != null) continue;
+    if (!/^(shot_on|shot_off|corner|offside|yellow|red|woodwork|goal)$/.test(e.kind || '')) continue;
+    if (e.kind === 'goal' && eventGoalKind(e) === 'missed_pen') continue;
+    const key = String(e.kind) + '|' + String(e.side || '');
+    counts[key] = (counts[key] || 0) + 1;
+    e.ordinal = counts[key];
+    e.ordinalCounted = true;
+  }
+  return list;
+}
+function livePeriodMarkers(live, x) {
+  const periods = (live && live.periods) || [];
+  const st = (live && live.status) || {};
+  const short = String(st.short || st.long || '').toUpperCase();
+  const ls = (typeof S !== 'undefined' && S.liveScores && x) ? S.liveScores[String(x.id || '')] : null;
+  const finished = !!(live && live.finished) || /^(FT|AET|FT_PEN|PEN_FT|AFTER_ET|AFTER_PEN|ENDED|FULL)/.test(short)
+    || !!(ls && ls.finished);
+  const p1 = periods.find((p) => Number(p.typeId) === 1) || periods[0] || null;
+  const p2 = periods.find((p) => Number(p.typeId) === 2) || (periods.length > 1 ? periods[1] : null);
+  const started = finished || !!(p1 && p1.started) || /INPLAY|LIVE|1H|2H|^HT$|ET|PEN|BREAK|INT/.test(short)
+    || !!(ls && (ls.live || ls.minute != null));
+  const out = [];
+  if (started) out.push({ kind: 'period', periodKind: 'kickoff', elapsed: 0, extra: null, periodBias: -0.2, label: '开赛' });
+  if (p1 && p1.timeAdded != null && Number(p1.timeAdded) > 0 && (p1.ended || p2 || finished || short === 'HT')) {
+    out.push({ kind: 'period', periodKind: 'injury1', elapsed: 45, extra: null, periodBias: 0.01, label: '伤停补时', timeAdded: Number(p1.timeAdded) });
+  }
+  if ((p1 && p1.ended) || short === 'HT' || p2 || finished) {
+    out.push({ kind: 'period', periodKind: 'ht', elapsed: 45, extra: null, periodBias: 0.05, label: '中场' });
+  }
+  if (p2 && p2.timeAdded != null && Number(p2.timeAdded) > 0 && (p2.ended || finished)) {
+    out.push({ kind: 'period', periodKind: 'injury2', elapsed: 90, extra: null, periodBias: 0.01, label: '伤停补时', timeAdded: Number(p2.timeAdded) });
+  }
+  if ((p2 && p2.ended) || finished) {
+    out.push({ kind: 'period', periodKind: '2h_end', elapsed: 90, extra: null, periodBias: 0.05, label: '下半场结束' });
+  }
+  if (finished) out.push({ kind: 'period', periodKind: 'ft', elapsed: 90, extra: null, periodBias: 0.09, label: '完场' });
+  return out;
+}
+function isLiveImportantEvent(e) {
+  if (!e) return false;
+  if (e.kind === 'period') return true;
+  if (e.kind === 'goal' || e.kind === 'yellow' || e.kind === 'red' || e.kind === 'second_yellow') return true;
+  if (e.kind === 'subst' || e.kind === 'var' || e.kind === 'woodwork') return true;
+  if (e.kind === 'pen_shootout_goal' || e.kind === 'pen_shootout_miss') return true;
+  return false;
+}
+function eventTeamCrestHtml(x, live, e) {
+  if (!e || (e.side !== 'home' && e.side !== 'away')) return '';
+  const home = e.side === 'home';
+  const name = home
+    ? ((live && live.home && (live.home.nameZh || live.home.name)) || (x && (x.home || x.homeZh)) || e.teamName || '')
+    : ((live && live.away && (live.away.nameZh || live.away.name)) || (x && (x.away || x.awayZh)) || e.teamName || '');
+  const logo = home
+    ? ((live && live.home && live.home.logo) || (x && x.homeLogo) || '')
+    : ((live && live.away && live.away.logo) || (x && x.awayLogo) || '');
+  const tid = home ? (x && x.homeTeamId) : (x && x.awayTeamId);
+  const crest = (typeof badge === 'function')
+    ? badge(name, 'sm', logo, tid ? { teamId: tid, eager: true } : { eager: true })
+    : '';
+  return `<div class="live-c-team">${crest}${name ? `<span>${esc(name)}</span>` : ''}</div>`;
 }
 function eventMinuteLab(e) {
   if (e.elapsed == null || e.elapsed === '') return '';
@@ -10314,7 +11605,7 @@ function eventsTabHtml(x, live) {
     }
     return `<div class="events-chat-stack"><div class="ev-tree-wrap" id="${wrapId}"><div class="ana-card"><p class="note">${esc(why)}</p></div></div>${chatBelow()}</div>`;
   }
-  const raw = (live.events || []).slice();
+  const raw = dedupeLiveEvents((live.events || []).slice());
   // chronological ascending for tree (kickoff → FT)
   raw.sort((a, b) => {
     const ae = (a.elapsed == null ? 999 : Number(a.elapsed)) + (a.extra ? Number(a.extra) / 100 : 0);
@@ -10523,8 +11814,11 @@ function syncLiveScoreFromStats(matchId, live) {
   S.liveScores = S.liveScores || {};
   const prev = S.liveScores[id] || { id };
   const nh = Number(live.score.home), na = Number(live.score.away);
-  if (prev.homeScore === nh && prev.awayScore === na && prev.scoreSource === 'detail') return false;
   const st = live.status || {};
+  const nextMinute = st.elapsed != null ? Number(st.elapsed) : prev.minute;
+  const nextPhase = st.short || prev.phase;
+  if (prev.homeScore === nh && prev.awayScore === na && prev.scoreSource === 'detail'
+    && prev.minute === nextMinute && prev.phase === nextPhase) return false;
   const mapZh = { '1H': '上半场', HT: '中场', '2H': '下半场', ET: '加时', BT: '加时休息', P: '点球', LIVE: '进行中', FT: '完场' };
   const short = st.short || '';
   S.liveScores[id] = {
@@ -10728,12 +12022,14 @@ async function loadLiveStats(x, { force } = {}) {
         if (hero && route().name === 'match' && String(route().arg) === key) {
           const m = (S.matches || []).find(z => String(z.id) === key) || x;
           const r = (S.results || []).find(z => String(z.id) === key);
+          try { if (isAnimLiveOn(key)) parkPitchLive(key); } catch (_) {}
           hero.outerHTML = matchHero(m || x, m, r, { favBtn: matchFavBtn(m || x) });
           const sticky = document.getElementById('match-sticky-' + key);
           if (sticky) sticky.outerHTML = matchStickyHero(m || x, m, r);
           try { bindMatchHeroWeather(document.getElementById('match-hero-' + key) && document.getElementById('match-hero-' + key).parentNode || document); } catch (_) {}
           try { bindMatchHeroSticky(); } catch (_) {}
           try { applyMatchWeather(m || x, weatherPackOf(m || x)); } catch (_) {}
+          if (isAnimLiveOn(key)) { try { syncHeroAnimLive(key); } catch (_) {} }
         }
         if (route().name === 'schedule') render();
         else if (route().name === 'home') { patchHomeFocusStrip(); if (!softPatchLiveScoreCards()) render(); }
@@ -10751,14 +12047,17 @@ function renderLivePitch(x) {
   const key = String(x.id || '');
   const live = (S.liveStatsCache && S.liveStatsCache[key]) || null;
   const box = document.getElementById('live-pitch-' + x.id);
-  if (!box) return;
   if (document.getElementById('live-tab-' + key)) {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = liveStatsStripHtml(x, live);
-    if (tmp.firstElementChild) box.replaceWith(tmp.firstElementChild);
-    paintLiveSub(key);
+    if (box) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = liveStatsStripHtml(x, live);
+      if (tmp.firstElementChild) box.replaceWith(tmp.firstElementChild);
+      paintLiveSub(key);
+    }
+    try { pitchLiveUpdateFromCaches(x); } catch (_) {}
     return;
   }
+  if (!box) return;
   box.outerHTML = livePitchHtml(x, live || { ok: false, reason: 'error', error: '暂无数据' }, { compact: false });
 }
 function ensureLivePoll(x) {
@@ -10779,6 +12078,7 @@ function ensureLivePoll(x) {
     if (tabNow !== 'live') return stopLivePoll();
     const hadReview = detailTabsFor(x).some(t => t[0] === 'review');
     await loadLiveStats(x, { force: true });
+    try { await ensureSmMatchfacts(x); } catch (_) {}
     if (route().name === 'match' && String(route().arg) === String(x.id) && detailTabOf(x.id) === 'live') {
       patchEventsTabIfVisible(x);
       renderLivePitch(x);
@@ -11301,23 +12601,52 @@ function openMvSheet(id, side) {
   const pack = S.matchSquadValue && S.matchSquadValue[String(id)];
   if (!pack || pack._loading) { toast('身价还在整理'); return; }
   side = side === 'away' ? 'away' : 'home';
+  const sh = document.getElementById('sheet') || (typeof $ === 'function' && $('#sheet'));
+  let already = false;
+  try { already = !!(sh && !sh.classList.contains('hidden') && sh.querySelector('.mv-sheet')); } catch (_) {}
+  if (already) {
+    const sheet = sh.querySelector('.mv-sheet');
+    if (sheet && sheet.querySelector('.mv-rank-list[data-for="home"]') && sheet.querySelector('.mv-rank-list[data-for="away"]')) {
+      applyMvSheetSide(sheet, side);
+      return;
+    }
+  }
   const h = pack.home || {}, a = pack.away || {};
-  const cur = side === 'away' ? a : h;
-  const players = cur.players || [];
-  const maxEur = Math.max(0, ...players.map((p) => Number(p.eur) || 0));
+  const listHtml = (which) => {
+    const cur = which === 'away' ? a : h;
+    const players = cur.players || [];
+    const maxEur = Math.max(0, ...players.map((p) => Number(p.eur) || 0));
+    return players.length ? players.map((p) => mvSheetPlayerRow(p, maxEur, which)).join('') : '<p class="note">暂无逐人名单</p>';
+  };
   const asOf = pack.asOf ? `数据约至 ${pack.asOf}。` : '';
-  const bits = [pack.sourceNoteZh || '', asOf, cur.coverage && cur.coverage.noteZh ? cur.coverage.noteZh : ''].filter(Boolean).join(' ');
-  const html = `<div class="sheet mv-sheet" role="dialog" aria-label="身价最高球员">
+  const cover = (side === 'away' ? a : h);
+  const bits = [pack.sourceNoteZh || '', asOf, cover.coverage && cover.coverage.noteZh ? cover.coverage.noteZh : ''].filter(Boolean).join(' ');
+  const html = `<div class="sheet mv-sheet" data-side="${side}" role="dialog" aria-label="身价最高球员">
     <h3><span>身价最高球员</span><button type="button" class="x" data-act="closeSheet">✕</button></h3>
     <p class="note">${esc(bits)}</p>
     <div class="sm-switch">
       <button type="button" class="${side === 'home' ? 'on' : ''}" data-act="mvSheetSide" data-id="${esc(String(id))}" data-side="home">${esc(h.nameZh || '主队')}</button>
       <button type="button" class="${side === 'away' ? 'on' : ''}" data-act="mvSheetSide" data-id="${esc(String(id))}" data-side="away">${esc(a.nameZh || '客队')}</button>
     </div>
-    <div class="mv-rank-list">${players.length ? players.map((p) => mvSheetPlayerRow(p, maxEur, side)).join('') : '<p class="note">暂无逐人名单</p>'}</div>
+    <div class="mv-sheet-panes">
+      <div class="mv-rank-list" data-for="home">${listHtml('home')}</div>
+      <div class="mv-rank-list" data-for="away">${listHtml('away')}</div>
+    </div>
   </div>`;
   openSheetHtml(html);
 }
+function applyMvSheetSide(sheet, side) {
+  if (!sheet) return;
+  side = side === 'away' ? 'away' : 'home';
+  try { sheet.setAttribute('data-side', side); } catch (_) {}
+  try {
+    sheet.querySelectorAll('[data-act="mvSheetSide"]').forEach((b) => {
+      b.classList.toggle('on', b.dataset.side === side);
+    });
+  } catch (_) {}
+}
+
+
 async function ensureMatchSquadValue(x) {
   if (!x || !x.id) return;
   S.matchSquadValue = S.matchSquadValue || {};
@@ -12051,6 +13380,7 @@ function closeRadarExpand() {
     if (el) {
       teardownOverlayEl(el, () => {
         try { document.body.classList.remove('rk-lock'); } catch (_) {}
+        try { syncSheetScrollLock(); } catch (_) {}
       });
     } else {
       try { document.body.classList.remove('rk-lock'); } catch (_) {}
@@ -12523,17 +13853,27 @@ function liveStatsStripHtml(x, live) {
   const ya = has(st.yellowCards) ? liveStatNum(st.yellowCards.away) : '—';
   const rh = has(st.redCards) ? liveStatNum(st.redCards.home) : '—';
   const ra = has(st.redCards) ? liveStatNum(st.redCards.away) : '—';
+  const ch = has(st.corners) ? liveStatNum(st.corners.home) : '—';
+  const ca = has(st.corners) ? liveStatNum(st.corners.away) : '—';
   const sh = has(st.shotsOnTarget) ? liveStatNum(st.shotsOnTarget.home) : '—';
   const sa = has(st.shotsOnTarget) ? liveStatNum(st.shotsOnTarget.away) : '—';
   const oh = has(st.shots) && has(st.shotsOnTarget) ? liveOffTarget(st.shots.home, st.shotsOnTarget.home) : null;
   const oa = has(st.shots) && has(st.shotsOnTarget) ? liveOffTarget(st.shots.away, st.shotsOnTarget.away) : null;
   const mid = `<div class="live-stats-mid">
-    <div class="live-cards is-home"><div class="live-cd"><i class="y"></i><span>${esc(yh)}</span></div><div class="live-cd"><i class="r"></i><span>${esc(rh)}</span></div></div>
+    <div class="live-cards is-home">
+      <div class="live-cd is-corner"><i class="c" aria-hidden="true">⚑</i><span>${esc(ch)}</span></div>
+      <div class="live-cd"><i class="r"></i><span>${esc(rh)}</span></div>
+      <div class="live-cd"><i class="y"></i><span>${esc(yh)}</span></div>
+    </div>
     <div class="live-shots">
       <div class="ls-row"><span>${esc(sh)}</span><b>射正</b><span>${esc(sa)}</span></div>
       <div class="ls-row"><span>${oh == null ? '—' : esc(String(oh))}</span><b>射偏</b><span>${oa == null ? '—' : esc(String(oa))}</span></div>
     </div>
-    <div class="live-cards is-away"><div class="live-cd"><span>${esc(ya)}</span><i class="y"></i></div><div class="live-cd"><span>${esc(ra)}</span><i class="r"></i></div></div>
+    <div class="live-cards is-away">
+      <div class="live-cd"><span>${esc(ya)}</span><i class="y"></i></div>
+      <div class="live-cd"><span>${esc(ra)}</span><i class="r"></i></div>
+      <div class="live-cd is-corner"><span>${esc(ca)}</span><i class="c" aria-hidden="true">⚑</i></div>
+    </div>
   </div>`;
   const empty = !rings ? '<p class="live-stats-empty">进攻 / 控球数据暂无</p>' : '';
   return `<div class="live-stats-strip" id="live-pitch-${id}">
@@ -12541,31 +13881,78 @@ function liveStatsStripHtml(x, live) {
     ${mid}
   </div>`;
 }
-function liveCommentLine(e) {
-  const min = eventMinuteLab(e) || '·';
+function liveCommentSentence(e, x, live) {
+  if (!e) return '';
+  if (e.kind === 'period') {
+    const add = e.timeAdded != null ? '（+' + e.timeAdded + '）' : '';
+    return (e.label || '') + add;
+  }
   const { player, assist } = eventPlayerLab(e);
-  let text = '';
+  const team = e.side === 'home'
+    ? ((live && live.home && (live.home.nameZh || live.home.name)) || (x && x.home) || e.teamName || '')
+    : e.side === 'away'
+      ? ((live && live.away && (live.away.nameZh || live.away.name)) || (x && x.away) || e.teamName || '')
+      : (e.teamName || '');
+  const withTeam = (core) => {
+    if (player) return core;
+    return team ? (core + ' — ' + team) : core;
+  };
   if (e.kind === 'goal') {
     const gk = eventGoalKind(e);
-    if (gk === 'own') text = '乌龙球' + (player ? ' — ' + player : '');
-    else if (gk === 'pen') text = '点球' + (player ? ' — ' + player : '');
-    else if (gk === 'missed_pen') text = '点球未进' + (player ? ' — ' + player : '');
-    else text = '进球' + (player ? ' — ' + player : '');
-    if (assist && gk !== 'missed_pen') text += '（助攻 ' + assist + '）';
-  } else if (e.kind === 'yellow') text = '黄牌' + (player ? ' — ' + player : '');
-  else if (e.kind === 'red') text = '红牌' + (player ? ' — ' + player : '');
-  else if (e.kind === 'subst') {
+    const n = eventOrdinalLab(e, '个');
+    let lab = '进球';
+    if (gk === 'own') lab = '乌龙球';
+    else if (gk === 'pen') lab = '点球';
+    else if (gk === 'missed_pen') lab = '点球未进';
+    else if (gk === 'shootout') lab = '点球大战进球';
+    else if (gk === 'shootout_miss') lab = '点球大战未进';
+    const head = (n && gk === 'goal' ? n : '') + lab;
+    let text = head + (player ? ' — ' + player : (team ? ' — ' + team : ''));
+    const body = eventGoalBodyZh(e);
+    if (body) text += ' · ' + body;
+    if (assist && gk !== 'missed_pen' && gk !== 'shootout_miss' && gk !== 'own') text += '（助攻 ' + assist + '）';
+    return text;
+  }
+  if (e.kind === 'pen_shootout_goal') return '点球大战进球' + (player ? ' — ' + player : '');
+  if (e.kind === 'pen_shootout_miss') return '点球大战未进' + (player ? ' — ' + player : '');
+  if (e.kind === 'shot_on') return withTeam((eventOrdinalLab(e, '个') || '') + '射正' + (player ? ' — ' + player : ''));
+  if (e.kind === 'shot_off') return withTeam((eventOrdinalLab(e, '个') || '') + '射偏' + (player ? ' — ' + player : ''));
+  if (e.kind === 'corner') return withTeam((eventOrdinalLab(e, '个') || '') + '角球' + (player ? ' — ' + player : ''));
+  if (e.kind === 'offside') return withTeam((eventOrdinalLab(e, '个') || '') + '越位' + (player ? ' — ' + player : ''));
+  if (e.kind === 'woodwork') return '击中门框' + (player ? ' — ' + player : (team ? ' — ' + team : ''));
+  if (e.kind === 'yellow') {
+    const foul = /foul/i.test(String(e.info || '')) ? ' · 犯规' : '';
+    return (eventOrdinalLab(e, '张') || '') + '黄牌' + (player ? ' — ' + player : '') + foul;
+  }
+  if (e.kind === 'second_yellow') return '两黄变红' + (player ? ' — ' + player : '');
+  if (e.kind === 'red') return (eventOrdinalLab(e, '张') || '') + '红牌' + (player ? ' — ' + player : '');
+  if (e.kind === 'subst') {
+    const lab = e.injurySub ? '受伤换人' : '换人';
     const bits = [];
     if (player) bits.push('换上 ' + player);
     if (assist) bits.push('换下 ' + assist);
-    text = bits.join('，') || (e.detail || '换人');
-  } else if (e.kind === 'var') text = 'VAR' + (e.detail ? ' — ' + e.detail : '');
-  else text = player || e.detail || e.type || '事件';
-  return `<div class="live-c-row"><div class="live-c-ico">${eventIconHtml(e)}</div><div><b>${esc(min)}</b> ${esc(text)}</div></div>`;
+    return bits.length ? (lab + ' — ' + bits.join('，')) : lab;
+  }
+  if (e.kind === 'var') {
+    const outc = e.varOutcome || '';
+    return outc ? ('VAR — ' + outc) : 'VAR';
+  }
+  return player || e.detail || e.type || '事件';
+}
+function liveCommentLine(e, x, live) {
+  if (e && e.kind === 'period') {
+    const min = eventMinuteLab(e);
+    const text = liveCommentSentence(e, x, live);
+    return `<div class="live-c-row is-period"><div class="live-c-ico">${eventIconHtml(e)}</div><div class="live-c-body">${min ? `<b>${esc(min)}</b> ` : ''}${esc(text)}</div></div>`;
+  }
+  const min = eventMinuteLab(e) || '·';
+  const text = liveCommentSentence(e, x, live);
+  const team = eventTeamCrestHtml(x, live, e);
+  return `<div class="live-c-row${e && e.side ? ' is-' + e.side : ''}"><div class="live-c-ico">${eventIconHtml(e)}</div><div class="live-c-body"><b>${esc(min)}</b> ${esc(text)}</div>${team}</div>`;
 }
 function liveCommentHtml(x, live) {
-  const pack = weatherPackOf(x);
-  const venue = venueFromLive(x) || {};
+  const pack = (typeof weatherPackOf === 'function') ? weatherPackOf(x) : null;
+  const venue = (typeof venueFromLive === 'function' ? venueFromLive(x) : null) || {};
   const wxLine = pack && pack.ok && pack.labelZh
     ? `<p>本场比赛天气情况：${esc(pack.labelZh)}</p>`
     : '';
@@ -12575,58 +13962,95 @@ function liveCommentHtml(x, live) {
   if (!live || !live.ok) {
     return `<div class="live-comment">${meta}<p class="live-c-empty">${esc(live ? liveStatsUserMsg(live) : '正在加载比赛事件…')}</p></div>`;
   }
-  const raw = (live.events || []).slice();
-  raw.sort((a, b) => {
-    const ae = (a.elapsed == null ? -1 : Number(a.elapsed)) + (a.extra ? Number(a.extra) / 100 : 0);
-    const be = (b.elapsed == null ? -1 : Number(b.elapsed)) + (b.extra ? Number(b.extra) / 100 : 0);
-    return be - ae;
-  });
-  const rows = raw.map(liveCommentLine).join('');
-  const empty = rows ? '' : '<p class="live-c-empty">暂无文字直播（未开赛、无数据源或尚未产生事件）。</p>';
-  return `<div class="live-comment">${meta}${rows || empty}</div>`;
+  const raw = dedupeLiveEvents((live.events || []).map((e) => Object.assign({}, e)));
+  assignCountedOrdinals(raw);
+  const rows = raw.concat(livePeriodMarkers(live, x));
+  rows.sort((a, b) => eventTimeKey(b) - eventTimeKey(a));
+  const html = rows.map((e) => liveCommentLine(e, x, live)).join('');
+  const empty = html ? '' : '<p class="live-c-empty">暂无文字直播（未开赛、无数据源或尚未产生事件）。</p>';
+  return `<div class="live-comment">${meta}${html || empty}</div>`;
+}
+function liveImportantCardBody(e, sh, sa) {
+  const { player, assist } = eventPlayerLab(e);
+  if (e.kind === 'goal' || e.kind === 'pen_shootout_goal' || e.kind === 'pen_shootout_miss') {
+    const gk = eventGoalKind(e);
+    const score = (e.kind === 'goal' && gk !== 'missed_pen' && gk !== 'shootout' && gk !== 'shootout_miss')
+      ? `<div class="tl-score">${sh}-${sa}</div>` : '';
+    let name = player || '';
+    if (gk === 'own') name = (name ? name + ' · ' : '') + '乌龙';
+    else if (gk === 'pen') name = (name ? name + ' · ' : '') + '点球';
+    else if (gk === 'missed_pen') name = (name ? name + ' · ' : '') + '点球未进';
+    else if (gk === 'shootout' || e.kind === 'pen_shootout_goal') name = (name ? name + ' · ' : '') + '点球大战';
+    else if (gk === 'shootout_miss' || e.kind === 'pen_shootout_miss') name = (name ? name + ' · ' : '') + '点球大战未进';
+    const body = eventGoalBodyZh(e);
+    const assistHtml = (assist && gk !== 'missed_pen' && gk !== 'shootout_miss' && gk !== 'own')
+      ? `<div class="tl-assist">${eventIconHtml({ kind: 'assist' })} ${esc(assist)}</div>` : '';
+    return { goal: e.kind === 'goal' && gk !== 'missed_pen', html: `${score}<div class="tl-player">${eventIconHtml(e)} ${esc(name || '进球')}${body ? ` · ${esc(body)}` : ''}</div>${assistHtml}` };
+  }
+  if (e.kind === 'subst') {
+    const lab = e.injurySub ? '受伤换人' : '换人';
+    const on = player ? `<div class="tl-sub on">${eventIconHtml(e)} ${esc('换上 ' + player)}</div>` : `<div class="tl-player">${eventIconHtml(e)} ${esc(lab)}</div>`;
+    const off = assist ? `<div class="tl-sub off">${esc('换下 ' + assist)}</div>` : '';
+    return { goal: false, html: on + off };
+  }
+  if (e.kind === 'var') {
+    const lab = e.varOutcome ? ('VAR · ' + e.varOutcome) : 'VAR';
+    return { goal: false, html: `<div class="tl-player is-card">${eventIconHtml(e)} ${esc(lab)}</div>` };
+  }
+  if (e.kind === 'woodwork') {
+    return { goal: false, html: `<div class="tl-player is-card">${eventIconHtml(e)} ${esc('击中门框' + (player ? ' · ' + player : ''))}</div>` };
+  }
+  let lab = '';
+  if (e.kind === 'second_yellow') lab = '两黄变红';
+  else if (e.kind === 'red') lab = '红牌';
+  else if (e.kind === 'yellow') lab = /foul/i.test(String(e.info || '')) ? '黄牌 · 犯规' : '黄牌';
+  else lab = e.detail || e.type || '事件';
+  if (player) lab += ' · ' + player;
+  return { goal: false, html: `<div class="tl-player is-card">${eventIconHtml(e)} ${esc(lab)}</div>` };
 }
 function liveImportantHtml(x, live, ui) {
   if (!live || !live.ok) {
-    return `<div class="live-tl"><p class="live-ev-empty">${esc(live ? liveStatsUserMsg(live) : '正在加载比赛事件…')}</p></div>`;
+    return `<div class="live-tl is-split"><p class="live-ev-empty">${esc(live ? liveStatsUserMsg(live) : '正在加载比赛事件…')}</p></div>`;
   }
   const goalsOnly = !!(ui && ui.goalsOnly);
-  const raw = (live.events || []).filter((e) => {
-    if (e.kind === 'goal') return true;
+  const raw = dedupeLiveEvents((live.events || []).map((e) => Object.assign({}, e))).filter((e) => {
+    if (e.kind === 'goal' && eventGoalKind(e) !== 'missed_pen') return true;
     if (goalsOnly) return false;
-    return e.kind === 'yellow' || e.kind === 'red';
+    return isLiveImportantEvent(e);
   });
-  raw.sort((a, b) => {
-    const ae = (a.elapsed == null ? 999 : Number(a.elapsed)) + (a.extra ? Number(a.extra) / 100 : 0);
-    const be = (b.elapsed == null ? 999 : Number(b.elapsed)) + (b.extra ? Number(b.extra) / 100 : 0);
-    return ae - be;
-  });
+  assignCountedOrdinals(raw);
+  if (!goalsOnly) raw.push.apply(raw, livePeriodMarkers(live, x));
+  raw.sort((a, b) => eventTimeKey(a) - eventTimeKey(b));
   if (!raw.length) {
-    return `<div class="live-tl"><p class="live-ev-empty">${goalsOnly ? '暂无进球记录。' : '暂无进球或牌记录。'}</p></div>`;
+    return `<div class="live-tl is-split"><p class="live-ev-empty">${goalsOnly ? '暂无进球记录。' : '暂无重要事件。'}</p></div>`;
   }
   let sh = 0, sa = 0;
   const items = raw.map((e) => {
-    const min = eventMinuteLab(e) || '';
-    const { player, assist } = eventPlayerLab(e);
-    let body = '';
-    if (e.kind === 'goal') {
-      const gk = eventGoalKind(e);
-      if (gk !== 'missed_pen') {
-        if (e.side === 'home') sh += 1;
-        else if (e.side === 'away') sa += 1;
-      }
-      const score = (gk === 'missed_pen') ? '' : `<div class="tl-score">${sh}-${sa}</div>`;
-      let name = player || '';
-      if (gk === 'own') name = (name ? name + ' · ' : '') + '乌龙';
-      else if (gk === 'pen') name = (name ? name + ' · ' : '') + '点球';
-      else if (gk === 'missed_pen') name = (name ? name + ' · ' : '') + '点球未进';
-      body = `${score}<div class="tl-player">${eventIconHtml(e)} ${esc(name || '进球')}</div>${assist && gk !== 'missed_pen' ? `<div class="tl-assist">助攻 ${esc(assist)}</div>` : ''}`;
-    } else {
-      const lab = (e.kind === 'red' ? '红牌' : '黄牌') + (player ? ' · ' + player : '');
-      body = `<div class="tl-player is-card">${eventIconHtml(e)} ${esc(lab)}</div>`;
+    if (e.kind === 'period') {
+      const add = e.timeAdded != null ? ' +' + e.timeAdded : '';
+      return `<div class="live-tl-item is-period" data-period="${esc(e.periodKind || '')}"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>${esc((e.label || '') + add)}</span></div></div>`;
     }
-    return `<div class="live-tl-item"><div class="live-tl-min">${esc(min)}</div><div class="live-tl-card${e.kind === 'goal' ? '' : ' is-card'}">${body}</div></div>`;
+    const min = eventMinuteLab(e) || '';
+    const gk = e.kind === 'goal' ? eventGoalKind(e) : '';
+    if (e.kind === 'goal' && gk !== 'missed_pen' && gk !== 'shootout' && gk !== 'shootout_miss') {
+      if (gk === 'own') {
+        if (e.side === 'home') sa += 1;
+        else if (e.side === 'away') sh += 1;
+      } else if (e.side === 'home') sh += 1;
+      else if (e.side === 'away') sa += 1;
+    }
+    const pack = liveImportantCardBody(e, sh, sa);
+    const side = e.side === 'away' ? 'away' : (e.side === 'home' ? 'home' : 'mid');
+    const card = `<div class="live-tl-card${pack.goal ? ' is-goal' : ' is-card'}">${pack.html}</div>`;
+    if (side === 'away') {
+      return `<div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">${esc(min)}</div>${card}</div>`;
+    }
+    if (side === 'home') {
+      return `<div class="live-tl-item is-home">${card}<div class="live-tl-min">${esc(min)}</div><div class="live-tl-gap"></div></div>`;
+    }
+    return `<div class="live-tl-item is-mid"><div class="live-tl-gap"></div><div class="live-tl-min">${esc(min)}</div>${card}</div>`;
   }).join('');
-  return `<div class="live-tl"><div class="live-tl-whistle" aria-hidden="true">♪</div>${items}</div>`;
+  return `<div class="live-tl is-split">${items}</div>`;
 }
 function liveSubHeadHtml(x, ui) {
   const id = esc(String(x.id || ''));
@@ -12648,13 +14072,22 @@ function liveSubBodyHtml(x, live, ui) {
 function liveLegendHtml() {
   return `<div class="live-legend ev-legend">
     <span><i class="ev-ico goal"><span class="ev-ball">⚽</span></i>进球</span>
+    <span><i class="ev-ico shot-on"><span class="ev-ball">⚽</span></i>射正</span>
+    <span><i class="ev-ico shot-off"><span class="ev-ball">⚽</span></i>射偏</span>
     <span><i class="ev-ico pen"><span class="ev-ball">⚽</span><b>P</b></i>点球</span>
     <span><i class="ev-ico missed">○</i>点球未进</span>
-    <span><i class="ev-ico own"><span class="ev-ball">⚽</span><b>OG</b></i>乌龙</span>
+    <span><i class="ev-ico pen shootout"><span class="ev-ball">⚽</span><b>PS</b></i>点球大战</span>
+    <span><i class="ev-ico own"><span class="ev-ball">⚽</span><b>OG</b></i>乌龙球</span>
+    <span><i class="ev-ico assist">👟</i>助攻</span>
+    <span><i class="ev-ico corner">⚑</i>角球</span>
     <span><i class="ev-ico yellow"></i>黄牌</span>
     <span><i class="ev-ico red"></i>红牌</span>
+    <span><i class="ev-ico second-yellow"><i class="y"></i><i class="r"></i></i>两黄变红</span>
+    <span><i class="ev-ico subst is-injury"><b class="up">↑</b><b class="dn">↓</b></i>受伤换人</span>
     <span><i class="ev-ico subst"><b class="up">↑</b><b class="dn">↓</b></i>换人</span>
     <span><i class="ev-ico var">VAR</i>VAR</span>
+    <span><i class="ev-ico woodwork">▭</i>击中门框</span>
+    <span><i class="ev-ico offside">▲</i>越位</span>
   </div>`;
 }
 function paintLiveSub(id) {
@@ -12672,14 +14105,1312 @@ function paintLiveSub(id) {
   if (body) body.innerHTML = liveSubBodyHtml(x, live, ui);
 }
 
+
+function pitchLiveShellHtml(x) {
+  const id = esc(String((x && x.id) || ''));
+  const wx = (typeof matchWeatherType === 'function') ? matchWeatherType(x) : 'neutral';
+  return `<section class="pitch-live" id="pitch-live-${id}" data-wx="${esc(wx)}"></section>`;
+}
+function pitchLiveCrestOpts(x) {
+  if (!x) return {};
+  const homeName = x.home || x.homeZh || '';
+  const awayName = x.away || x.awayZh || '';
+  const homeCrestHtml = (typeof badge === 'function')
+    ? badge(homeName, 'sm', x.homeLogo, x.homeTeamId ? { teamId: x.homeTeamId, eager: true } : null)
+    : '';
+  const awayCrestHtml = (typeof badge === 'function')
+    ? badge(awayName, 'sm', x.awayLogo, x.awayTeamId ? { teamId: x.awayTeamId, eager: true } : null)
+    : '';
+  return { homeName, awayName, homeCrestHtml, awayCrestHtml };
+}
+function loadPitchLiveModule() {
+  if (window.JCPitchLive) return Promise.resolve(window.JCPitchLive);
+  if (window.__pitchLiveP) return window.__pitchLiveP;
+  window.__pitchLiveP = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'js/pitch-live.js?v=pitch409';
+    s.onload = () => resolve(window.JCPitchLive);
+    s.onerror = (err) => reject(err);
+    document.head.appendChild(s);
+  });
+  return window.__pitchLiveP;
+}
+function pitchLivePhaseOf(x, live) {
+  const st = (live && live.status) || {};
+  const ls = S.liveScores && S.liveScores[String((x && x.id) || '')];
+  const phase = st.short || (ls && ls.phase) || '';
+  let phaseZh = (ls && ls.phaseZh) || '';
+  if (typeof liveStatusZh === 'function' && st.short) phaseZh = liveStatusZh(st.short, st.elapsed);
+  const kickoffMs = (typeof matchKickoffMs === 'function')
+    ? matchKickoffMs(x)
+    : ((typeof kickoff === 'function' && x) ? kickoff(x) : NaN);
+  return {
+    phase,
+    phaseZh,
+    elapsed: st.elapsed != null ? st.elapsed : (ls && ls.minute),
+    live: !!(live && live.live) || !!(ls && ls.live),
+    finished: !!(live && live.finished) || !!(ls && ls.finished) || (typeof isMatchFinished === 'function' && isMatchFinished(x)),
+    kickoffMs,
+  };
+}
+function isAnimLiveOn(id) {
+  return !!(S.animLiveOn && S.animLiveOn[String(id || '')]);
+}
+/** 完场 / FT / AET / PEN — animation live must not stay open or be reopened. */
+function isAnimLiveClosedPhase(x) {
+  if (!x) return false;
+  if (typeof isMatchFinished === 'function' && isMatchFinished(x)) return true;
+  const short = String((x.status && (x.status.short || x.status)) || x.phase || x.phaseZh || '').toUpperCase();
+  if (/^(FT|AET|PEN|FT_PEN|PEN_FT|AFTER_ET|AFTER_PEN)$/.test(short)) return true;
+  if (/完场|加时完场|点球结束|已结束|已完成/.test(String(x.status || x.phaseZh || ''))) return true;
+  const id = String(x.id || '');
+  if (!id) return false;
+  const live = (typeof S !== 'undefined' && S.liveStatsCache) ? S.liveStatsCache[id] : null;
+  if (live) {
+    const s = String((live.status && live.status.short) || '');
+    if (/^(FT|AET|PEN)$/.test(s) || live.finished) return true;
+  }
+  const ls = (typeof S !== 'undefined' && S.liveScores) ? S.liveScores[id] : null;
+  if (ls && (ls.finished || /完场|加时完场|点球结束/.test(String(ls.phaseZh || '')))) return true;
+  return false;
+}
+function canOpenAnimLive(x) {
+  return !!x;
+}
+function animLiveWantPitch(x, live) {
+  if (!x) return false;
+  if (isAnimLiveClosedPhase(x)) return false;
+  const phase = (typeof animLivePhaseOf === 'function') ? animLivePhaseOf(x, live) : '';
+  return phase !== 'ft';
+}
+function closeAnimLiveIfFinished(id, x) {
+  const key = String(id || (x && x.id) || '');
+  if (!key) return false;
+  const row = x || (typeof matchByPitchId === 'function' && matchByPitchId(key)) || null;
+  if (!isAnimLiveClosedPhase(row || { id: key })) return false;
+  const doc = (typeof document !== 'undefined') ? document : null;
+  const stage = doc ? document.getElementById('anim-live-stage-' + key) : null;
+  const phase = (stage && typeof stage.getAttribute === 'function') ? String(stage.getAttribute('data-phase') || '') : '';
+  const pitch = doc ? document.getElementById('pitch-live-' + key) : null;
+  let closedPitch = false;
+  if (pitch) {
+    try { if (typeof stopPitchLivePoll === 'function') stopPitchLivePoll(); } catch (_) {}
+    try {
+      if (window.JCPitchLive && window.JCPitchLive.instances) {
+        const inst = window.JCPitchLive.get(pitch);
+        if (inst && typeof inst.destroy === 'function') inst.destroy();
+      }
+    } catch (_) {}
+    try { if (pitch.parentNode) pitch.parentNode.removeChild(pitch); } catch (_) {}
+    closedPitch = true;
+  }
+  // Keep an already-open post-match recap. Only auto-close an in-play 3D stage.
+  if (isAnimLiveOn(key) && phase === 'ft') return closedPitch;
+  if (isAnimLiveOn(key)) {
+    S.animLiveOn = S.animLiveOn || {};
+    S.animLiveOn[key] = false;
+    try { syncHeroAnimLive(key); } catch (_) {}
+    return true;
+  }
+  return closedPitch;
+}
+function animLiveModeOf(id) {
+  const m = S.animLiveMode && S.animLiveMode[String(id || '')];
+  return m === 'landscape' || m === 'pip' ? m : 'docked';
+}
+function animLivePhaseOf(x, live) {
+  const ph = (typeof pitchLivePhaseOf === 'function') ? pitchLivePhaseOf(x, live) : {};
+  const short = String(ph.phase || '').toUpperCase();
+  if (ph.finished || /^(FT|AET|FT_PEN|PEN_FT|AFTER_ET|ENDED)/.test(short)) return 'ft';
+  if (ph.live || /INPLAY|LIVE|^1H$|^2H$|^HT$|^ET/.test(short)) return 'live';
+  if (window.JCPitchLive && typeof window.JCPitchLive.canAnimateLive === 'function'
+    && window.JCPitchLive.canAnimateLive(ph, Date.now())) return 'live';
+  if (Number.isFinite(ph.kickoffMs) && Date.now() >= ph.kickoffMs) return 'live';
+  return 'ns';
+}
+function lockAnimLiveOrientation(mode) {
+  try {
+    if (window.JingcaiChrome && typeof window.JingcaiChrome.lockOrientation === 'function') {
+      window.JingcaiChrome.lockOrientation(mode || 'unlock');
+      return true;
+    }
+  } catch (_) {}
+  try {
+    if (mode === 'landscape' && screen.orientation && typeof screen.orientation.lock === 'function') {
+      const p = screen.orientation.lock('landscape');
+      if (p && typeof p.catch === 'function') p.catch(function () {});
+      return true;
+    }
+    if (mode === 'portrait' && screen.orientation && typeof screen.orientation.lock === 'function') {
+      const p = screen.orientation.lock('portrait');
+      if (p && typeof p.catch === 'function') p.catch(function () {});
+      return true;
+    }
+    if ((!mode || mode === 'unlock') && screen.orientation && typeof screen.orientation.unlock === 'function') {
+      screen.orientation.unlock();
+    }
+  } catch (_) {}
+  return false;
+}
+function cancelAnimLiveOrientationRestore() {
+  try { if (typeof S !== 'undefined' && S._animLiveOriRestoreT) clearTimeout(S._animLiveOriRestoreT); } catch (_) {}
+  try { if (typeof S !== 'undefined') S._animLiveOriRestoreT = null; } catch (_) {}
+}
+/** Leave landscape live: force portrait first, then release to the activity default (sensor / unspecified). */
+function restoreAppOrientation() {
+  cancelAnimLiveOrientationRestore();
+  try {
+    if (typeof S !== 'undefined') {
+      S.animLiveOriIgnoreUntil = Date.now() + 1600;
+      if (!S._animLiveDidLockOri) return;
+    }
+  } catch (_) {}
+  lockAnimLiveOrientation('portrait');
+  try {
+    if (typeof window !== 'undefined' && window.JingcaiChrome && typeof window.JingcaiChrome.refreshSafeArea === 'function') {
+      window.JingcaiChrome.refreshSafeArea();
+    }
+  } catch (_) {}
+  try {
+    S._animLiveOriRestoreT = setTimeout(function () {
+      S._animLiveOriRestoreT = null;
+      lockAnimLiveOrientation('unlock');
+      try { S._animLiveDidLockOri = false; } catch (_) {}
+    }, 700);
+  } catch (_) {
+    lockAnimLiveOrientation('unlock');
+    try { S._animLiveDidLockOri = false; } catch (__) {}
+  }
+}
+function markAnimLiveOrientationLocked() {
+  try {
+    cancelAnimLiveOrientationRestore();
+    if (typeof S !== 'undefined') S._animLiveDidLockOri = true;
+  } catch (_) {}
+}
+function ensureAnimLiveLandHost() {
+  let el = document.getElementById('anim-live-land');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'anim-live-land';
+    el.className = 'anim-live-land hidden';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', '动画直播横屏');
+    el.setAttribute('aria-hidden', 'true');
+    (document.getElementById('app') || document.body).appendChild(el);
+  }
+  return el;
+}
+function ensureAnimLivePipHost() {
+  let el = document.getElementById('anim-live-pip');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'anim-live-pip';
+    el.className = 'anim-live-pip hidden';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', '动画直播小窗');
+    el.setAttribute('aria-hidden', 'true');
+    (document.getElementById('app') || document.body).appendChild(el);
+  }
+  return el;
+}
+function hideAnimLiveHost(el, keepNode) {
+  if (!el) return;
+  try { el.classList.add('hidden'); } catch (_) {}
+  try { el.setAttribute('aria-hidden', 'true'); } catch (_) {}
+  if (!keepNode) {
+    try {
+      const still = el.querySelector('.anim-live-stage, .pitch-live');
+      if (!still) el.innerHTML = '';
+    } catch (_) {}
+  }
+  try { if (typeof syncSheetScrollLock === 'function') syncSheetScrollLock(); } catch (_) {}
+}
+function animLiveCountdownParts(kickoffMs, now) {
+  if (!Number.isFinite(kickoffMs)) return null;
+  const t = now != null ? now : Date.now();
+  const left = kickoffMs - t;
+  if (left <= 0) return null;
+  let sec = Math.floor(left / 1000);
+  const days = Math.floor(sec / 86400); sec -= days * 86400;
+  const hours = Math.floor(sec / 3600); sec -= hours * 3600;
+  const mins = Math.floor(sec / 60);
+  const secs = sec - mins * 60;
+  return { days, hours, mins, secs };
+}
+function animLivePad2(n) {
+  return String(Math.max(0, Number(n) || 0)).padStart(2, '0');
+}
+function tickAnimLiveCountdown(now) {
+  const nodes = document.querySelectorAll('[data-anim-cd]');
+  if (!nodes.length) return;
+  const t = now != null ? now : Date.now();
+  const doneIds = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const el = nodes[i];
+    const ms = Number(el.getAttribute('data-anim-cd'));
+    const parts = animLiveCountdownParts(ms, t);
+    if (!parts) {
+      el.classList.add('is-done');
+      try {
+        const stage = el.closest && el.closest('.anim-live-stage');
+        const id = stage && String(stage.id || '').replace(/^anim-live-stage-/, '');
+        if (id) doneIds.push(id);
+      } catch (_) {}
+      continue;
+    }
+    const map = { days: parts.days, hours: parts.hours, mins: parts.mins, secs: parts.secs };
+    const units = el.querySelectorAll('[data-cd]');
+    for (let j = 0; j < units.length; j++) {
+      const u = units[j].getAttribute('data-cd');
+      const v = u === 'days' ? String(map.days) : animLivePad2(map[u]);
+      if (units[j].textContent !== v) units[j].textContent = v;
+    }
+  }
+  if (doneIds.length && !tickAnimLiveCountdown._painting) {
+    tickAnimLiveCountdown._painting = true;
+    try {
+      const seen = {};
+      for (let i = 0; i < doneIds.length; i++) {
+        const id = doneIds[i];
+        if (seen[id]) continue;
+        seen[id] = 1;
+        try { if (typeof paintAnimLiveStage === 'function') paintAnimLiveStage(id); } catch (_) {}
+      }
+    } finally {
+      tickAnimLiveCountdown._painting = false;
+    }
+  }
+}
+function animLiveH2hPageHtml(x) {
+  if (!x) return '';
+  const stats = (typeof S !== 'undefined' && S.statsCache)
+    ? S.statsCache[String(x.homeTeamId || '') + '|' + String(x.awayTeamId || '')]
+    : null;
+  const matches = stats && stats.h2h && stats.h2h.matches;
+  if (!matches || !matches.length) return '';
+  const list = matches.slice(0, 5);
+  const s = (typeof summarizeOutcomes === 'function')
+    ? summarizeOutcomes(list.map((m) => ({ forCurrentHome: m.forCurrentHome })))
+    : { w: 0, d: 0, l: 0 };
+  const cells = list.map((m) => {
+    const o = m.forCurrentHome;
+    const cls = o === 'W' ? 'w' : o === 'D' ? 'd' : 'l';
+    const lab = o === 'W' ? '胜' : o === 'D' ? '平' : '负';
+    return `<i class="${cls}">${esc(lab)}</i>`;
+  }).join('');
+  return `<div class="als-page" data-page="h2h"><div class="als-h2h"><div class="als-k">历史交手</div>
+    <div class="als-h2h-sum">${esc((x.home || '主队') + ' ' + (s.w || 0) + '胜' + (s.d || 0) + '平' + (s.l || 0) + '负')}</div>
+    <div class="als-form">${cells}</div></div></div>`;
+}
+function animLiveCountPageHtml(x, live) {
+  if (!x) return '';
+  const phase = (typeof pitchLivePhaseOf === 'function') ? pitchLivePhaseOf(x, live) : {};
+  if (animLivePhaseOf(x, live) !== 'ns') return '';
+  const kick = Number.isFinite(phase.kickoffMs) ? phase.kickoffMs : (typeof matchKickoffMs === 'function' ? matchKickoffMs(x) : NaN);
+  const parts = animLiveCountdownParts(kick, Date.now());
+  let cd = '';
+  if (parts) {
+    const cell = (k, lab, v) => `<div class="als-cd-cell"><b data-cd="${k}">${esc(v)}</b><span>${esc(lab)}</span></div>`;
+    cd = `<div class="als-cd" data-anim-cd="${esc(String(kick))}">
+      ${cell('days', '天', String(parts.days))}
+      ${cell('hours', '时', animLivePad2(parts.hours))}
+      ${cell('mins', '分', animLivePad2(parts.mins))}
+      ${cell('secs', '秒', animLivePad2(parts.secs))}
+    </div>`;
+  }
+  const pack = (typeof weatherPackOf === 'function') ? weatherPackOf(x) : null;
+  const venue = (typeof venueFromLive === 'function' ? venueFromLive(x) : null) || {};
+  const venueLab = [venue.name || (pack && pack.venueName), venue.city || (pack && pack.venueCity)].filter(Boolean).join(' · ');
+  const wx = pack && pack.ok && pack.labelZh ? pack.labelZh : '';
+  const meta = [];
+  if (venueLab) meta.push(`<div class="als-meta-row">场地 ${esc(venueLab)}</div>`);
+  if (wx) meta.push(`<div class="als-meta-row">天气 ${esc(wx)}</div>`);
+  if (!cd && !meta.length) return '';
+  return `<div class="als-page" data-page="count"><div class="als-k">开赛倒计时</div>${cd}${meta.join('')}</div>`;
+}
+function animLiveStandingsRowOf(x, side) {
+  if (!x || typeof S === 'undefined' || !S.dataCache) return null;
+  const tid = String((side === 'away' ? x.awayTeamId : x.homeTeamId) || '');
+  const name = side === 'away' ? (x.away || x.awayZh || '') : (x.home || x.homeZh || '');
+  const keys = Object.keys(S.dataCache);
+  for (let i = 0; i < keys.length; i++) {
+    if (!/standings$/.test(keys[i])) continue;
+    const payload = S.dataCache[keys[i]];
+    const tables = (payload && payload.tables) || [];
+    for (let t = 0; t < tables.length; t++) {
+      const rows = tables[t].rows || [];
+      let hit = tid ? rows.find((r) => String(r.teamId || '') === tid) : null;
+      if (!hit && name) hit = rows.find((r) => (r.teamZh || r.team) === name);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+function animLiveFormPageHtml(x) {
+  if (!x) return '';
+  const stats = (typeof S !== 'undefined' && S.statsCache)
+    ? S.statsCache[String(x.homeTeamId || '') + '|' + String(x.awayTeamId || '')]
+    : null;
+  const formDots = (form) => {
+    const list = (form && form.matches) ? form.matches.slice(0, 5) : [];
+    if (!list.length) return '';
+    return '<div class="als-form">' + list.map((m) => {
+      const o = m.outcome || m.forCurrentHome;
+      const cls = o === 'W' ? 'w' : o === 'D' ? 'd' : 'l';
+      const lab = o === 'W' ? '胜' : o === 'D' ? '平' : '负';
+      return `<i class="${cls}">${esc(lab)}</i>`;
+    }).join('') + '</div>';
+  };
+  const sideBlock = (side, form, name) => {
+    const row = animLiveStandingsRowOf(x, side);
+    const dots = formDots(form);
+    let table = '';
+    if (row && (row.played != null || row.points != null)) {
+      const cell = (lab, v) => `<span><b>${esc(v == null ? '—' : String(v))}</b>${esc(lab)}</span>`;
+      table = `<div class="als-table">${cell('赛', row.played)}${cell('胜', row.win)}${cell('平', row.draw)}${cell('负', row.lose)}${cell('Pts', row.points)}</div>`;
+    }
+    if (!dots && !table) return '';
+    return `<div class="als-side"><div class="als-name">${esc(name || '')}</div>${dots}${table}</div>`;
+  };
+  const home = sideBlock('home', stats && stats.homeForm, x.home);
+  const away = sideBlock('away', stats && stats.awayForm, x.away);
+  if (!home && !away) return '';
+  return `<div class="als-page als-recap als-sheet" data-page="form"><div class="als-k">赛季积分</div><div class="als-stand">${home}${away}</div></div>`;
+}
+function animLiveStatsOf(x) {
+  if (!x || typeof S === 'undefined' || !S.statsCache) return null;
+  return S.statsCache[String(x.homeTeamId || '') + '|' + String(x.awayTeamId || '')] || null;
+}
+function animLivePctLab(v) {
+  if (v == null || !Number.isFinite(Number(v))) return '';
+  const n = Number(v);
+  const pct = n <= 1 ? n * 100 : n;
+  const t = Math.round(pct * 100) / 100;
+  return (Number.isInteger(t) ? String(t) : t.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')) + '%';
+}
+function animLivePredWdlOf(x) {
+  const pack = (typeof smPredPackOf === 'function') ? smPredPackOf(x && x.id) : null;
+  if (!pack || pack.ok === false || pack._loading) return null;
+  if (pack.hasPredictions === false || !pack.wdl) return null;
+  const w = pack.wdl;
+  if (w.h == null && w.d == null && w.a == null) return null;
+  return { h: w.h, d: w.d, a: w.a, frozenAt: pack.frozenAt || null, noteZh: pack.noteZh || pack.frozenReason || '' };
+}
+function animLiveResultOf(x, live) {
+  const info = (typeof animLiveScoreOf === 'function') ? animLiveScoreOf(x, live) : {};
+  const h = info && info.home, a = info && info.away;
+  if (h == null || a == null || !Number.isFinite(Number(h)) || !Number.isFinite(Number(a))) return null;
+  const hn = Number(h), an = Number(a);
+  return { home: hn, away: an, label: hn > an ? '主胜' : hn < an ? '客胜' : '平局' };
+}
+function animLiveH2hSummaryOf(x) {
+  const stats = animLiveStatsOf(x);
+  const matches = stats && stats.h2h && stats.h2h.matches;
+  if (!matches || !matches.length) return null;
+  const sum = stats.h2h.summary || {};
+  let w = Number(sum.homeWins), d = Number(sum.draws), l = Number(sum.awayWins);
+  if (!Number.isFinite(w) || !Number.isFinite(d) || !Number.isFinite(l)) {
+    const s = (typeof summarizeOutcomes === 'function')
+      ? summarizeOutcomes(matches.map((m) => ({ forCurrentHome: m.forCurrentHome })))
+      : { w: 0, d: 0, l: 0 };
+    w = s.w || 0; d = s.d || 0; l = s.l || 0;
+  }
+  if (!(w + d + l)) return null;
+  return { w: w, d: d, l: l, n: matches.length };
+}
+function animLiveThisMatchGoalBins(x, live) {
+  const evs = (live && (live.events || live.important)) || [];
+  const labels = ['0-15', '15-30', '30-45', '45-60', '60-75', '75-90'];
+  const home = [0, 0, 0, 0, 0, 0], away = [0, 0, 0, 0, 0, 0];
+  let n = 0;
+  evs.forEach((e) => {
+    if (!e || e.kind !== 'goal') return;
+    const min = Number(e.elapsed);
+    if (!Number.isFinite(min)) return;
+    let i = Math.min(5, Math.max(0, Math.floor((min > 90 ? 90 : min) / 15)));
+    if (min === 0) i = 0;
+    if (e.side === 'away') away[i] += 1;
+    else if (e.side === 'home') home[i] += 1;
+    else return;
+    n += 1;
+  });
+  if (!n) return null;
+  return { labels: labels, home: home, away: away, scope: '本场', note: '本场进球按 15 分钟分段，加时计入 75-90' };
+}
+function animLiveGoalBinsOf(x, live) {
+  const own = animLiveThisMatchGoalBins(x, live);
+  if (own) return own;
+  const pack = (typeof mfPackOf === 'function') ? mfPackOf(x && x.id) : null;
+  const g = pack && pack.goalBins;
+  if (g && g.labels && ((g.home && g.home.some(Boolean)) || (g.away && g.away.some(Boolean)))) {
+    const lg = pack.leagueZh ? (pack.leagueZh + '，') : '';
+    return { labels: g.labels, home: g.home || [], away: g.away || [], scope: '近5场', note: lg + '近 5 场进球时间段，不含本场' };
+  }
+  return null;
+}
+function animLiveSeasonXgOf(x) {
+  const pack = (typeof mfPackOf === 'function') ? mfPackOf(x && x.id) : null;
+  const season = pack && pack.season;
+  if (!season || !season.length) return null;
+  const row = season.find((r) => r && r.name === '场均期望进球');
+  if (!row || (row.home == null && row.away == null)) return null;
+  return { home: row.home, away: row.away, mean: row.mean, label: '本赛季场均预期进球' };
+}
+function animLiveThisMatchXgOf(x) {
+  const surf = (typeof S !== 'undefined' && S.smSurface) ? S.smSurface[String((x && x.id) || '')] : null;
+  const card = surf && surf.xgCard;
+  if (card && card.ok && card.hasXg && card.home && card.away && (card.home.xg != null || card.away.xg != null)) {
+    return { home: card.home.xg, away: card.away.xg, source: card.sourceLabel || card.source || '' };
+  }
+  const live = (typeof S !== 'undefined' && S.liveStatsCache) ? S.liveStatsCache[String((x && x.id) || '')] : null;
+  const st = live && live.stats && live.stats.expectedGoals;
+  if (st && (st.home != null || st.away != null)) return { home: st.home, away: st.away, source: '本场技术统计' };
+  return null;
+}
+function animLiveXgFmt(v) {
+  if (v == null || !Number.isFinite(Number(v))) return '—';
+  return (Math.round(Number(v) * 100) / 100).toFixed(2);
+}
+function animLiveAxisShare(v, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0 || !max) return 0;
+  return Math.max(8, Math.min(100, (n / max) * 100));
+}
+function animLiveTinyCrest(x, side) {
+  if (!x || typeof badge !== 'function') return '';
+  const name = side === 'away' ? (x.away || x.awayZh || '') : (x.home || x.homeZh || '');
+  const logo = side === 'away' ? x.awayLogo : x.homeLogo;
+  const tid = side === 'away' ? x.awayTeamId : x.homeTeamId;
+  try {
+    return '<span class="als-crest">' + badge(name, 'sm', logo, tid ? { teamId: tid, eager: true } : null) + '</span>';
+  } catch (_) { return ''; }
+}
+function animLiveAxisColHtml(opts) {
+  const o = opts || {};
+  const max = Math.max(1, Number(o.homeRaw) || 0, Number(o.midRaw) || 0, Number(o.awayRaw) || 0);
+  const up = animLiveAxisShare(o.homeRaw, max);
+  const down = animLiveAxisShare(o.awayRaw, max);
+  const lab = (val, name, cls) => `<div class="als-axis-lab ${cls}"><b>${esc(val)}</b><span>${esc(name || '')}</span></div>`;
+  const track = (cls, share) => `<div class="als-axis-track"><i class="als-axis-bar ${cls}" style="--p:${share.toFixed(1)}%"></i></div>`;
+  return `<div class="als-axis">
+    <div class="als-axis-k">${esc(o.title || '')}</div>
+    ${lab(o.homeVal, o.homeName, 'is-home')}
+    <div class="als-axis-up">${track('is-home', up)}</div>
+    <div class="als-axis-mid"><span>平局</span><b>${esc(o.midVal || '')}</b></div>
+    <div class="als-axis-down">${track('is-away', down)}</div>
+    ${lab(o.awayVal, o.awayName, 'is-away')}
+  </div>`;
+}
+function animLiveComparePageHtml(x, live) {
+  const wdl = animLivePredWdlOf(x);
+  const h2h = animLiveH2hSummaryOf(x);
+  if (!wdl && !h2h) return '';
+  const home = (x && (x.home || x.homeZh)) || '主队';
+  const away = (x && (x.away || x.awayZh)) || '客队';
+  const cols = [];
+  if (h2h) {
+    cols.push(animLiveAxisColHtml({
+      title: '历史交手', homeName: home, awayName: away,
+      homeVal: String(h2h.w), midVal: String(h2h.d), awayVal: String(h2h.l),
+      homeRaw: h2h.w, midRaw: h2h.d, awayRaw: h2h.l,
+    }));
+  }
+  if (wdl) {
+    const hv = Number(wdl.h) <= 1 ? Number(wdl.h) * 100 : Number(wdl.h);
+    const dv = Number(wdl.d) <= 1 ? Number(wdl.d) * 100 : Number(wdl.d);
+    const av = Number(wdl.a) <= 1 ? Number(wdl.a) * 100 : Number(wdl.a);
+    cols.push(animLiveAxisColHtml({
+      title: '预测胜率', homeName: home, awayName: away,
+      homeVal: animLivePctLab(wdl.h), midVal: animLivePctLab(wdl.d), awayVal: animLivePctLab(wdl.a),
+      homeRaw: hv, midRaw: dv, awayRaw: av,
+    }));
+  }
+  const res = animLiveResultOf(x, live);
+  const lg = (x && (x.leagueZh || x.league || x.leagueName)) || '';
+  const when = [x && x.date, x && x.time].filter(Boolean).join(' ');
+  const meta = [lg, when].filter(Boolean).join(' · ');
+  const actual = res ? `<div class="als-actual">完场 ${esc(String(res.home))}-${esc(String(res.away))}</div>` : '';
+  const hd = `<div class="als-compare-hd">
+    <div class="als-compare-teams">${animLiveTinyCrest(x, 'home')}<span>${esc(home)}</span><i>VS</i><span>${esc(away)}</span>${animLiveTinyCrest(x, 'away')}</div>
+    ${actual}${meta ? `<div class="als-compare-meta">${esc(meta)}</div>` : ''}
+  </div>`;
+  return `<div class="als-page als-recap als-compare" data-page="compare">${hd}<div class="als-axis-pair${cols.length === 1 ? ' is-solo' : ''}">${cols.join('')}</div></div>`;
+}
+function animLiveVcmpHtml(cols) {
+  // Kept as a thin adapter for older single-metric callers; new recap uses the axis.
+  const list = (cols || []).filter((c) => c && (c.value != null || c.count != null));
+  if (!list.length) return '';
+  const pick = (cls) => list.find((c) => c.cls === cls) || {};
+  const raw = (c) => (c.count != null ? Number(c.count) : (Number(c.value) <= 1 ? Number(c.value) * 100 : Number(c.value)));
+  const val = (c) => (c.count != null ? String(c.count) : animLivePctLab(c.value));
+  const h = pick('is-home'), d = pick('is-draw'), a = pick('is-away');
+  return animLiveAxisColHtml({
+    title: '', homeName: h.label, awayName: a.label,
+    homeVal: val(h), midVal: val(d), awayVal: val(a),
+    homeRaw: raw(h), midRaw: raw(d), awayRaw: raw(a),
+  });
+}
+function animLivePredPageHtml(x, live) {
+  return animLiveComparePageHtml(x, live);
+}
+function animLiveH2hBarsPageHtml(x) {
+  if (animLivePredWdlOf(x)) return '';
+  return animLiveComparePageHtml(x, null);
+}
+function animLiveGoalBinsPageHtml(x, live) {
+  const g = animLiveGoalBinsOf(x, live);
+  if (!g) return '';
+  const home = (x && (x.home || x.homeZh)) || '主队';
+  const away = (x && (x.away || x.awayZh)) || '客队';
+  const max = Math.max(1, ...[...(g.home || []), ...(g.away || [])].map(Number).filter(Number.isFinite));
+  const ticks = (g.labels || []).map((lab) => `<span>${esc(String(lab).replace(/-/, '–'))}</span>`).join('');
+  const seg = (side, arr) => {
+    const cells = (g.labels || []).map((_, i) => {
+      const v = Number(arr[i]) || 0;
+      const flex = Math.max(v, 0.15);
+      return `<i class="${side}" style="flex:${flex.toFixed(2)}">${esc(String(v))}</i>`;
+    }).join('');
+    return `<div class="als-seg-bar is-${side}">${cells}</div>`;
+  };
+  const sumH = (g.home || []).reduce((a, b) => a + (Number(b) || 0), 0);
+  const sumA = (g.away || []).reduce((a, b) => a + (Number(b) || 0), 0);
+  const note = g.scope === '本场' ? '本场进球按 15 分钟分段' : (g.note || (g.scope ? (g.scope + '，不含本场') : ''));
+  return `<div class="als-page als-recap als-sheet" data-page="bins"><div class="als-k">进球分布${g.scope ? ' · ' + esc(g.scope) : ''}</div>
+    <div class="als-seg">
+      <div class="als-seg-lab is-home">${animLiveTinyCrest(x, 'home')}<span>${esc(home)}</span><b>${esc(String(sumH))}</b></div>
+      ${seg('home', g.home || [])}
+      <div class="als-seg-ticks">${ticks}</div>
+      ${seg('away', g.away || [])}
+      <div class="als-seg-lab is-away">${animLiveTinyCrest(x, 'away')}<span>${esc(away)}</span><b>${esc(String(sumA))}</b></div>
+    </div>
+    ${note ? `<div class="als-src">${esc(note)}</div>` : ''}</div>`;
+}
+function animLiveXgPageHtml(x) {
+  const matchXg = animLiveThisMatchXgOf(x);
+  const seasonXg = animLiveSeasonXgOf(x);
+  if (!matchXg && !seasonXg) return '';
+  const home = (x && (x.home || x.homeZh)) || '主队';
+  const away = (x && (x.away || x.awayZh)) || '客队';
+  const rows = [];
+  if (matchXg) {
+    rows.push(`<tr><th>本场 xG</th><td class="h">${esc(animLiveXgFmt(matchXg.home))}</td><td class="a">${esc(animLiveXgFmt(matchXg.away))}</td></tr>`);
+  }
+  if (seasonXg) {
+    rows.push(`<tr><th>${esc(seasonXg.label)}</th><td class="h">${esc(animLiveXgFmt(seasonXg.home))}</td><td class="a">${esc(animLiveXgFmt(seasonXg.away))}</td></tr>`);
+  }
+  const foot = (seasonXg && seasonXg.mean != null)
+    ? `<div class="als-src">本赛季 · 联赛场均 ${esc(animLiveXgFmt(seasonXg.mean))}</div>` : '';
+  return `<div class="als-page als-recap als-sheet" data-page="xg"><div class="als-k">预期进球</div>
+    <table class="als-xg-table"><thead><tr><th></th><th>${esc(home)}</th><th>${esc(away)}</th></tr></thead><tbody>${rows.join('')}</tbody></table>
+    ${foot}</div>`;
+}
+function animLiveTablePageHtml(x) {
+  const home = animLiveStandingsRowOf(x, 'home');
+  const away = animLiveStandingsRowOf(x, 'away');
+  if (!home && !away) return '';
+  // If the form/standings sheet already painted these rows, skip a second identical page.
+  const stats = animLiveStatsOf(x);
+  const hasForm = !!(stats && ((stats.homeForm && stats.homeForm.matches && stats.homeForm.matches.length) || (stats.awayForm && stats.awayForm.matches && stats.awayForm.matches.length)));
+  if (hasForm) return '';
+  const row = (r, name) => {
+    if (!r) return '';
+    const form = (r.form || r.formDots || '');
+    const dots = form ? `<div class="als-form">${String(form).split('').slice(0, 5).map((ch) => {
+      const u = String(ch).toUpperCase();
+      const cls = u === 'W' ? 'w' : u === 'D' ? 'd' : (u === 'L' ? 'l' : '');
+      const lab = u === 'W' ? '胜' : u === 'D' ? '平' : (u === 'L' ? '负' : esc(ch));
+      return cls ? `<i class="${cls}">${lab}</i>` : '';
+    }).join('')}</div>` : '';
+    const cell = (lab, v) => `<span><b>${esc(v == null ? '—' : String(v))}</b>${esc(lab)}</span>`;
+    const pos = r.rank != null ? r.rank : r.position;
+    return `<div class="als-side"><div class="als-name">${pos != null ? ('#' + esc(String(pos)) + ' ') : ''}${esc(name || r.teamZh || r.team || '')}</div>
+      ${dots}
+      <div class="als-table">${cell('赛', r.played)}${cell('胜', r.win)}${cell('平', r.draw)}${cell('负', r.lose)}${cell('Pts', r.points)}</div></div>`;
+  };
+  const body = row(home, x && x.home) + row(away, x && x.away);
+  if (!body) return '';
+  return `<div class="als-page als-recap als-sheet" data-page="table"><div class="als-k">积分排名</div>${body}</div>`;
+}
+function animLiveRecapPagesHtml(x, live) {
+  return [
+    animLiveComparePageHtml(x, live),
+    animLiveFormPageHtml(x),
+    animLiveGoalBinsPageHtml(x, live),
+    animLiveXgPageHtml(x),
+    animLiveTablePageHtml(x),
+  ].filter(Boolean);
+}
+function animLiveRecapMetaHtml(x) {
+  if (!x) return '';
+  const lg = x.leagueZh || x.league || x.leagueName || '';
+  const when = [x.date || '', x.time || ''].filter(Boolean).join(' ');
+  const bits = [lg, when].filter(Boolean);
+  if (!bits.length) return '';
+  return `<div class="anim-live-recap-meta">${esc(bits.join(' · '))}</div>`;
+}
+function animLiveRecapEmptyHtml() {
+  return `<div class="als-page als-recap" data-page="empty"><div class="als-k">赛后数据</div><div class="als-empty">本场暂无可用的赛后数据。不编造预测、交手、进球分布或 xG。</div></div>`;
+}
+function ensureAnimLiveRecapData(x) {
+  if (!x || !x.id) return;
+  const key = String(x.id);
+  const refresh = function () {
+    try { if (typeof paintAnimLiveStage === 'function') paintAnimLiveStage(key); } catch (_) {}
+  };
+  const jobs = [];
+  try { if (typeof ensureSmPredictions === 'function') jobs.push(Promise.resolve(ensureSmPredictions(x))); } catch (_) {}
+  try { if (typeof loadMatchStats === 'function') jobs.push(Promise.resolve(loadMatchStats(x))); } catch (_) {}
+  try { if (typeof ensureSmMatchfacts === 'function') jobs.push(Promise.resolve(ensureSmMatchfacts(x))); } catch (_) {}
+  try { if (typeof ensureSmSurface === 'function') jobs.push(Promise.resolve(ensureSmSurface(x))); } catch (_) {}
+  if (!jobs.length) return;
+  Promise.all(jobs).then(refresh, refresh);
+}
+function animLiveCardsHtml(x, live) {
+  if (!x) return '';
+  const phase = animLivePhaseOf(x, live);
+  let pages;
+  if (phase === 'ft') {
+    pages = animLiveRecapPagesHtml(x, live);
+    if (!pages.length) pages = [animLiveRecapEmptyHtml()];
+  } else if (phase === 'ns') {
+    pages = [animLiveH2hPageHtml(x), animLiveCountPageHtml(x, live)].filter(Boolean);
+  } else {
+    return '';
+  }
+  if (!pages.length) return '';
+  const dots = pages.length > 1
+    ? `<div class="anim-live-dots">${pages.map((_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div>`
+    : '';
+  return `<div class="anim-live-cards" id="anim-live-cards-${esc(String(x.id || ''))}">
+    <div class="anim-live-track">${pages.join('')}</div>
+    ${dots}
+  </div>`;
+}
+function animLiveNamesHtml(x, live) {
+  const home = (x && (x.home || x.homeZh)) || '';
+  const away = (x && (x.away || x.awayZh)) || '';
+  if (!home && !away) return '';
+  const finished = (typeof animLivePhaseOf === 'function' && animLivePhaseOf(x, live) === 'ft')
+    || (typeof isAnimLiveClosedPhase === 'function' && isAnimLiveClosedPhase(x));
+  const res = finished && typeof animLiveResultOf === 'function' ? animLiveResultOf(x, live) : null;
+  const when = finished ? [x && x.date, x && x.time].filter(Boolean).join(' ') : '';
+  const gutter = finished ? `<div class="als-gutter"><b>VS</b>${res ? `<span class="als-gutter-score">${esc(String(res.home))}-${esc(String(res.away))}</span>` : ''}${when ? `<span class="als-gutter-when">${esc(when)}</span>` : ''}</div>` : '';
+  const hCrest = finished ? animLiveTinyCrest(x, 'home') : '';
+  const aCrest = finished ? animLiveTinyCrest(x, 'away') : '';
+  return `<div class="anim-live-names${finished ? ' is-recap' : ''}" aria-hidden="true"><span class="is-home">${hCrest}<em>${esc(home)}</em></span>${gutter}<span class="is-away">${aCrest}<em>${esc(away)}</em></span></div>`;
+}
+function animLiveIconSvg(kind) {
+  if (kind === 'rotate') {
+    return '<svg class="als-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8.2" y="2.8" width="8.6" height="14.8" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M11 16.4h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6.2 13.2c-2.2 1.1-3.2 3.6-2.2 5.7 1.1 2.3 3.9 3.2 6.2 2.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M5.1 11.8l2.4.5-1.5 2.1z" fill="currentColor"/></svg>';
+  }
+  if (kind === 'expand') {
+    return '<svg class="als-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.8" y="6.8" width="14.4" height="10.4" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9 9.2L6.8 7m0 0H9.1M6.8 7v2.3M15 9.2L17.2 7m0 0H15M17.2 7v2.3M9 14.8L6.8 17m0 0H9.1M6.8 17v-2.3M15 14.8L17.2 17m0 0H15M17.2 17v-2.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  if (kind === 'collapse') {
+    return '<svg class="als-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.8" y="5.8" width="16.4" height="12.4" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9 10H5.8V6.8M15 10h3.2V6.8M9 14H5.8v3.2M15 14h3.2v3.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  if (kind === 'pip') {
+    return '<svg class="als-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.8" y="6" width="16.4" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="11.6" y="11" width="6.8" height="5" rx="1" fill="currentColor"/></svg>';
+  }
+  if (kind === 'close') {
+    return '<svg class="als-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 6.6l10.8 10.8M17.4 6.6L6.6 17.4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+  }
+  return '';
+}
+function animLiveCtrlsHtml(id, mode) {
+  const key = esc(String(id || ''));
+  const m = mode || 'docked';
+  const pipLab = m === 'pip' ? '退出小窗' : '小窗模式';
+  const pipBtn = `<button type="button" class="als-btn als-ico-btn als-pip" data-act="animLivePip" data-id="${key}" aria-label="${pipLab}">${animLiveIconSvg('pip')}</button>`;
+  const closeBtn = `<button type="button" class="als-btn als-ico-btn als-x" data-act="animLiveClose" data-id="${key}" aria-label="关闭">${animLiveIconSvg('close')}</button>`;
+  const end = `<div class="als-ctrls-end">${pipBtn}${closeBtn}</div>`;
+  if (m === 'landscape') {
+    return `<div class="anim-live-ctrls als-ctrls-ios">
+    <button type="button" class="als-btn als-ico-btn als-land" data-act="animLiveLand" data-id="${key}" aria-label="退出横屏">${animLiveIconSvg('collapse')}</button>
+    ${end}
+  </div>`;
+  }
+  const expandBtn = m === 'pip' ? ''
+    : `<button type="button" class="als-btn als-ico-btn als-expand" data-act="animLiveLand" data-id="${key}" aria-label="全屏观看">${animLiveIconSvg('expand')}</button>`;
+  return `<div class="anim-live-ctrls als-ctrls-ios">${expandBtn}${end}</div>`;
+}
+function animLiveScoreOf(x, live) {
+  const id = String((x && x.id) || '');
+  const ls = (typeof S !== 'undefined' && S.liveScores) ? S.liveScores[id] : null;
+  const st = (live && live.status) || {};
+  let home = null, away = null;
+  if (live && live.score && live.score.home != null && live.score.away != null) {
+    home = live.score.home;
+    away = live.score.away;
+  } else if (ls && ls.homeScore != null && ls.awayScore != null) {
+    home = ls.homeScore;
+    away = ls.awayScore;
+  }
+  const short = String(st.short || (ls && ls.phase) || '');
+  const elapsed = st.elapsed != null ? st.elapsed : (ls && ls.minute);
+  const extra = st.extra != null ? st.extra : (ls && ls.minuteExtra);
+  let phaseLab = '';
+  if (typeof liveStatusZh === 'function' && (st.short || short)) {
+    phaseLab = liveStatusZh(st.short || short, elapsed);
+  } else if (ls && ls.phaseZh) {
+    phaseLab = String(ls.phaseZh);
+    if (elapsed != null && !/\d/.test(phaseLab) && /上半场|下半场|加时|进行中/.test(phaseLab)) {
+      const min = (typeof formatLiveClockMinute === 'function')
+        ? formatLiveClockMinute(phaseLab, elapsed, extra)
+        : (String(elapsed) + "'");
+      if (min) phaseLab = phaseLab + ' ' + min;
+    }
+  }
+  const num = (v) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null);
+  const stats = (live && live.stats) || {};
+  let yh = num(stats.yellowCards && stats.yellowCards.home);
+  let ya = num(stats.yellowCards && stats.yellowCards.away);
+  let rh = num(stats.redCards && stats.redCards.home);
+  let ra = num(stats.redCards && stats.redCards.away);
+  const lc = ls && ls.cards;
+  if (yh == null && lc && lc.yellow) yh = num(lc.yellow.home);
+  if (ya == null && lc && lc.yellow) ya = num(lc.yellow.away);
+  if (rh == null && lc && lc.red) rh = num(lc.red.home);
+  if (ra == null && lc && lc.red) ra = num(lc.red.away);
+  return { home, away, phaseLab, short, elapsed, extra, yellowHome: yh, yellowAway: ya, redHome: rh, redAway: ra };
+}
+function animLiveScorebarHtml(x, live, mode) {
+  if (!x) return '';
+  const m = mode || 'docked';
+  if (m !== 'landscape' && m !== 'pip' && m !== 'docked') return '';
+  const phase = animLivePhaseOf(x, live);
+  if (phase !== 'live' && phase !== 'ft') return '';
+  const info = animLiveScoreOf(x, live);
+  const homeName = (x.home || x.homeZh) || '';
+  const awayName = (x.away || x.awayZh) || '';
+  let homeCrest = '', awayCrest = '';
+  if (typeof badge === 'function') {
+    homeCrest = badge(homeName, 'sm', x.homeLogo, x.homeTeamId ? { teamId: x.homeTeamId, eager: true } : null);
+    awayCrest = badge(awayName, 'sm', x.awayLogo, x.awayTeamId ? { teamId: x.awayTeamId, eager: true } : null);
+  }
+  const score = (info.home != null && info.away != null)
+    ? (esc(String(info.home)) + '-' + esc(String(info.away)))
+    : '—';
+  const phaseHtml = info.phaseLab ? `<div class="als-sb-phase">${esc(info.phaseLab)}</div>` : '';
+  const ticks = (y, r) => {
+    let s = '';
+    if (y != null && y > 0) s += `<i class="als-sb-yc" title="黄牌">${esc(String(y))}</i>`;
+    if (r != null && r > 0) s += `<i class="als-sb-rc" title="红牌">${esc(String(r))}</i>`;
+    return s ? `<span class="als-sb-tcc">${s}</span>` : '';
+  };
+  const homeTicks = m === 'pip' ? '' : ticks(info.yellowHome, info.redHome);
+  const awayTicks = m === 'pip' ? '' : ticks(info.yellowAway, info.redAway);
+  return `<div class="anim-live-scorebar${m === 'pip' ? ' is-thin' : ''}" id="anim-live-scorebar-${esc(String(x.id || ''))}">
+    <div class="als-sb-side is-home">${homeCrest}<span class="als-sb-name">${esc(homeName)}</span>${homeTicks}</div>
+    <div class="als-sb-mid"><div class="als-sb-score">${score}</div>${phaseHtml}</div>
+    <div class="als-sb-side is-away">${awayTicks}<span class="als-sb-name">${esc(awayName)}</span>${awayCrest}</div>
+  </div>`;
+}
+function animLiveStageInnerHtml(x, live, mode) {
+  const id = String((x && x.id) || '');
+  const m = mode || 'docked';
+  const wantPitch = animLiveWantPitch(x, live);
+  const visualInner = wantPitch
+    ? (typeof pitchLiveShellHtml === 'function' ? pitchLiveShellHtml(x) : '')
+    : '<div class="anim-live-recap-bg" aria-hidden="true"></div>';
+  return `<div class="anim-live-visual" id="anim-live-visual-${esc(id)}">${visualInner}</div>`
+    + animLiveNamesHtml(x, live)
+    + (wantPitch ? '' : animLiveRecapMetaHtml(x))
+    + animLiveCardsHtml(x, live)
+    + animLiveScorebarHtml(x, live, m)
+    + animLiveCtrlsHtml(id, m);
+}
+function bindAnimLiveSwipe(stage) {
+  if (!stage) return;
+  const track = stage.querySelector('.anim-live-track');
+  if (!track || track.dataset.bound === '1') return;
+  track.dataset.bound = '1';
+  const syncDots = () => {
+    const pages = track.querySelectorAll('.als-page');
+    const dots = stage.querySelectorAll('.anim-live-dots i');
+    if (!pages.length || !dots.length) return;
+    const w = track.clientWidth || 1;
+    const idx = Math.max(0, Math.min(pages.length - 1, Math.round(track.scrollLeft / w)));
+    for (let i = 0; i < dots.length; i++) dots[i].classList.toggle('on', i === idx);
+  };
+  track.addEventListener('scroll', syncDots, { passive: true });
+}
+function syncAnimLiveSlot(stage, sel, html) {
+  if (!stage) return;
+  const el = stage.querySelector(sel);
+  if (html) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const next = tmp.firstElementChild;
+    if (!next) return;
+    if (el) el.replaceWith(next);
+    else {
+      const ctrls = stage.querySelector('.anim-live-ctrls');
+      if (ctrls) stage.insertBefore(next, ctrls);
+      else stage.appendChild(next);
+    }
+  } else if (el) {
+    el.remove();
+  }
+}
+function paintAnimLiveStage(id) {
+  const key = String(id || '');
+  const stage = document.getElementById('anim-live-stage-' + key);
+  if (!stage) return;
+  const x = (typeof matchByPitchId === 'function') ? matchByPitchId(key) : null;
+  const live = (typeof S !== 'undefined' && S.liveStatsCache) ? S.liveStatsCache[key] : null;
+  const mode = animLiveModeOf(key);
+  const phase = x ? animLivePhaseOf(x, live) : 'ns';
+  stage.setAttribute('data-mode', mode);
+  stage.setAttribute('data-phase', phase);
+  syncAnimLiveSlot(stage, '.anim-live-cards', x ? animLiveCardsHtml(x, live) : '');
+  syncAnimLiveSlot(stage, '.anim-live-scorebar', x ? animLiveScorebarHtml(x, live, mode) : '');
+  const ctrls = stage.querySelector('.anim-live-ctrls');
+  if (ctrls) ctrls.outerHTML = animLiveCtrlsHtml(key, mode);
+  bindAnimLiveSwipe(document.getElementById('anim-live-stage-' + key));
+  try { tickAnimLiveCountdown(); } catch (_) {}
+}
+function ensureAnimLiveStage(id, x) {
+  const key = String(id || '');
+  let wrap = document.getElementById('anim-live-stage-' + key);
+  const host = document.getElementById('hero-anim-stage-' + key);
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.className = 'anim-live-stage';
+    wrap.id = 'anim-live-stage-' + key;
+    const live = (typeof S !== 'undefined' && S.liveStatsCache) ? S.liveStatsCache[key] : null;
+    const mode0 = animLiveModeOf(key);
+    wrap.innerHTML = `<div class="anim-live-visual" id="anim-live-visual-${esc(key)}"></div>`
+      + (x ? (animLiveNamesHtml(x, live) + animLiveCardsHtml(x, live) + animLiveScorebarHtml(x, live, mode0) + animLiveCtrlsHtml(key, mode0)) : animLiveCtrlsHtml(key, 'docked'));
+    if (host) host.appendChild(wrap);
+  }
+  wrap.setAttribute('data-mode', animLiveModeOf(key));
+  if (x) wrap.setAttribute('data-phase', animLivePhaseOf(x, (S.liveStatsCache && S.liveStatsCache[key]) || null));
+  if (host && wrap.parentNode !== host && animLiveModeOf(key) === 'docked') {
+    try { host.appendChild(wrap); } catch (_) {}
+  }
+  const visual = document.getElementById('anim-live-visual-' + key) || wrap.querySelector('.anim-live-visual');
+  let pitch = document.getElementById('pitch-live-' + key);
+  if (visual) {
+    if (pitch && pitch.parentNode !== visual) {
+      try { visual.appendChild(pitch); } catch (_) {}
+    }
+    const live0 = (S.liveStatsCache && S.liveStatsCache[key]) || null;
+    const wantPitch = x ? animLiveWantPitch(x, live0) : false;
+    if (wantPitch && !document.getElementById('pitch-live-' + key) && x) {
+      visual.innerHTML = pitchLiveShellHtml(x);
+    }
+    if (!wantPitch && visual && !visual.querySelector('.anim-live-recap-bg')) {
+      const leftover = document.getElementById('pitch-live-' + key);
+      if (leftover) { try { leftover.remove(); } catch (_) {} }
+      visual.innerHTML = '<div class="anim-live-recap-bg" aria-hidden="true"></div>';
+    }
+  }
+  bindAnimLiveSwipe(wrap);
+  bindAnimLiveOrientation();
+  return wrap;
+}
+function unstickMatchHeroForAnimLive(on) {
+  const wrap = document.querySelector('#view.view.md-wrap, #view.view.md-wrap--review, #view');
+  if (!wrap) return;
+  wrap.classList.toggle('is-anim-live', !!on);
+  if (on) {
+    wrap.classList.remove('is-hero-stuck');
+    const sticky = wrap.querySelector('.hero-sticky');
+    if (sticky) sticky.setAttribute('aria-hidden', 'true');
+  }
+}
+function resizeAnimLivePitch(id) {
+  const key = String(id || '');
+  const el = document.getElementById('pitch-live-' + key);
+  if (!el) return;
+  try {
+    const api = window.JCPitchLive;
+    const inst = api && (api.get ? api.get(el) : (api.instances && api.instances.get && api.instances.get(el)));
+    if (inst && inst.cam) inst.cam.init = false;
+    if (api && typeof api.resize === 'function') api.resize(el);
+    else if (inst && typeof inst.resize === 'function') inst.resize();
+  } catch (_) {}
+}
+function relayoutAnimLiveAfterMode(id, mode) {
+  const key = String(id || '');
+  const on = typeof isAnimLiveOn === 'function' && isAnimLiveOn(key);
+  try { unstickMatchHeroForAnimLive(!!on); } catch (_) {}
+  try { if (typeof syncMatchHeroSticky === 'function') syncMatchHeroSticky(); } catch (_) {}
+  const tick = function () {
+    try { unstickMatchHeroForAnimLive(!!on); } catch (_) {}
+    try { resizeAnimLivePitch(key); } catch (_) {}
+    try { if (typeof syncMatchHeroSticky === 'function') syncMatchHeroSticky(); } catch (_) {}
+  };
+  tick();
+  try {
+    requestAnimationFrame(function () {
+      tick();
+      requestAnimationFrame(tick);
+    });
+  } catch (_) {}
+}
+function placeAnimLiveStage(id, mode) {
+  const key = String(id || '');
+  const wrap = document.getElementById('anim-live-stage-' + key);
+  if (!wrap) return;
+  const want = mode === 'landscape' || mode === 'pip' ? mode : 'docked';
+  const prev = (S.animLiveMode && S.animLiveMode[key]) || 'docked';
+  S.animLiveMode = S.animLiveMode || {};
+  S.animLiveMode[key] = want;
+  wrap.setAttribute('data-mode', want);
+  const land = ensureAnimLiveLandHost();
+  const pip = ensureAnimLivePipHost();
+  if (want === 'landscape') {
+    if (wrap.parentNode !== land) {
+      try { land.appendChild(wrap); } catch (_) {}
+    }
+    try { pip.classList.add('hidden'); pip.setAttribute('aria-hidden', 'true'); } catch (_) {}
+    try { land.classList.remove('hidden'); land.setAttribute('aria-hidden', 'false'); } catch (_) {}
+    markAnimLiveOrientationLocked();
+    lockAnimLiveOrientation('landscape');
+  } else if (want === 'pip') {
+    if (wrap.parentNode !== pip) {
+      try { pip.appendChild(wrap); } catch (_) {}
+    }
+    try { land.classList.add('hidden'); land.setAttribute('aria-hidden', 'true'); } catch (_) {}
+    try { pip.classList.remove('hidden'); pip.setAttribute('aria-hidden', 'false'); } catch (_) {}
+    if (prev === 'landscape') restoreAppOrientation();
+    else lockAnimLiveOrientation('unlock');
+  } else {
+    const host = document.getElementById('hero-anim-stage-' + key);
+    if (host && wrap.parentNode !== host) {
+      try { host.appendChild(wrap); } catch (_) {}
+    }
+    hideAnimLiveHost(land, false);
+    hideAnimLiveHost(pip, false);
+    if (prev === 'landscape' || (typeof S !== 'undefined' && S._animLiveDidLockOri)) restoreAppOrientation();
+    else lockAnimLiveOrientation('unlock');
+  }
+  try { if (typeof syncSheetScrollLock === 'function') syncSheetScrollLock(); } catch (_) {}
+  try { if (typeof syncPitchLiveMotion === 'function') syncPitchLiveMotion(); } catch (_) {}
+  paintAnimLiveStage(key);
+  try { relayoutAnimLiveAfterMode(key, want); } catch (_) {}
+}
+function setAnimLiveMode(id, mode) {
+  const key = String(id || '');
+  if (!isAnimLiveOn(key) && mode !== 'docked') return;
+  placeAnimLiveStage(key, mode);
+}
+function closeAnimLiveLandscape() {
+  const land = document.getElementById('anim-live-land');
+  if (!land || land.classList.contains('hidden')) return false;
+  const wrap = land.querySelector('.anim-live-stage');
+  const id = wrap && String(wrap.id || '').replace(/^anim-live-stage-/, '');
+  if (id) setAnimLiveMode(id, 'docked');
+  else {
+    hideAnimLiveHost(land, false);
+    restoreAppOrientation();
+  }
+  return true;
+}
+function closeAnimLivePip() {
+  const pip = document.getElementById('anim-live-pip');
+  if (!pip || pip.classList.contains('hidden')) return false;
+  const wrap = pip.querySelector('.anim-live-stage');
+  const id = wrap && String(wrap.id || '').replace(/^anim-live-stage-/, '');
+  if (id) setAnimLiveMode(id, 'docked');
+  else hideAnimLiveHost(pip, false);
+  return true;
+}
+function tearDownAnimLiveModes(id, forceOff) {
+  const key = String(id || '');
+  const wrap = document.getElementById('anim-live-stage-' + key);
+  const host = document.getElementById('hero-anim-stage-' + key);
+  if (wrap && host && wrap.parentNode !== host) {
+    try { host.appendChild(wrap); } catch (_) {}
+  }
+  hideAnimLiveHost(document.getElementById('anim-live-land'), false);
+  hideAnimLiveHost(document.getElementById('anim-live-pip'), false);
+  restoreAppOrientation();
+  try { unstickMatchHeroForAnimLive(false); } catch (_) {}
+  if (forceOff) {
+    S.animLiveMode = S.animLiveMode || {};
+    S.animLiveMode[key] = 'docked';
+  }
+}
+function bindAnimLiveOrientation() {
+  if (typeof window === 'undefined' || window.__animLiveOriBound) return;
+  window.__animLiveOriBound = true;
+  let lastLand = null;
+  try { lastLand = !!(window.matchMedia && window.matchMedia('(orientation: landscape)').matches); } catch (_) { lastLand = false; }
+  const onOri = function () {
+    let now = lastLand;
+    try { now = !!(window.matchMedia && window.matchMedia('(orientation: landscape)').matches); } catch (_) {}
+    if (now === lastLand) return;
+    lastLand = now;
+    try {
+      if (typeof S !== 'undefined' && S.animLiveOriIgnoreUntil && Date.now() < S.animLiveOriIgnoreUntil) return;
+      const r = (typeof route === 'function') ? route() : {};
+      if (!r || r.name !== 'match' || !isAnimLiveOn(r.arg)) return;
+      const mode = animLiveModeOf(r.arg);
+      /* Do not auto-enter landscape fullscreen from docked (t1368 / t1386). */
+      if (!now && mode === 'landscape') setAnimLiveMode(r.arg, 'docked');
+    } catch (_) {}
+  };
+  try { window.addEventListener('orientationchange', onOri); } catch (_) {}
+  try {
+    if (window.matchMedia) window.matchMedia('(orientation: landscape)').addEventListener('change', onOri);
+  } catch (_) {}
+}
+function pitchLivePark() {
+  let park = document.getElementById('pitch-live-park');
+  if (!park) {
+    park = document.createElement('div');
+    park.id = 'pitch-live-park';
+    park.hidden = true;
+    park.setAttribute('aria-hidden', 'true');
+    (document.getElementById('app') || document.body).appendChild(park);
+  }
+  return park;
+}
+function parkPitchLive(id) {
+  const el = document.getElementById('pitch-live-' + String(id || ''));
+  if (!el) return null;
+  try { pitchLivePark().appendChild(el); } catch (_) {}
+  return el;
+}
+function matchByPitchId(id) {
+  const key = String(id || '');
+  return (typeof findMatch === 'function' && findMatch(key))
+    || ((S.results || []).find((z) => String(z.id) === key))
+    || (typeof loadFxShell === 'function' && loadFxShell(key))
+    || null;
+}
+function syncHeroAnimLive(id) {
+  const key = String(id || '');
+  if (!key) return;
+  const on = isAnimLiveOn(key);
+  const x = matchByPitchId(key);
+  const hero = document.getElementById('match-hero-' + key);
+  let stage = document.getElementById('hero-anim-stage-' + key);
+  if (hero && !stage) {
+    stage = document.createElement('div');
+    stage.id = 'hero-anim-stage-' + key;
+    stage.className = 'hero-anim-stage';
+    const teams = hero.querySelector('.teams');
+    if (teams) hero.insertBefore(stage, teams);
+    else hero.appendChild(stage);
+  }
+  if (hero) hero.classList.toggle('hero--anim-live', on);
+  try { unstickMatchHeroForAnimLive(on); } catch (_) {}
+  if (stage) stage.classList.toggle('is-on', on);
+  const btn = hero && hero.querySelector('.hero-anim-live');
+  if (btn) {
+    btn.classList.toggle('is-on', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  let el = document.getElementById('pitch-live-' + key);
+  if (on) {
+    if (!stage) return;
+    try { ensureAnimLiveStage(key, x); } catch (_) {}
+    const visual = document.getElementById('anim-live-visual-' + key);
+    el = document.getElementById('pitch-live-' + key);
+    if (visual && el && el.parentNode !== visual) {
+      try { visual.appendChild(el); } catch (_) {}
+    }
+    const wantPitch = x ? animLiveWantPitch(x, (S.liveStatsCache && S.liveStatsCache[key]) || null) : false;
+    if (wantPitch && !document.getElementById('pitch-live-' + key) && x) {
+      if (visual) visual.innerHTML = pitchLiveShellHtml(x);
+      else stage.innerHTML = pitchLiveShellHtml(x);
+    }
+    if (!wantPitch) {
+      const leftover = document.getElementById('pitch-live-' + key);
+      if (leftover) {
+        try {
+          if (window.JCPitchLive) {
+            const inst = window.JCPitchLive.get(leftover);
+            if (inst && inst.destroy) inst.destroy();
+          }
+        } catch (_) {}
+        try { leftover.remove(); } catch (_) {}
+      }
+      if (visual && !visual.querySelector('.anim-live-recap-bg')) {
+        visual.innerHTML = '<div class="anim-live-recap-bg" aria-hidden="true"></div>';
+      }
+      try { if (x) ensureAnimLiveRecapData(x); } catch (_) {}
+    }
+    try { placeAnimLiveStage(key, animLiveModeOf(key)); } catch (_) {}
+    try { if (x && wantPitch) ensurePitchLive(x); } catch (_) {}
+    try { syncPitchLiveMotion(); } catch (_) {}
+    try { if (x && wantPitch) ensurePitchLivePoll(x); } catch (_) {}
+    try { paintAnimLiveStage(key); } catch (_) {}
+  } else {
+    try { tearDownAnimLiveModes(key, true); } catch (_) {}
+    try { teardownPitchLive(key, { force: true }); } catch (_) {}
+    if (stage) stage.innerHTML = '';
+    try { syncPitchLiveMotion(); } catch (_) {}
+  }
+}
+function syncPitchLiveMotion() {
+  try {
+    if (!window.JCPitchLive) return;
+    let overlayOn = (typeof overlayBusy === 'function') && overlayBusy();
+    try {
+      if (overlayOn && typeof overlayElBusy === 'function' && overlayElBusy(document.getElementById('anim-live-land'))) {
+        const other = overlayElBusy(document.getElementById('sheet'))
+          || overlayElBusy(document.getElementById('dialog'))
+          || overlayElBusy(document.getElementById('mf-fullview'))
+          || (typeof isRadarExpandOpen === 'function' && isRadarExpandOpen());
+        if (!other) overlayOn = false;
+      }
+    } catch (_) {}
+    const r = (typeof route === 'function') ? route() : {};
+    const onHero = r.name === 'match' && isAnimLiveOn(r.arg);
+    window.JCPitchLive.syncAllMotion({
+      hidden: !!document.hidden,
+      overlayOpen: !!overlayOn,
+      tabVisible: !!onHero,
+    });
+  } catch (_) {}
+}
+function stopPitchLivePoll() {
+  if (S.pitchLivePoll) { clearInterval(S.pitchLivePoll); S.pitchLivePoll = null; }
+  S.pitchLivePollId = null;
+}
+function teardownPitchLive(id, opts) {
+  const force = !!(opts && opts.force);
+  const want = id != null && id !== '' ? String(id) : '';
+  if (!force && want && isAnimLiveOn(want)) {
+    try { parkPitchLive(want); } catch (_) {}
+    return;
+  }
+  try { if (!(isAnimLiveOn(want) && !force)) stopPitchLivePoll(); } catch (_) {}
+  try {
+    if (!window.JCPitchLive) return;
+    const list = [];
+    window.JCPitchLive.instances.forEach((inst, el) => {
+      const eid = String((el && el.id) || '').replace(/^pitch-live-/, '');
+      if (!want || eid === want) list.push(inst);
+    });
+    list.forEach((inst) => { try { inst.destroy(); } catch (_) {} });
+  } catch (_) {}
+  try {
+    const full = document.getElementById('pitch-live-full');
+    if (full && !full.querySelector('.pitch-live')) {
+      full.classList.add('hidden');
+      full.innerHTML = '';
+    }
+  } catch (_) {}
+  try {
+    if (force && want) tearDownAnimLiveModes(want, true);
+    const land = document.getElementById('anim-live-land');
+    if (land && !land.querySelector('.anim-live-stage, .pitch-live')) hideAnimLiveHost(land, false);
+    const pip = document.getElementById('anim-live-pip');
+    if (pip && !pip.querySelector('.anim-live-stage, .pitch-live')) hideAnimLiveHost(pip, false);
+  } catch (_) {}
+}
+async function loadBallCoords(x, { force } = {}) {
+  if (!x) return null;
+  const key = String(x.id || '');
+  S.ballCoordsCache = S.ballCoordsCache || {};
+  const prev = S.ballCoordsCache[key];
+  if (!force && prev && prev._at && Date.now() - prev._at < 3000) return prev;
+  try {
+    const q = [];
+    if (x.id) q.push('matchId=' + encodeURIComponent(x.id));
+    if (x.homeTeamId) q.push('homeTeamId=' + encodeURIComponent(x.homeTeamId));
+    if (x.awayTeamId) q.push('awayTeamId=' + encodeURIComponent(x.awayTeamId));
+    if (x.home) q.push('home=' + encodeURIComponent(x.home));
+    if (x.away) q.push('away=' + encodeURIComponent(x.away));
+    if (x.date) q.push('date=' + encodeURIComponent(x.date));
+    if (x.time) q.push('time=' + encodeURIComponent(x.time));
+    const j = await api('/sm-ball-coords?' + q.join('&'), { timeout: 12000 });
+    const merged = (window.JCPitchLive && typeof window.JCPitchLive.mergeLastGood === 'function')
+      ? window.JCPitchLive.mergeLastGood(prev, j)
+      : ((j && (j.hasCoords || (j.coords && j.coords.length))) || !prev ? j : Object.assign({}, j, { coords: prev.coords, hasCoords: true, keptLastGood: true }));
+    if (merged) merged._at = Date.now();
+    S.ballCoordsCache[key] = merged || j;
+    return S.ballCoordsCache[key];
+  } catch (e) {
+    if (prev && (prev.hasCoords || (prev.coords && prev.coords.length))) return prev;
+    const fail = { ok: false, reason: 'error', coords: [], hasCoords: false, _at: Date.now() };
+    if (!prev) S.ballCoordsCache[key] = fail;
+    return S.ballCoordsCache[key] || fail;
+  }
+}
+function pitchLiveUpdateFromCaches(x) {
+  if (!x) return;
+  const el = document.getElementById('pitch-live-' + String(x.id || ''));
+  if (!el || !window.JCPitchLive) return;
+  const inst = window.JCPitchLive.get(el);
+  if (!inst) return;
+  const live = (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null;
+  const pack = (S.ballCoordsCache && S.ballCoordsCache[String(x.id)]) || { coords: [], hasCoords: false };
+  const phase = pitchLivePhaseOf(x, live);
+  inst.update(Object.assign({
+    weather: (typeof matchWeatherType === 'function') ? matchWeatherType(x) : 'neutral',
+    events: (live && live.events) || [],
+    pack,
+    state: phase,
+  }, phase, pitchLiveCrestOpts(x)));
+  try { if (typeof isAnimLiveOn === 'function' && isAnimLiveOn(String(x.id || ''))) paintAnimLiveStage(String(x.id || '')); } catch (_) {}
+}
+async function ensurePitchLive(x) {
+  if (!x || !x.id) return;
+  if (typeof animLiveWantPitch === 'function' && !animLiveWantPitch(x, (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null)) return;
+  const el = document.getElementById('pitch-live-' + String(x.id));
+  if (!el) return;
+  try { await loadPitchLiveModule(); } catch (_) { return; }
+  if (!window.JCPitchLive) return;
+  const live = (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null;
+  const phase = pitchLivePhaseOf(x, live);
+  window.JCPitchLive.mount(el, Object.assign({
+    weather: (typeof matchWeatherType === 'function') ? matchWeatherType(x) : 'neutral',
+    tabVisible: true,
+    events: (live && live.events) || [],
+    state: phase,
+    onExpand: isAnimLiveOn(x.id) ? function () { setAnimLiveMode(x.id, animLiveModeOf(x.id) === 'landscape' ? 'docked' : 'landscape'); } : null,
+  }, phase, pitchLiveCrestOpts(x)));
+  const started = window.JCPitchLive.canAnimateLive(phase, Date.now()) || phase.finished;
+  if (started) {
+    try { await loadBallCoords(x); } catch (_) {}
+  }
+  pitchLiveUpdateFromCaches(x);
+  syncPitchLiveMotion();
+  ensurePitchLivePoll(x);
+}
+function ensurePitchLivePoll(x) {
+  stopPitchLivePoll();
+  if (!x || !window.JCPitchLive) return;
+  const key = String(x.id || '');
+  const live = (S.liveStatsCache && S.liveStatsCache[key]) || null;
+  const phase = pitchLivePhaseOf(x, live);
+  if (!window.JCPitchLive.canAnimateLive(phase, Date.now())) return;
+  S.pitchLivePollId = key;
+  const tick = async () => {
+    if (document.hidden) return;
+    if (route().name !== 'match' || String(route().arg) !== key) return stopPitchLivePoll();
+    if (!isAnimLiveOn(key)) return stopPitchLivePoll();
+    try { await loadBallCoords(x, { force: true }); } catch (_) {}
+    pitchLiveUpdateFromCaches(x);
+    const liveNow = (S.liveStatsCache && S.liveStatsCache[key]) || live;
+    const ph = pitchLivePhaseOf(x, liveNow);
+    if (!window.JCPitchLive.canAnimateLive(ph, Date.now())) stopPitchLivePoll();
+  };
+  S.pitchLivePoll = setInterval(tick, 4000);
+  setTimeout(tick, 0);
+}
+
 function liveTabHtml(x, live) {
   const id = String(x.id || '');
   const key = esc(id);
   const ui = liveUiState(id);
+  const pitchNote = isAnimLiveOn(id)
+    ? `<div class="pitch-live-in-hero-note">动画直播正在上方播出</div>`
+    : '';
   return `<div class="live-tab" id="live-tab-${key}">
+    ${pitchNote}
     ${weatherCardHtml(x)}
     ${liveStatsStripHtml(x, live)}
     <div id="sm-live-${key}" class="sm-slot live-sm-slot"></div>
+    <div id="live-mf-${key}" class="live-mf-slot">${mfLiveSlotHtml(x, mfPackOf(x.id))}</div>
     ${liveSubHeadHtml(x, ui)}
     <div class="live-sub-body" id="live-sub-${key}">${liveSubBodyHtml(x, live, ui)}</div>
     ${liveLegendHtml()}
@@ -12711,6 +15442,14 @@ function setMatchWeatherType(id, type) {
   if (sticky) sticky.setAttribute('data-weather', t);
   const card = id && document.getElementById('wx-card-' + id);
   if (card) card.setAttribute('data-wx', t);
+  const pitch = id && document.getElementById('pitch-live-' + id);
+  if (pitch) {
+    pitch.setAttribute('data-wx', t);
+    try {
+      const inst = window.JCPitchLive && window.JCPitchLive.get(pitch);
+      if (inst) inst.setWeather(t);
+    } catch (_) {}
+  }
   return t;
 }
 
@@ -13027,6 +15766,15 @@ function syncMatchHeroSticky() {
   const sticky = wrap.querySelector('.hero-sticky');
   if (!hero || !sticky) {
     wrap.classList.remove('is-hero-stuck');
+    return;
+  }
+  const mid = String((hero.id || '').replace(/^match-hero-/, ''));
+  const liveOn = !!(wrap.classList.contains('is-anim-live')
+    || hero.classList.contains('hero--anim-live')
+    || (mid && typeof isAnimLiveOn === 'function' && isAnimLiveOn(mid)));
+  if (liveOn) {
+    wrap.classList.remove('is-hero-stuck');
+    sticky.setAttribute('aria-hidden', 'true');
     return;
   }
   const h = compactHeroH();
@@ -13476,6 +16224,7 @@ function syncHeroWeatherMotion() {
   const overlayOn = (typeof overlayBusy === 'function') && overlayBusy();
   const off = !!(document.hidden || (typeof route === 'function' && route().name !== 'match') || overlayOn);
   try { document.documentElement.classList.toggle('wx-paused', off); } catch (_) {}
+  try { if (typeof syncPitchLiveMotion === 'function') syncPitchLiveMotion(); } catch (_) {}
   if (!off) ensureWxPanLoop();
 }
 
@@ -13573,15 +16322,304 @@ function prefCell(lab, v, cls) {
 }
 function prefBlock(title, src, body) {
   if (!body) return '';
-  return `<div class="pref-block"><div class="pref-hd">${esc(title)}${src ? `<small>${esc(src)}</small>` : ''}</div>${body}</div>`;
+  return `<div class="pref-block"><div class="pref-hd"><i class="pref-tick"></i><span class="pref-hd-t">${esc(title)}</span>${src ? `<small>${esc(src)}</small>` : ''}</div>${body}</div>`;
 }
+function prefGapPct(d) {
+  const pp = Number(d) * 100;
+  if (!Number.isFinite(pp)) return '';
+  const abs = Math.abs(pp);
+  const n = (abs >= 10 || Math.abs(abs - Math.round(abs)) < 0.05) ? abs.toFixed(0) : abs.toFixed(1);
+  return (pp > 0 ? '+' : '−') + n + '%';
+}
+function prefMaxGapKeys(market, model, keys) {
+  let bestAbs = -1;
+  const hits = [];
+  for (const k of keys || []) {
+    if (!prefHas(market && market[k]) || !prefHas(model && model[k])) continue;
+    const d = Number(model[k]) - Number(market[k]);
+    const abs = Math.abs(d);
+    if (abs > bestAbs + 1e-12) {
+      bestAbs = abs;
+      hits.length = 0;
+      hits.push({ k, d });
+    } else if (Math.abs(abs - bestAbs) <= 1e-12) {
+      hits.push({ k, d });
+    }
+  }
+  const map = {};
+  if (bestAbs > 0) for (const h of hits) map[h.k] = h.d;
+  return map;
+}
+function prefCmpBlock(title, src, cols, marketVals, modelVals) {
+  const list = cols || [];
+  const hasM = !!(marketVals && list.some((c) => prefHas(marketVals[c.key])));
+  const hasMo = !!(modelVals && list.some((c) => prefHas(modelVals[c.key])));
+  if (!hasM && !hasMo) return '';
+  const gaps = (hasM && hasMo) ? prefMaxGapKeys(marketVals, modelVals, list.map((c) => c.key)) : {};
+  let max = 0.01;
+  for (const c of list) {
+    if (hasM && prefHas(marketVals[c.key])) max = Math.max(max, Number(marketVals[c.key]));
+    if (hasMo && prefHas(modelVals[c.key])) max = Math.max(max, Number(modelVals[c.key]));
+  }
+  const pair = (v, cls) => {
+    if (!prefHas(v)) return `<div class="pref-cmp-pair ${cls} empty" style="--pref-h:0%"><b>—</b><span class="pref-cmp-track"><i class="${cls} empty"></i></span></div>`;
+    const h = Math.max(0, Math.min(100, Number(v) / max * 100));
+    return `<div class="pref-cmp-pair ${cls}" style="--pref-h:${h.toFixed(1)}%"><b>${esc(prefPct(v))}</b><span class="pref-cmp-track"><i class="${cls}"></i></span></div>`;
+  };
+  const cells = list.map((c) => {
+    const gap = Object.prototype.hasOwnProperty.call(gaps, c.key);
+    const tag = gap
+      ? `<em class="pref-cmp-gap"><span>出入最大</span><b>${esc(prefGapPct(gaps[c.key]))}</b></em>`
+      : '<em class="pref-cmp-gap"></em>';
+    let inner = '';
+    if (hasM) inner += pair(marketVals[c.key], 'mkt');
+    if (hasMo) inner += pair(modelVals[c.key], 'model');
+    return `<div class="pref-cmp-col${gap ? ' is-gap' : ''}"><div class="pref-cmp-bars">${inner}</div><span class="pref-cmp-lab">${esc(c.lab)}</span>${tag}</div>`;
+  }).join('');
+  return prefBlock(title, src, `<div class="pref-cmp" style="--pref-cmp-n:${list.length}">${cells}</div>`);
+}
+function prefGoalColsBlock(title, src, marketTotals, modelTotals) {
+  let anyM = false, anyMo = false, max = 0.01;
+  const valsM = [], valsMo = [];
+  for (let i = 0; i <= 7; i++) {
+    const k = 's' + i;
+    const mv = marketTotals && prefHas(marketTotals[k]) ? Number(marketTotals[k]) : null;
+    const pv = modelTotals && prefHas(modelTotals[k]) ? Number(modelTotals[k]) : null;
+    valsM.push(mv);
+    valsMo.push(pv);
+    if (mv != null) { anyM = true; max = Math.max(max, mv); }
+    if (pv != null) { anyMo = true; max = Math.max(max, pv); }
+  }
+  if (!anyM && !anyMo) return '';
+  let cols = '';
+  for (let i = 0; i <= 7; i++) {
+    const lab = i === 7 ? '7+球' : (i + '球');
+    let bars = '';
+    const add = (v, cls) => {
+      const zero = v == null || v <= 0;
+      const h = zero ? 2 : Math.max(2, v / max * 100);
+      bars += `<i class="pref-col-bar ${cls}${zero ? ' is-zero' : ''}" style="height:${h.toFixed(1)}%"></i>`;
+    };
+    if (anyM) add(valsM[i], 'mkt');
+    if (anyMo) add(valsMo[i], 'model');
+    cols += `<div class="pref-col"><div class="pref-col-bars">${bars}</div><span class="pref-col-lab">${esc(lab)}</span></div>`;
+  }
+  return prefBlock(title, src, `<div class="pref-cols">${cols}</div>`);
+}
+function prefNormPair(left, right) {
+  const l = prefHas(left) ? Number(left) : 0;
+  const r = prefHas(right) ? Number(right) : 0;
+  const t = l + r;
+  if (!(t > 0)) return null;
+  return { l: l / t, r: r / t };
+}
+function prefSplitBlock(title, src, rows, leftLab, rightLab) {
+  const parts = [];
+  const list = (rows || []).filter(Boolean);
+  const dual = list.length > 1;
+  for (const row of list) {
+    const pair = prefNormPair(row.left, row.right);
+    if (!pair) continue;
+    const srcCell = dual ? `<span class="pref-split-src">${esc(row.src || '')}</span>` : '';
+    parts.push(
+      `<div class="pref-split-row${dual ? ' has-src' : ''}">${srcCell}`
+      + `<b class="pct l">${esc(prefPct(pair.l))}</b>`
+      + `<div class="pref-split"><i class="over" style="width:${(pair.l * 100).toFixed(1)}%"></i><i class="under" style="width:${(pair.r * 100).toFixed(1)}%"></i></div>`
+      + `<b class="pct r">${esc(prefPct(pair.r))}</b></div>`
+    );
+  }
+  if (!parts.length) return '';
+  const key = `<div class="pref-split-key"><span><i class="over"></i>${esc(leftLab)}</span><span><i class="under"></i>${esc(rightLab)}</span></div>`;
+  return prefBlock(title, src, parts.join('') + key);
+}
+function prefPctInt(v) {
+  if (!prefHas(v)) return '—';
+  return Math.round(Number(v) * 100) + '%';
+}
+function prefStripBlock(title, src, items) {
+  const list = (items || []).filter((it) => it && prefHas(it.v));
+  if (!list.length) return '';
+  const cells = list.map((it) => `<div class="pref-strip-item"><b>${esc(it.lab)}</b><small>${esc(prefPctInt(it.v))}</small></div>`).join('');
+  return prefBlock(title, src, `<div class="pref-strip" style="--pref-strip-n:${list.length}">${cells}</div>`);
+}
+function smPredPackOf(id) {
+  return (S.smPredictions && S.smPredictions[String(id)]) || null;
+}
+function smPredFreshMs(pack) {
+  const st = String((pack && pack.state && pack.state.short) || '').toUpperCase();
+  if (/INPLAY|LIVE|^HT$|^BREAK$|^ET/.test(st)) return 30 * 1000;
+  if (/^(FT|AET|FT_PEN|PEN_FT|AFTER_ET|AFTER_PEN|ENDED|FULL_?TIME)$/.test(st)) return 30 * 60 * 1000;
+  return 10 * 60 * 1000;
+}
+function smFeaturedCorner(pack) {
+  if (!pack || !Array.isArray(pack.corners) || !pack.corners.length) return null;
+  return pack.corners.find((c) => Number(c.line) === 9)
+    || pack.corners.find((c) => Number(c.line) === 8)
+    || pack.corners[0]
+    || null;
+}
+function prefGrid(values, cls, cols) {
+  const cells = (values || []).map(([lab, v]) => prefCell(lab, v, cls)).join('');
+  const grid = cols === 8 ? 'pref-grid8' : cols === 4 ? 'pref-grid4' : 'pref-grid3';
+  return `<div class="${grid}">${cells}</div>`;
+}
+async function ensureSmPredictions(x) {
+  if (!x || !x.id) return;
+  S.smPredictions = S.smPredictions || {};
+  const key = String(x.id);
+  const hit = S.smPredictions[key];
+  const age = hit && hit._at ? Date.now() - hit._at : Infinity;
+  const stillFresh = hit && !hit._loading && (
+    (hit.ok && age < smPredFreshMs(hit))
+    || (hit.ok === false && age < 90 * 1000)
+  );
+  if (stillFresh) { paintSmPredictions(key, hit); return hit; }
+  if (hit && hit._loading) return;
+  const prevGood = hit && hit.ok !== false && !hit._loading ? hit : null;
+  if (prevGood) paintSmPredictions(key, prevGood);
+  const q = [
+    'matchId=' + encodeURIComponent(key),
+    'date=' + encodeURIComponent(x.date || ''),
+    'time=' + encodeURIComponent(x.time || ''),
+    'homeTeamId=' + encodeURIComponent(x.homeTeamId || ''),
+    'awayTeamId=' + encodeURIComponent(x.awayTeamId || ''),
+    'home=' + encodeURIComponent(x.home || ''),
+    'away=' + encodeURIComponent(x.away || ''),
+    'league=' + encodeURIComponent(x.league || x.leagueName || ''),
+  ];
+  const glQ = (x.hhad && x.hhad.goalLine != null && x.hhad.goalLine !== '')
+    ? x.hhad.goalLine
+    : (x.goalLine != null && x.goalLine !== '' ? x.goalLine : '');
+  if (glQ !== '' && glQ != null) q.push('goalLine=' + encodeURIComponent(String(glQ)));
+  const loadingPack = prevGood
+    ? Object.assign({}, prevGood, { _loading: true, _refreshing: true })
+    : { ok: true, _loading: true, _at: Date.now(), hasPredictions: false };
+  S.smPredictions[key] = loadingPack;
+  if (!prevGood) paintSmPredictions(key, loadingPack);
+  let pack;
+  try { pack = await api('/sm-predictions?' + q.join('&'), { timeout: 60000 }); }
+  catch (e) { pack = { ok: false, error: '预测数据暂时不可用', hasPredictions: false }; }
+  pack._at = Date.now();
+  if (pack && pack.ok === false && prevGood) {
+    prevGood._at = Date.now();
+    S.smPredictions[key] = prevGood;
+    paintSmPredictions(key, prevGood);
+    return prevGood;
+  }
+  S.smPredictions[key] = pack;
+  paintSmPredictions(key, pack);
+  return pack;
+}
+function paintSmPredictions(id, pack) {
+  const key = String(id || '');
+  if (pack) {
+    S.smPredictions = S.smPredictions || {};
+    if (!S.smPredictions[key]) S.smPredictions[key] = pack;
+  }
+  const el = document.getElementById('pred-ref-' + key);
+  if (!el) return;
+  const x = (typeof findMatch === 'function' && findMatch(key))
+    || ((S.results || []).find((z) => String(z.id) === key))
+    || (typeof loadFxShell === 'function' && loadFxShell(key))
+    || { id: key };
+  const html = predRefBodyHtml(x);
+  const p = pack || smPredPackOf(key);
+  const sig = String((p && (p.fetchedAt || p._at)) || '') + (p && p._loading ? 'L' : '') + (p && p.hasPredictions ? 'Y' : 'N') + (p && p.ok === false ? 'E' : 'K');
+  if (el.dataset.predSig === sig) return;
+  el.dataset.predSig = sig;
+  if (el.dataset.predReady === '1' && typeof swapSlotHtml === 'function') swapSlotHtml(el, html);
+  else { el.innerHTML = html; el.dataset.predReady = '1'; }
+}
+function prematchRefLoadingHtml() {
+  return `<div class="dsec pref-ref"><h3>赛前参考</h3><p class="pref-note">正在加载赛前参考…</p></div>`;
+}
+function smPredSettled(pack) {
+  if (!pack || pack._loading) return false;
+  if (pack.ok === false) return true;
+  if (pack.hasPredictions === true || pack.hasPredictions === false) return true;
+  const reason = String(pack.reason || '');
+  if (/^(no-team|no-fixture|no-coverage|no-predictions|no-token|no-match)$/.test(reason)) return true;
+  if (pack.fetchedAt) return true;
+  return false;
+}
+function predRefSettled(m) {
+  if (!m || !m.id) return false;
+  // 盘口可随后补上；不要因为赔率请求还在飞就卡住「赛前参考」。
+  return smPredSettled(smPredPackOf(m.id));
+}
+function predRefBodyHtml(m) {
+  if (!m) return '';
+  if (!predRefSettled(m)) return prematchRefLoadingHtml();
+  return prematchRefHtml(m);
+}
+function prefetchPredRef(x) {
+  if (!x || !x.id) return;
+  try { loadOddsSnapshot(x.id, x.date, x).catch(function () { return null; }); } catch (_) {}
+  try { ensureSmPredictions(x); } catch (_) {}
+}
+const HHAD_COVERAGE_MIN = 0.90;
+function deriveHhadFromScores(scores, goalLine) {
+  const gl = Number(goalLine);
+  if (!Number.isFinite(gl)) return null;
+  if (!scores || typeof scores !== 'object' || Array.isArray(scores)) return null;
+  function parseKey(key) {
+    const s = String(key || '').trim();
+    if (s === 'Other_1' || s === 'other_1' || s === '其他主胜') return { kind: 'other1' };
+    if (s === 'Other_2' || s === 'other_2' || s === '其他客胜') return { kind: 'other2' };
+    if (s === 'Other_X' || s === 'other_x' || s === 'Other_x' || s === '其他平局') return { kind: 'otherX' };
+    const m = s.match(/^(\d+)\s*[-:]\s*(\d+)$/);
+    if (m) return { kind: 'score', home: Number(m[1]), away: Number(m[2]) };
+    return null;
+  }
+  function bucket(home, away) {
+    const diff = home + gl - away;
+    if (diff > 0) return 'h';
+    if (diff === 0) return 'd';
+    if (diff < 0) return 'a';
+    return null;
+  }
+  let h = 0, d = 0, a = 0, unassigned = 0, used = false;
+  for (const key of Object.keys(scores)) {
+    const p = Number(scores[key]);
+    if (!Number.isFinite(p) || p < 0) continue;
+    used = true;
+    const parsed = parseKey(key);
+    let b = null;
+    if (!parsed) b = null;
+    else if (parsed.kind === 'score') b = bucket(parsed.home, parsed.away);
+    else if (parsed.kind === 'otherX') b = bucket(0, 0);
+    else if (parsed.kind === 'other1') b = (gl > -1) ? bucket(1, 0) : null;
+    else if (parsed.kind === 'other2') b = (gl < 1) ? bucket(0, 1) : null;
+    if (b === 'h') h += p;
+    else if (b === 'd') d += p;
+    else if (b === 'a') a += p;
+    else unassigned += p;
+  }
+  if (!used) return null;
+  const coverage = h + d + a;
+  if (coverage < HHAD_COVERAGE_MIN) return null;
+  return { h: h / coverage, d: d / coverage, a: a / coverage, goalLine: gl, coverage, unassigned, source: 'correct-score' };
+}
+function smHhadPredOf(sm, goalLine) {
+  if (!sm || !Number.isFinite(goalLine)) return null;
+  const prev = sm.hhadPred;
+  if (prev && Number(prev.goalLine) === goalLine && (prev.h != null || prev.d != null || prev.a != null)
+    && prev.source !== 'wdl' && prev.source !== '1x2') {
+    return prev;
+  }
+  if (!sm.scores || typeof sm.scores !== 'object' || Array.isArray(sm.scores)) return null;
+  return deriveHhadFromScores(sm.scores, goalLine);
+}
+
 function prematchRefHtml(m) {
   if (!m) return '';
+  if (!predRefSettled(m)) return prematchRefLoadingHtml();
   const snap = oddsSnapCache()[String(m.id) + '|' + (m.date || '')];
   const pools = snap && snap.ok !== false ? snap.pools : null;
-  const rep = S.predictCache && S.predictCache[String(m.id)];
-  const edge = (rep && rep.ok && rep.sections && rep.sections.oddsEdge) || null;
-  const modelWdl = (edge && edge.wdl) || null;
+  const pack = smPredPackOf(m.id);
+  const loading = false;
+  const smReady = true;
+  const sm = (smReady && pack.ok !== false && pack.hasPredictions) ? pack : null;
   const marketHad = (m.had && implied(m.had))
     || (pools && pools.had && implied(pools.had))
     || null;
@@ -13597,75 +16635,122 @@ function prematchRefHtml(m) {
     const shown = Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100);
     hhadTitle = gl < 0 ? `让球（主队让 ${shown} 球）` : gl > 0 ? `让球（主队受让 ${shown} 球）` : '让球（平手）';
   }
-  const modelRq = (edge && edge.rq && Array.isArray(edge.rq.rows) && edge.rq.rows.length) ? edge.rq : null;
   const ttgOdds = pools && pools.ttg ? pools.ttg : null;
   const ttgImp = impliedMap(ttgOdds);
   const hafuOdds = pools && pools.hafu ? pools.hafu : null;
   const hafuImp = impliedMap(hafuOdds);
-  const over25 = edge && edge.over25 != null && Number.isFinite(Number(edge.over25)) ? Number(edge.over25) : null;
+  const smWdl = sm && sm.wdl ? sm.wdl : null;
+  const smOu25 = sm && sm.ou25 && prefHas(sm.ou25.over) ? Number(sm.ou25.over) : null;
+  const smHafu = sm && sm.hafu ? sm.hafu : null;
+  const smTotals = sm && sm.totals ? sm.totals : null;
 
   let body = '';
   let mixed = false;
-  // 胜平负 — one row per outcome; 盘口/模型 share the row when both exist
-  if (marketHad || modelWdl) {
-    if (marketHad && modelWdl) {
-      mixed = true;
-      body += prefBlock('胜平负', '', prefTwinRow('主胜', marketHad.h, modelWdl.h) + prefTwinRow('平局', marketHad.d, modelWdl.d) + prefTwinRow('客胜', marketHad.a, modelWdl.a));
-    } else if (marketHad) {
-      body += prefBlock('胜平负', '盘口', prefRow('主胜', marketHad.h) + prefRow('平局', marketHad.d) + prefRow('客胜', marketHad.a));
-    } else {
-      body += prefBlock('胜平负', '模型', prefRow('主胜', modelWdl.h, 'model') + prefRow('平局', modelWdl.d, 'model') + prefRow('客胜', modelWdl.a, 'model'));
-    }
+  // 胜平负 — 盘口 + SportMonks 预测并排柱状图; no local model
+  if (marketHad || smWdl) {
+    if (marketHad && smWdl) mixed = true;
+    const src = (marketHad && smWdl) ? '' : (marketHad ? '盘口' : '预测');
+    body += prefCmpBlock('胜平负', src, [
+      { key: 'h', lab: '主胜' },
+      { key: 'd', lab: '平局' },
+      { key: 'a', lab: '客胜' },
+    ], marketHad, smWdl);
   }
-  // 让球
-  if (marketHhad || modelRq) {
-    const labs = { h: '让胜', d: '让平', a: '让负' };
-    if (marketHhad && modelRq) {
-      mixed = true;
-      const byK = {};
-      for (const r of modelRq.rows) if (r && r.k) byK[r.k] = r.model;
-      let rows = '';
-      for (const k of ['h', 'd', 'a']) rows += prefTwinRow(labs[k], marketHhad[k], byK[k]);
-      body += prefBlock(hhadTitle, '', rows);
-    } else if (marketHhad) {
-      body += prefBlock(hhadTitle, '盘口', prefRow('让胜', marketHhad.h) + prefRow('让平', marketHhad.d) + prefRow('让负', marketHhad.a));
-    } else {
-      const rows2 = modelRq.rows.map((r) => prefRow(r.lab || labs[r.k] || r.k, r.model, 'model')).join('');
-      body += prefBlock(hhadTitle, '模型', rows2);
-    }
+  // 让球 — SportMonks 没有亚洲让球；预测由正确比分按体彩让球线汇总
+  const smHhad = smHhadPredOf(sm, gl);
+  if (marketHhad || smHhad) {
+    if (marketHhad && smHhad) mixed = true;
+    const src = (marketHhad && smHhad) ? '' : (marketHhad ? '盘口' : '预测');
+    body += prefCmpBlock(hhadTitle, src, [
+      { key: 'h', lab: '让胜' },
+      { key: 'd', lab: '让平' },
+      { key: 'a', lab: '让负' },
+    ], marketHhad, smHhad);
   }
-  // 进球数 / 大小球
+  // 进球数
+  if (ttgImp || smTotals) {
+    if (ttgImp && smTotals) mixed = true;
+    const src = (ttgImp && smTotals) ? '' : (ttgImp ? '盘口' : '预测');
+    body += prefGoalColsBlock(smTotals ? '进球数预测' : '进球数', src, ttgImp, smTotals);
+  }
+  // 大小球 2.5
+  let marketOver = null;
+  let marketUnder = null;
   if (ttgImp) {
-    const labs = [];
-    for (let i = 0; i <= 7; i++) labs.push([i === 7 ? '7+' : String(i), ttgImp['s' + i]]);
-    body += prefBlock('进球数', '盘口', `<div class="pref-grid8">${labs.map(([lab, v]) => prefCell(lab, v)).join('')}</div>`);
+    let under = 0, over = 0, seen = false;
+    for (let i = 0; i <= 2; i++) if (prefHas(ttgImp['s' + i])) { under += Number(ttgImp['s' + i]); seen = true; }
+    for (let i = 3; i <= 7; i++) if (prefHas(ttgImp['s' + i])) { over += Number(ttgImp['s' + i]); seen = true; }
+    const tot = under + over;
+    if (seen && tot > 0) { marketOver = over / tot; marketUnder = under / tot; }
   }
-  if (over25 != null || ttgImp) {
-    let marketOver = null;
-    if (ttgImp) {
-      let under = 0, over = 0, seen = false;
-      for (let i = 0; i <= 2; i++) if (prefHas(ttgImp['s' + i])) { under += Number(ttgImp['s' + i]); seen = true; }
-      for (let i = 3; i <= 7; i++) if (prefHas(ttgImp['s' + i])) { over += Number(ttgImp['s' + i]); seen = true; }
-      const tot = under + over;
-      if (seen && tot > 0) marketOver = over / tot;
-    }
-    if (marketOver != null && over25 != null) {
-      mixed = true;
-      body += prefBlock('大小球（2.5）', '', prefTwinRow('大球', marketOver, over25) + prefTwinRow('小球', 1 - marketOver, 1 - over25));
-    } else if (over25 != null) {
-      body += prefBlock('大小球（2.5）', '模型', prefRow('大球', over25, 'model') + prefRow('小球', 1 - over25, 'model'));
-    }
+  const smOuUnder = smOu25 != null
+    ? (sm && sm.ou25 && prefHas(sm.ou25.under) ? Number(sm.ou25.under) : (1 - smOu25))
+    : null;
+  if (marketOver != null || smOu25 != null) {
+    if (marketOver != null && smOu25 != null) mixed = true;
+    const ouRows = [];
+    if (marketOver != null) ouRows.push({ src: '盘口', left: marketOver, right: marketUnder });
+    if (smOu25 != null) ouRows.push({ src: '预测', left: smOu25, right: smOuUnder });
+    const src = (marketOver != null && smOu25 != null) ? '' : (smOu25 != null ? '预测' : '盘口');
+    body += prefSplitBlock(smOu25 != null ? '大小预测（2.5）' : '大小球（2.5）', src, ouRows, '大', '小');
   }
-  // 半全场 — 仅展示已有盘口，不编造模型九宫格；缺项为 — 不是 0
+  // 比分预测概率 — SportMonks 正确比分前五
+  if (sm && Array.isArray(sm.correctScore) && sm.correctScore.length) {
+    const items = sm.correctScore.slice(0, 5).map((s) => ({
+      lab: String((s && s.score) || '').replace(/:/g, '-'),
+      v: s && s.p,
+    }));
+    body += prefStripBlock('比分预测概率', '', items);
+  }
+  // 半全场 — 缺项为 — 不是 0；预测取前三，盘口仍给九宫格
+  const hafuLabs = [['hh', '胜胜'], ['hd', '胜平'], ['ha', '胜负'], ['dh', '平胜'], ['dd', '平平'], ['da', '平负'], ['ah', '负胜'], ['ad', '负平'], ['aa', '负负']];
+  if (smHafu) {
+    if (hafuImp) mixed = true;
+    const items = hafuLabs.map(([k, lab]) => ({ lab, v: smHafu[k] })).filter((it) => prefHas(it.v));
+    items.sort((a, b) => Number(b.v) - Number(a.v));
+    body += prefStripBlock('半全场预测概率', '', items.slice(0, 3));
+  }
   if (hafuImp) {
-    const labs = [['hh', '胜胜'], ['hd', '胜平'], ['ha', '胜负'], ['dh', '平胜'], ['dd', '平平'], ['da', '平负'], ['ah', '负胜'], ['ad', '负平'], ['aa', '负负']];
-    body += prefBlock('半全场', '盘口', `<div class="pref-grid3">${labs.map(([k, lab]) => prefCell(lab, hafuImp[k])).join('')}</div>`);
+        const hafuCells = hafuLabs.map(([k, lab]) => `<div class="pref-cell"><span>${esc(lab)}</span><b class="num">${esc(prefPctInt(hafuImp[k]))}</b></div>`).join('');
+    body += prefBlock('半全场', '盘口', `<div class="pref-grid3">${hafuCells}</div>`);
   }
-  if (!body) {
-    body = '<p class="pref-empty">本场暂无可用的胜平负、让球、进球数或半全场参考。未开售的盘口不会展示。</p>';
+  // SportMonks-only blocks (竞彩盘口通常没有)
+  if (sm && sm.btts && (prefHas(sm.btts.yes) || prefHas(sm.btts.no))) {
+    body += prefSplitBlock('双方都进球', '预测', [{ src: '预测', left: sm.btts.yes, right: sm.btts.no }], '是', '否');
+  }
+  if (sm && sm.firstHalf && (prefHas(sm.firstHalf.h) || prefHas(sm.firstHalf.d) || prefHas(sm.firstHalf.a))) {
+    body += prefCmpBlock('半场胜负', '预测', [
+      { key: 'h', lab: '主胜' },
+      { key: 'd', lab: '平局' },
+      { key: 'a', lab: '客胜' },
+    ], null, sm.firstHalf);
+  }
+  if (sm && sm.doubleChance && (prefHas(sm.doubleChance.hd) || prefHas(sm.doubleChance.ad) || prefHas(sm.doubleChance.ha))) {
+    body += prefBlock('双胜', '预测', prefRow('主或平', sm.doubleChance.hd, 'model') + prefRow('客或平', sm.doubleChance.ad, 'model') + prefRow('主或客', sm.doubleChance.ha, 'model'));
+  }
+  const corner = smFeaturedCorner(sm);
+  if (corner) {
+    const line = Number.isInteger(Number(corner.line)) ? String(Number(corner.line)) : String(corner.line);
+    let rows = '';
+    if (prefHas(corner.over)) rows += prefRow('超过 ' + line, corner.over, 'model');
+    if (prefHas(corner.exact)) rows += prefRow('正好 ' + line, corner.exact, 'model');
+    if (prefHas(corner.under)) rows += prefRow('不足 ' + line, corner.under, 'model');
+    if (rows) body += prefBlock('角球', '预测', rows);
+  }
+
+  const hasMarket = !!(marketHad || marketHhad || ttgImp || hafuImp);
+  if (loading) {
+    return prematchRefLoadingHtml();
+  } else if (!sm && hasMarket) {
+    const note = (pack && pack.ok === false)
+      ? (pack.error || '预测数据暂时不可用')
+      : '本场暂无 SportMonks 预测';
+    body += `<p class="pref-note">${esc(note)}</p>`;
+  } else if (!body) {
+    body = '<p class="pref-empty">本场暂无预测数据</p>';
   }
   const legend = mixed
-    ? '<div class="pref-legend"><span><i class="mkt"></i>盘口</span><span><i class="mod"></i>模型</span></div>'
+    ? '<div class="pref-legend"><span><i class="mkt"></i>盘口</span><span><i class="mod"></i>预测</span></div>'
     : '';
   return `<div class="dsec pref-ref"><h3>赛前参考</h3>${legend}${body}</div>`;
 }
@@ -13725,10 +16810,23 @@ function goalClockHtml(m) {
     const ok = Number.isFinite(v) && v >= 0;
     return `<div class="num ${side}${ok ? '' : ' na'}">${esc(ok ? goalClockFmt(v) : '—')}</div>`;
   };
-  let rows = avgs.map((pair, i) => {
-    const lab = GOAL_CLOCK_PERIODS[i][1];
-    return `<div class="xg-row gc-row">${num(pair[0], 'left')}<div class="stat-mid"><div class="label">${esc(lab)}</div><div class="bars">${bar(pair[0], 'h')}${bar(pair[1], 'a')}</div></div>${num(pair[1], 'right')}</div>`;
-  }).join('');
+  const solo = !hOk || !aOk;
+  const soloSide = solo ? (hOk ? 'h' : 'a') : '';
+  const soloName = solo ? (hOk ? homeName : awayName) : '';
+  const missName = solo ? (hOk ? awayName : homeName) : '';
+  let rows;
+  if (solo) {
+    rows = avgs.map((pair, i) => {
+      const lab = GOAL_CLOCK_PERIODS[i][1];
+      const v = hOk ? pair[0] : pair[1];
+      return `<div class="gc-solo-row"><div class="lab">${esc(lab)}</div><div class="bars">${bar(v, soloSide)}</div>${num(v, hOk ? 'left' : 'right')}</div>`;
+    }).join('');
+  } else {
+    rows = avgs.map((pair, i) => {
+      const lab = GOAL_CLOCK_PERIODS[i][1];
+      return `<div class="xg-row gc-row">${num(pair[0], 'left')}<div class="stat-mid"><div class="label">${esc(lab)}</div><div class="bars">${bar(pair[0], 'h')}${bar(pair[1], 'a')}</div></div>${num(pair[1], 'right')}</div>`;
+    }).join('');
+  }
   const cfRow = () => {
     const hv = hOk && h.concede_first_index != null && Number.isFinite(Number(h.concede_first_index)) ? Number(h.concede_first_index) : null;
     const av = aOk && a.concede_first_index != null && Number.isFinite(Number(a.concede_first_index)) ? Number(a.concede_first_index) : null;
@@ -13740,18 +16838,26 @@ function goalClockHtml(m) {
       const w = ok ? Math.max(0, Math.min(100, (v / maxCf) * 100)) : 0;
       return `<div class="${side}${ok ? '' : ' empty'}"><i style="width:${w.toFixed(1)}%"></i></div>`;
     };
+    if (solo) {
+      const v = hOk ? hv : av;
+      if (v == null) return '';
+      return `<div class="gc-solo-row"><div class="lab">先丢球</div><div class="bars">${b(v, soloSide)}</div><div class="num ${hOk ? 'left' : 'right'}">${esc(fmt(v))}</div></div>`;
+    }
     return `<div class="xg-row gc-row"><div class="num left${hv == null ? ' na' : ''}">${esc(fmt(hv))}</div><div class="stat-mid"><div class="label">先丢球</div><div class="bars">${b(hv, 'h')}${b(av, 'a')}</div></div><div class="num right${av == null ? ' na' : ''}">${esc(fmt(av))}</div></div>`;
   };
   const nBits = [];
-  if (h && Number(h.n_fixtures) > 0) nBits.push(`${homeName}近 ${Number(h.n_fixtures)} 场`);
-  if (a && Number(a.n_fixtures) > 0) nBits.push(`${awayName}近 ${Number(a.n_fixtures)} 场`);
-  const sideNote = (!hOk || !aOk)
-    ? `<p class="gc-empty-side">${esc((!hOk ? homeName : awayName) + '进球分钟不够（不足 4 场），该侧留空，不编造场均。轴与另一侧对齐。')}</p>`
+  if (hOk && h && Number(h.n_fixtures) > 0) nBits.push(`${homeName}近 ${Number(h.n_fixtures)} 场`);
+  if (aOk && a && Number(a.n_fixtures) > 0) nBits.push(`${awayName}近 ${Number(a.n_fixtures)} 场`);
+  const sideNote = solo
+    ? `<p class="gc-empty-side">${esc(missName + '进球分钟不够（不足 4 场），没有放进对照，不编造场均。')}</p>`
     : '';
-  return `<section class="sm-kit gc-kit${!hOk || !aOk ? ' gc-one-side' : ''}"><div class="sm-kit-hd"><h3>近况进球时段</h3><small>场均进球</small></div>
+  const legend = solo
+    ? `<div class="sm-legend"><i class="${soloSide}"></i><span>${esc(soloName)}</span></div>`
+    : `<div class="sm-legend"><i class="h"></i><span>${esc(homeName)}</span><i class="a"></i><span>${esc(awayName)}</span></div>`;
+  return `<section class="sm-kit gc-kit${solo ? ' gc-solo gc-solo-' + soloSide : ''}"><div class="sm-kit-hd"><h3>近况进球时段</h3><small>场均进球</small></div>
     <p class="gc-sub">近况场均：该段进球数 ÷ 场次。不是本场会进几个。</p>
-    <div class="sm-legend"><i class="h"></i><span>${esc(homeName)}</span><i class="a"></i><span>${esc(awayName)}</span></div>
-    ${rows}${cfRow()}
+    ${legend}
+    <div class="gc-rows">${rows}${cfRow()}</div>
     ${sideNote}
     ${nBits.length ? `<p class="gc-n">${esc(nBits.join(' · '))}，数字是场均。</p>` : ''}
   </section>`;
@@ -13797,6 +16903,11 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
   const mid = (hg != null && ag != null)
     ? `<div class="score num">${esc(hg)} : ${esc(ag)}</div><small>${half ? '半场 ' + esc(half) + ' · ' : ''}${esc(officialStatusZh(statusLab, finished ? '完场' : '进行中'))}</small>`
     : `<div class="vs">VS</div><small>${started ? (finished ? '完场' : '已开赛 · 待开奖') : esc(x.time) + ' 开赛'}</small>`;
+  const liveOn = isAnimLiveOn(id);
+  const hasPitchNode = typeof document !== 'undefined' && !!document.getElementById('pitch-live-' + id);
+  const wantPitch = !finished && animLiveWantPitch(x);
+  const animLiveBtn = `<button type="button" class="hero-anim-live${liveOn ? ' is-on' : ''}" data-act="openAnimLive" data-id="${esc(id)}" aria-label="动画直播" aria-pressed="${liveOn ? 'true' : 'false'}"><svg class="hero-anim-live-ico" viewBox="0 0 24 18" aria-hidden="true"><rect x="1.25" y="1.25" width="21.5" height="15.5" rx="3.2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="12" y1="1.25" x2="12" y2="16.75" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="9" r="3.15" fill="none" stroke="currentColor" stroke-width="2"/></svg>动画直播</button>`;
+  const animStage = `<div class="hero-anim-stage${liveOn ? ' is-on' : ''}" id="hero-anim-stage-${esc(id)}">${liveOn && !hasPitchNode && wantPitch ? pitchLiveShellHtml(x) : ''}</div>`;
   const nav = matchEdgeNavBar(favBtn, leagueHeroMark(x));
   const wx = matchWeatherType(x);
   const homeGlow = teamGlowCached(x, 'home');
@@ -13804,9 +16915,9 @@ function matchHero(x, m, r, { favBtn = '' } = {}) {
   const wxLayer = `<div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-fx hero-wx-flash"></div><div class="hero-wx-scrim"></div></div>`;
   const heroBg = heroGlowGradient(homeGlow, awayGlow) + ', #0A0B0E';
   const sample = x.sample ? '<div class="meta"><span class="sample-tag">示例数据</span></div>' : '';
-  let h = `<div class="hero hero--edge hero--weather" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="background:${esc(heroBg)}">${wxLayer}${nav}${sample}
+  let h = `<div class="hero hero--edge hero--weather${liveOn ? ' hero--anim-live' : ''}" id="match-hero-${esc(id)}" data-weather="${esc(wx)}" style="background:${esc(heroBg)}">${wxLayer}${nav}${sample}${animStage}
     <div class="teams"><div class="tm">${matchTeamBadge(x, 'home', 'lg', { eager: true })}<span>${esc(x.home)}</span><small>主队 ${esc(formatHeroRank(x.homeRank || ''))}</small><i class="tm-tick" hidden></i></div>
-    <div class="mid">${mid}</div>
+    <div class="mid">${mid}${animLiveBtn}</div>
     <div class="tm">${matchTeamBadge(x, 'away', 'lg', { eager: true })}<span>${esc(x.away)}</span><small>客队 ${esc(formatHeroRank(x.awayRank || ''))}</small><i class="tm-tick" hidden></i></div></div></div>`;
   return h;
 }
@@ -13827,6 +16938,23 @@ function formatOddsAge(iso) {
 }
 /** Prefer live full sheet before kickoff; after KO use frozen snapshot. */
 const _oddsSnapInflight = Object.create(null);
+const ODDS_SNAP_INFLIGHT_MAX_MS = 13000;
+function settleWithTimeout(promise, ms, onTimeout) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      if (typeof onTimeout === 'function') {
+        try { resolve(onTimeout()); } catch (e) { reject(e); }
+      } else reject(new Error('网络超时，请稍后重试'));
+    }, Math.max(1, Number(ms) || 0));
+    Promise.resolve(promise).then(
+      (v) => { if (done) return; done = true; clearTimeout(timer); resolve(v); },
+      (e) => { if (done) return; done = true; clearTimeout(timer); reject(e); }
+    );
+  });
+}
 async function loadOddsSnapshot(matchId, date, x) {
   const id = String(matchId || '');
   if (!id) return null;
@@ -13839,20 +16967,28 @@ async function loadOddsSnapshot(matchId, date, x) {
   // 60s poll, even though the server is already fine.
   if (cache[key] && cache[key].ok !== false && cache[key].pools
       && Date.now() - (cache[key]._at || 0) < (started ? 120e3 : 45e3)) return cache[key];
-  if (_oddsSnapInflight[key]) return _oddsSnapInflight[key];
+  const prev = _oddsSnapInflight[key];
+  if (prev && prev.promise && (Date.now() - (prev.at || 0)) < ODDS_SNAP_INFLIGHT_MAX_MS) {
+    return prev.promise;
+  }
+  if (prev) delete _oddsSnapInflight[key];
   const oddsJob = (async () => {
   const fetchOnce = async () => {
-    // After kickoff, use the frozen snapshot only — odds-live is off sale.
-    if (!started) {
-      const live = await api('/odds-live?matchId=' + encodeURIComponent(id), { timeout: 12000 });
-      if (live && live.ok && live.pools) {
-        return Object.assign({ _at: Date.now(), _mode: 'live' }, live);
+    const run = async () => {
+      // After kickoff, use the frozen snapshot only — odds-live is off sale.
+      if (!started) {
+        const live = await api('/odds-live?matchId=' + encodeURIComponent(id), { timeout: 12000 });
+        if (live && live.ok && live.pools) {
+          return Object.assign({ _at: Date.now(), _mode: 'live' }, live);
+        }
       }
-    }
-    let q = '/odds-snapshot?matchId=' + encodeURIComponent(id);
-    if (date) q += '&date=' + encodeURIComponent(date);
-    const j = await api(q, { timeout: 12000 });
-    return Object.assign({ _at: Date.now(), _mode: 'snap' }, j || {});
+      let q = '/odds-snapshot?matchId=' + encodeURIComponent(id);
+      if (date) q += '&date=' + encodeURIComponent(date);
+      const j = await api(q, { timeout: 12000 });
+      return Object.assign({ _at: Date.now(), _mode: 'snap' }, j || {});
+    };
+    // Hard cap: some WebViews do not reject fetch() when AbortController fires.
+    return settleWithTimeout(run(), 12000);
   };
   try {
     let payload;
@@ -13872,9 +17008,9 @@ async function loadOddsSnapshot(matchId, date, x) {
     return { ok: false, reason: 'error', error: e.message || '加载失败' };
   }
   })();
-  _oddsSnapInflight[key] = oddsJob;
+  _oddsSnapInflight[key] = { promise: oddsJob, at: Date.now() };
   try { return await oddsJob; } finally {
-    if (_oddsSnapInflight[key] === oddsJob) delete _oddsSnapInflight[key];
+    if (_oddsSnapInflight[key] && _oddsSnapInflight[key].promise === oddsJob) delete _oddsSnapInflight[key];
   }
 }
 
@@ -13908,6 +17044,10 @@ function warmupMatchOddsAndReports(list, opts) {
   let cursor = 0;
   const worker = async () => {
     while (cursor < todo.length) {
+      if (typeof route === 'function' && route().name === 'match') {
+        await new Promise((r) => setTimeout(r, 800));
+        continue;
+      }
       const x = todo[cursor++];
       try {
         await Promise.all([
@@ -14100,6 +17240,9 @@ function softPatchDetailTab(id, tab) {
     }
     const pane = document.getElementById('detail-pane-' + id);
     if (!pane) return false;
+    if (closeAnimLiveIfFinished(id, x)) { /* FT: stage already torn down */ }
+    else if (isAnimLiveOn(id)) { try { parkPitchLive(id); } catch (_) {} }
+    else { try { teardownPitchLive(id); } catch (_) {} }
     pane.className = detailPaneClass(tab);
     pane.innerHTML = detailPaneInnerHtml(x, tab);
     syncViewWrapClass();
@@ -14107,11 +17250,14 @@ function softPatchDetailTab(id, tab) {
       render.lastSig = 'match:' + String(id) + ':' + tab + ':' + ((S.squadTab && S.squadTab[id]) || '') + ':' + JSON.stringify((route().query) || {});
       render.last = location.hash;
     } catch (_) {}
+    if (isAnimLiveOn(id)) { try { syncHeroAnimLive(id); } catch (_) {} }
     return true;
   } catch (_) { return false; }
 }
 
 function pageMatch(id) {
+  try { closeAnimLiveIfFinished(id); } catch (_) {}
+  try { if (isAnimLiveOn(id)) parkPitchLive(id); } catch (_) {}
   const m = findMatch(id); const r = !m && (S.results || []).find(x => x.id === String(id));
   const shell = !m && !r && loadFxShell(id);
   const x = m || r || shell || null;
@@ -14123,6 +17269,7 @@ function pageMatch(id) {
     return `<div class="hero hero--edge hero--edge-min">${matchEdgeNavBar()}</div>`
       + empty('该场比赛已结束或已下架', '<button class="btn ghost sm" data-go="#/results">查看开奖</button>') + foot();
   }
+  try { prefetchPredRef(x); } catch (_) {}
   let tab = detailTabOf(x.id);
   const tabs = detailTabsFor(x);
   if (!tabs.some(tt => tt[0] === tab)) {
@@ -14230,12 +17377,14 @@ function ensureMatchStatusPoll(x) {
     const nowFin = isMatchFinished(x);
     const hasReview = detailTabsFor(x).some(t => t[0] === 'review');
     if ((!wasFin && nowFin) || (!hadReview && hasReview)) {
+      if (nowFin) { try { closeAnimLiveIfFinished(x.id, x); } catch (_) {} }
       refreshDetailTabs(x);
       if (nowFin) stopMatchStatusPoll();
       return;
     }
     // Keep hero clock/score fresh while in-play
     refreshDetailTabs(x);
+    if (nowFin) { try { closeAnimLiveIfFinished(x.id, x); } catch (_) {} }
     if (nowFin) stopMatchStatusPoll();
   }, 45e3);
 }
@@ -14245,17 +17394,31 @@ async function enrichMatchDetail(x) {
   const tab = detailTabOf(x.id);
   if (tab !== 'live') stopLivePoll();
   if (tab !== 'live') stopChatPoll();
+  if (isMatchFinished(x) || isAnimLiveClosedPhase(x)) { try { closeAnimLiveIfFinished(x.id, x); } catch (_) {} }
+  if (tab !== 'live' && !isAnimLiveOn(x.id)) { try { teardownPitchLive(x.id); } catch (_) {} }
   if (route().name !== 'match') stopMatchStatusPoll();
-  // 1.9.107: prefetch lineup when match detail opens so squad tab paints from cache
+  // First wave: small payloads the current tabs actually wait on.
   try { ensureLineup(x); } catch (_) {}
-  try { ensureSmSurface(x); } catch (_) {}
-  try { ensureMatchSquadValue(x); } catch (_) {}
-  try { ensureMatchRadar(x); } catch (_) {}
+  try { ensureSmPredictions(x); } catch (_) {}
+  try { ensureSmMatchfacts(x); } catch (_) {}
   try { ensureMatchWeather(x); } catch (_) {}
 
   // Start 赔率 / 情报 immediately, in parallel, never behind live-stats.
   const reportP = loadPredictReport(findMatch(x.id) || x).catch(() => null);
   const oddsP = loadOddsSnapshot(x.id, x.date, x).catch(() => null);
+
+  // Defer heavy 数据 packs (radar ~270KB, surface, 身价) so 阵容/预测
+  // are not stuck behind them on HTTP/1.1. Open them immediately if
+  // the user is already on 数据/情报.
+  const heavyLater = () => {
+    if (route().name !== 'match' || String(route().arg) !== String(x.id)) return;
+    try { ensureSmSurface(x); } catch (_) {}
+    try { ensureMatchSquadValue(x); } catch (_) {}
+    try { ensureMatchRadar(x); } catch (_) {}
+  };
+  if (tab === 'data' || tab === 'intel') heavyLater();
+  else if (typeof requestIdleCallback === 'function') requestIdleCallback(heavyLater, { timeout: 800 });
+  else setTimeout(heavyLater, 300);
 
   // After kickoff, warm live-stats in the background only. A hung
   // /live-stats must not block 赔率, 情报, or 天气 (20s client timeout).
@@ -14269,6 +17432,7 @@ async function enrichMatchDetail(x) {
       if (route().name !== 'match' || String(route().arg) !== String(x.id)) return;
       const nowFin = isMatchFinished(x);
       const hasReviewTab = detailTabsFor(x).some(t => t[0] === 'review');
+      if (nowFin) { try { closeAnimLiveIfFinished(x.id, x); } catch (_) {} }
       if ((!wasFin && nowFin) || (!hadReviewTab && hasReviewTab) || kickedOff) {
         refreshDetailTabs(x); // hero score / 赛后复盘 tab when it arrives
       }
@@ -14283,10 +17447,8 @@ async function enrichMatchDetail(x) {
   }
   if (tab === 'squad') {
     await ensureSquad(x);
-    try { await reportP; } catch (_) {}
-    const box = document.getElementById('lineup-box-' + x.id);
     const L = S.lineupCache && S.lineupCache[x.id];
-    if (box && L) box.innerHTML = lineupHtml(findMatch(x.id) || x, L);
+    paintLineupBox(findMatch(x.id) || x, L);
   }
   if (tab === 'odds') {
     stopOddsLivePoll();
@@ -14302,10 +17464,12 @@ async function enrichMatchDetail(x) {
   }
   if (tab === 'pred') {
     const m = findMatch(x.id) || x;
-    await Promise.all([reportP, oddsP]);
+    const predP = ensureSmPredictions(x).catch(() => null);
+    await Promise.all([oddsP, predP]);
     if (route().name === 'match' && String(route().arg) === String(x.id) && detailTabOf(x.id) === 'pred') {
       const pane = document.getElementById('detail-pane-' + x.id);
       if (pane) pane.innerHTML = predTabHtml(m);
+      try { paintSmPredictions(String(x.id)); } catch (_) {}
     }
     ensurePrematchAiPoll(m);
   }
@@ -14329,6 +17493,7 @@ async function enrichMatchDetail(x) {
     if (tab === 'intel') tasks.push(loadMatchStats(x));
     if (tab === 'intel') tasks.push(reportP);
     if (tab === 'intel') tasks.push(ensureSmBracket(x));
+    if (tab === 'intel' || tab === 'live') tasks.push(ensureSmMatchfacts(x));
     if (tab === 'data' || tab === 'live') tasks.push(ensureSmSurface(x));
     if (tab === 'data') tasks.push(reportP);
     if (tab === 'data') tasks.push(ensureMatchRadar(x));
@@ -14345,7 +17510,7 @@ async function enrichMatchDetail(x) {
       if (pane) {
         const stats = S.statsCache[String(x.homeTeamId || '') + '|' + String(x.awayTeamId || '')];
         const m = findMatch(x.id);
-        if (tab === 'intel') { pane.innerHTML = intelTabHtml(x, m, stats); loadVote(x.id); }
+        if (tab === 'intel') { pane.innerHTML = intelTabHtml(x, m, stats); loadVote(x.id); try { paintSmMatchfacts(String(x.id)); } catch (_) {} }
         else if (tab === 'data') {
           pane.innerHTML = dataTabHtml(x);
           const sm = S.smSurface && S.smSurface[String(x.id)];
@@ -14356,12 +17521,15 @@ async function enrichMatchDetail(x) {
         }
         else if (tab === 'live') {
           const live = (S.liveStatsCache && S.liveStatsCache[String(x.id)]) || null;
+          if (isAnimLiveOn(x.id)) { try { parkPitchLive(x.id); } catch (_) {} }
           pane.innerHTML = liveTabHtml(x, live);
           const sm = S.smSurface && S.smSurface[String(x.id)];
           if (sm) paintSmSurface(String(x.id), sm);
+          try { paintSmMatchfacts(String(x.id)); } catch (_) {}
           ensureLivePoll(x);
           ensureChatPoll(x);
           try { applyMatchWeather(x, weatherPackOf(x)); } catch (_) {}
+          if (isAnimLiveOn(x.id)) { try { syncHeroAnimLive(x.id); } catch (_) {} }
           maybeScrollToChat(String(x.id));
         }
       }
@@ -16664,6 +19832,10 @@ function invalidateTabKeep(name) {
 }
 
 function applyViewHtml(v, html, { isTab, hasPrev, cold, softSame } = {}) {
+  try {
+    const rr = (typeof route === 'function') ? route() : {};
+    if (rr && rr.name === 'match' && isAnimLiveOn(rr.arg)) parkPitchLive(rr.arg);
+  } catch (_) {}
   // Cold empty: navy hold so splash→first paint stays one color
   // 1.9.125: while #boot-shell is up, keep paint-hold until revealBootShell (images may still load)
   if (cold || !hasPrev) {
@@ -16755,7 +19927,9 @@ function applyViewWrapClass(v, r) {
 }
 
 function detailPaneClass(tab) {
-  return 'detail-pane' + (tab === 'review' ? ' detail-pane--review' : '');
+  return 'detail-pane'
+    + (tab === 'review' ? ' detail-pane--review' : '')
+    + (tab === 'squad' ? ' detail-pane--lineup' : '');
 }
 
 function syncViewWrapClass() {
@@ -16775,6 +19949,24 @@ function render(opts) {
   opts = opts || {};
   applyHomeTheme(homeTheme());
   let r = route();
+  if (!r || r.name !== 'match') {
+    try {
+      const land = document.getElementById('anim-live-land');
+      const pip = document.getElementById('anim-live-pip');
+      if (land && !land.classList.contains('hidden')) hideAnimLiveHost(land, false);
+      if (pip && !pip.classList.contains('hidden')) hideAnimLiveHost(pip, false);
+      if (typeof S !== 'undefined' && S._animLiveDidLockOri) restoreAppOrientation();
+      const vw = document.getElementById('view');
+      if (vw) vw.classList.remove('is-anim-live', 'is-hero-stuck');
+    } catch (_) {}
+  }
+  if (r && r.name === 'match' && r.arg) {
+    const early = (typeof findMatch === 'function' && findMatch(r.arg))
+      || ((S.results || []).find((z) => String(z.id) === String(r.arg)))
+      || (typeof loadFxShell === 'function' && loadFxShell(r.arg))
+      || null;
+    if (early) { try { prefetchPredRef(early); } catch (_) {} }
+  }
   if (r.name === 'me') {
     openMeDrawer();
     if (location.hash !== '#/home') {
@@ -16923,7 +20115,18 @@ function render(opts) {
       setTimeout(() => prefetchPredictReports(S.matches), 0);
     }
   }
+  if (r.name === 'schedule' || r.name === 'home' || r.name === 'match') {
+    const needMf = (S.matches || []).some((m) => {
+      const id = String(m.id);
+      const hit = S.smMatchfacts && S.smMatchfacts[id];
+      return Date.now() < kickoff(m) + 2 * 3600e3 && !(hit && hit.ok && !hit._loading);
+    });
+    if (needMf && !(S._mfPrefetch && S._mfPrefetch.running)) {
+      setTimeout(() => prefetchSmMatchfacts(S.matches), 0);
+    }
+  }
   if (r.name === 'match') setTimeout(() => enrichMatchDetail(findMatch(r.arg) || (S.results || []).find(z => z.id === String(r.arg))), 0);
+  else { try { teardownPitchLive(); } catch (_) {} }
   if ((r.name === 'membership' || r.name === 'pay') && (!S.memberCatalog || (loggedIn() && !S.membership))) {
     const need = r.name;
     ensureMembershipReady().then(() => { if (route().name === need) render({ force: true }); });
@@ -16977,6 +20180,7 @@ function render(opts) {
   if (r.name === 'match') {
     const mx = findMatch(r.arg) || (S.results || []).find(z => String(z.id) === String(r.arg)) || (typeof loadFxShell === 'function' && loadFxShell(r.arg));
     if (mx) { try { ensureMatchWeather(mx); } catch (_) {} }
+    if (mx && isAnimLiveOn(mx.id)) { try { syncHeroAnimLive(mx.id); } catch (_) {} }
   }
   tickClock();
 }
@@ -17472,13 +20676,13 @@ document.addEventListener('click', async e => {
       const box = el.closest('.sm-form');
       if (!box) return;
       const side = el.dataset.side === 'away' ? 'away' : 'home';
-      box.querySelectorAll('[data-act="smFormSide"]').forEach(b => b.classList.toggle('on', b.dataset.side === side));
-      if (box.getAttribute('data-side') === side) return;
-      box.setAttribute('data-side', side);
-      const mount = box.querySelector('.sm-form-mount');
-      const tpl = box.querySelector('template.sm-form-src[data-for="' + side + '"]');
-      const html = tpl ? String(tpl.innerHTML || '') : '';
-      if (mount) swapSlotHtml(mount, html);
+      applySmFormSide(box, side);
+      const wrap = box.closest('[id^="sm-form-"]') || box.parentElement;
+      const mid = wrap && wrap.id && wrap.id.indexOf('sm-form-') === 0 ? wrap.id.slice(8) : '';
+      if (mid) {
+        S.smFormSide = S.smFormSide || {};
+        S.smFormSide[mid] = side;
+      }
       return;
     }
     case 'openMvSheet':
@@ -17511,6 +20715,10 @@ document.addEventListener('click', async e => {
     }
     case 'radarPlayer':
       return openRadarPlayerSheet(el.dataset.id, el.dataset.sm);
+    case 'openMfFullview':
+      return openMfFullview(el.dataset.id);
+    case 'closeMfFullview':
+      return closeMfFullview();
     case 'radarTeamExpand':
       return openRadarExpand({ kind: 'team', id: el.dataset.id });
     case 'radarPlayerAll':
@@ -17615,6 +20823,54 @@ document.addEventListener('click', async e => {
       paintLiveSub(id);
       return;
     }
+    case 'openAnimLive': {
+      const id = String(el.dataset.id || '');
+      const x0 = findMatch(id) || (S.results || []).find(z => z.id === String(id)) || (typeof loadFxShell === 'function' && loadFxShell(id));
+      if (!id) return;
+      S.animLiveOn = S.animLiveOn || {};
+      S.animLiveOn[id] = !S.animLiveOn[id];
+      if (!S.animLiveOn[id]) {
+        try { tearDownAnimLiveModes(id, true); } catch (_) {}
+      } else {
+        S.animLiveMode = S.animLiveMode || {};
+        if (!S.animLiveMode[id]) S.animLiveMode[id] = 'docked';
+      }
+      try { syncHeroAnimLive(id); } catch (_) {}
+      const x = x0;
+      if (S.animLiveOn[id] && x) {
+        if (isAnimLiveClosedPhase(x)) {
+          try { ensureAnimLiveRecapData(x); } catch (_) {}
+        } else {
+          try { ensurePitchLivePoll(x); } catch (_) {}
+        }
+      }
+      return;
+    }
+    case 'animLiveLand': {
+      const id = String(el.dataset.id || '');
+      if (!isAnimLiveOn(id)) return;
+      setAnimLiveMode(id, animLiveModeOf(id) === 'landscape' ? 'docked' : 'landscape');
+      return;
+    }
+    case 'animLivePip': {
+      const id = String(el.dataset.id || '');
+      if (!isAnimLiveOn(id)) return;
+      setAnimLiveMode(id, animLiveModeOf(id) === 'pip' ? 'docked' : 'pip');
+      return;
+    }
+    case 'animLiveClose': {
+      const id = String(el.dataset.id || '');
+      const mode = animLiveModeOf(id);
+      if (mode === 'landscape' || mode === 'pip') {
+        setAnimLiveMode(id, 'docked');
+        return;
+      }
+      S.animLiveOn = S.animLiveOn || {};
+      S.animLiveOn[id] = false;
+      try { tearDownAnimLiveModes(id, true); } catch (_) {}
+      try { syncHeroAnimLive(id); } catch (_) {}
+      return;
+    }
     case 'detailTab': {
       const id = el.dataset.id;
       let tab = el.dataset.tab;
@@ -17647,7 +20903,7 @@ document.addEventListener('click', async e => {
       const x = findMatch(id) || (S.results || []).find(z => z.id === String(id));
       const box = document.getElementById('lineup-box-' + id);
       const L = S.lineupCache && S.lineupCache[id];
-      if (box && x) box.innerHTML = lineupHtml(x, L);
+      if (box && x) paintLineupBox(x, L);
       return;
     }
     case 'luTeam': {
@@ -17657,7 +20913,7 @@ document.addEventListener('click', async e => {
       const x = findMatch(id) || (S.results || []).find(z => z.id === String(id));
       const box = document.getElementById('lineup-box-' + id);
       const L = S.lineupCache && S.lineupCache[id];
-      if (box && x) box.innerHTML = lineupHtml(x, L);
+      if (box && x) paintLineupBox(x, L);
       return;
     }
     case 'vote': {
@@ -18238,11 +21494,21 @@ document.addEventListener('submit', async e => {
     try {
       // 1.9.245: 赛程页下拉刷新必须同步强刷实时比分（此前只刷新赛程列表，比分沿用旧缓存）
       const work = Promise.all([reloadData(true), refreshAccount(), pullRefreshScheduleLiveScores()]);
-      const timed = new Promise((resolve) => setTimeout(resolve, 12000));
+      // 387: last-good is already on screen — do not hold 正在刷新 for a 12–20s official/live fetch.
+      let workDone = false;
+      work.then(() => { workDone = true; }).catch(() => { workDone = true; });
+      const timed = new Promise((resolve) => setTimeout(resolve, 3000));
       await Promise.race([work, timed]);
       invalidateTabKeep();
       render({ force: true });
       txt('刷新完成');
+      if (!workDone) {
+        work.then(() => {
+          try { afterScheduleLiveScoresLoaded(); } catch (_) {
+            try { render({ force: true }); } catch (_) {}
+          }
+        }).catch(() => {});
+      }
     } catch (_) {
       txt('刷新失败');
       try { invalidateTabKeep(); render({ force: true }); } catch (_) {}
@@ -18258,6 +21524,14 @@ loadGoalAlertSeen();
 // 1.9.265: first launch must prompt Android POST_NOTIFICATIONS even with zero favs
 if (IS_APP) { requestFavGoalNotifyPermission(); syncPushRegistration(); }
 hydrateFromCache(); // 1.9.124: JSON lists
+try {
+  const teams = [];
+  for (const row of [].concat(S.matches || [], S.schedule || [], S.results || [])) {
+    if (row && row.homeLogo) teams.push({ logo: row.homeLogo, teamId: row.homeTeamId });
+    if (row && row.awayLogo) teams.push({ logo: row.awayLogo, teamId: row.awayTeamId });
+  }
+  if (teams.length) warmCrestCacheForTeams(teams);
+} catch (_) {}
 hydrateKbPacksCache(); // 1.9.158: KB list before first /kb paint
 if (loggedIn()) prefetchKbPacksOnBoot(); // 1.9.161: idle KB warm; DC queue yields while #/kb or KB in-flight
 hydratePredictCache(); // 1.9.125: predict reports so home sig matches snap
@@ -18351,6 +21625,7 @@ window.__partnerGateReady.then((ok) => {
 setInterval(tickClock, 1000);
 addEventListener('visibilitychange', () => {
   try { syncHeroWeatherMotion(); } catch (_) {}
+  try { syncPitchLiveMotion(); } catch (_) {}
   if (document.hidden) {
     ensureFavGoalPoll();
     return;

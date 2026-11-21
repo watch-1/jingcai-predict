@@ -17,9 +17,15 @@ assert.ok(app.includes('luSidelinedOf'), 'sidelined from squad cache / predict r
 assert.ok(!/luInjHtml[\s\S]{0,200}斯通斯/.test(app), 'does not invent mock injuries');
 assert.ok(css.includes('.lu-board'), 'board CSS');
 assert.ok(css.includes('#2f9e6b'), 'captain green');
-assert.ok(css.includes('#c0b4ea') || app.includes('#c0b4ea'), 'formation lines');
+assert.ok(!app.includes('class="lu-links"') && !app.includes("class='lu-links'"), 'no formation connectors on the board');
+assert.ok(!app.includes('stroke="#c0b4ea"'), 'no purple formation strokes');
+assert.ok(css.includes('.lu-board .lu-ph{width:32px'), 'smaller pitch avatars');
+assert.ok(css.includes('width:28px'), 'dense pitch avatars');
 assert.ok(css.includes('#141622'), 'dark formation card');
-assert.ok(css.includes('.lu-mid:after'), 'midfield circle');
+assert.ok(css.includes('.lu-lines'), 'pitch line layer');
+assert.ok(app.includes('luPitchLinesSvg'), 'pitch markings renderer');
+assert.ok(app.includes('class="lu-box"'), 'penalty boxes');
+assert.ok(app.includes('class="lu-goal"'), 'goal frames');
 assert.ok(!css.includes('.lu-pitch{'), 'no green pitch layer');
 assert.ok(css.includes('lineup-grain.png'), 'grain texture');
 assert.ok(css.includes('.lu-cap'), 'captain badge');
@@ -28,6 +34,6 @@ assert.ok(css.includes('.lu-board.dense') || css.includes('.lu-board.dense '), '
 assert.ok(css.includes('366/820'), 'taller pitch card');
 assert.ok(app.includes('data-act="luTeam"'), '名单/替补 team switcher');
 assert.ok(app.includes('sml-one'), 'single-team list');
-assert.ok(index.includes('216lu4'), 'cache bust');
+assert.ok(/216mf398|216mf399|216mf400|216mf401/.test(index), 'cache bust');
 assert.ok(fs.existsSync(path.join(__dirname, '../public/assets/lineup-grain.png')), 'grain asset');
 console.log('lineup UI source tests OK');

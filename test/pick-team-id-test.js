@@ -140,4 +140,15 @@ assert.strictEqual(hs.pickTeamId([
   row(2, 'PSV'),
 ], 'England'), null);
 
+// Unique search hit with a distinctive short query (crest/AF short vs SM full name)
+assert.strictEqual(hs.pickTeamId([row(3690, 'Kashima Antlers')], 'Kashima'), 3690);
+assert.strictEqual(hs.pickTeamId([row(3663, 'Shimizu S-Pulse')], 'Shimizu'), 3663);
+assert.strictEqual(hs.pickTeamId([row(1264, 'Western Sydney Wanderers')], 'Western Sydney'), 1264);
+assert.strictEqual(hs.pickTeamId([row(1, 'Manchester United')], 'United'), null);
+assert.strictEqual(hs.pickTeamId([row(1, 'Real Madrid')], 'Real'), null);
+assert.strictEqual(hs.pickTeamId([
+  row(3690, 'Kashima Antlers'),
+  row(9999, 'Kashima Reds'),
+], 'Kashima'), null);
+
 console.log('pick-team-id-test ok');

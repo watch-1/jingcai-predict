@@ -8,6 +8,7 @@ const assert = require('assert');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ls271-'));
 fs.mkdirSync(path.join(tmp, 'live-stats'), { recursive: true });
 process.env.DATA_DIR = tmp;
+process.env.ALLOW_AF_HTTP = '1';
 process.env.API_FOOTBALL_KEY = 'ut-271-key';
 const ko = new Date(Date.now() - 66 * 60e3);
 const bj = new Date(ko.getTime() + 8 * 3600e3);

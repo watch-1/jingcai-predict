@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Outline;
@@ -384,6 +385,22 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void setPushDeviceSecret(String secret) {
             PushState.storeSecret(MainActivity.this, secret);
+        }
+
+        @JavascriptInterface
+        public void lockOrientation(String mode) {
+            final String m = mode == null ? "" : mode.trim().toLowerCase();
+            runOnUiThread(new Runnable() {
+                @Override public void run() {
+                    if ("landscape".equals(m)) {
+                        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                    } else if ("portrait".equals(m)) {
+                        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
+                    } else {
+                        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+                    }
+                }
+            });
         }
 
         @JavascriptInterface

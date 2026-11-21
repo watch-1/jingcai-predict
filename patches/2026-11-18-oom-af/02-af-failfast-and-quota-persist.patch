@@ -1,0 +1,170 @@
+--- a/lib/live-stats.js
++++ b/lib/live-stats.js
+@@ -16,7 +16,18 @@
+ const statsCache = new Map(); // fixtureId -> { at, payload }
+ const eventsCache = new Map(); // fixtureId -> { at, events }
+ const inflight = new Map();
++const QUOTA_FILE = () => path.join(MAP_DIR(), 'af-quota.json');
+ let lastQuota = { remaining: null, limit: null, at: 0 };
++try {
++  const q = JSON.parse(fs.readFileSync(QUOTA_FILE(), 'utf8'));
++  if (q && typeof q === 'object') {
++    lastQuota = {
++      remaining: q.remaining != null ? Number(q.remaining) : null,
++      limit: q.limit != null ? Number(q.limit) : null,
++      at: q.at || 0,
++    };
++  }
++} catch (_) {}
+ const EVENTS_TTL_LIVE_MS = 45 * 1000;
+ const EVENTS_TTL_IDLE_MS = 10 * 60 * 1000;
+ /** Live fixture with score but empty events list — do not treat as settled for long. */
+@@ -113,6 +124,20 @@
+   if (/[\u4e00-\u9fff]/.test(msg)) return msg;
+   if (e && (e.code === 'upstream' || e.code === 'network')) return '实时数据暂时不可用，请稍后重试';
+   return '实时数据暂时不可用，请稍后重试';
++}
++
++/** Classify AF failures using raw English / HTTP / abort, not the translated UI message. */
++function classifyAfError(e, rawMsg) {
++  const msg = String(rawMsg || (e && e.rawMessage) || (e && e.message) || '');
++  const low = msg.toLowerCase();
++  const code = e && e.code;
++  if ((e && e.name === 'AbortError') || code === 'timeout' || /abort|timeout|etimedout/i.test(msg)) return 'timeout';
++  if (code === 'network' || /network|econnreset|enotfound|socket|tls|certificate|und_err|fetch failed|failed to fetch/i.test(low)) return 'network';
++  if (/too many requests|ratelimit|rate limit|429/.test(low) || code === 'rate_limit') return 'rate_limit';
++  if (/suspend/i.test(msg)) return 'suspended';
++  if (/do not have access to this season|access to this season/i.test(msg)) return 'season_access';
++  if (code === 'upstream' || code === 'no_key') return code;
++  return 'upstream';
+ }
+ 
+ function staleStatsPayload(cacheKey) {
+@@ -298,21 +323,30 @@
+     } catch (netErr) {
+       const e = new Error(upstreamMessageZh(netErr));
+       e.code = 'network';
++      e.rawMessage = String((netErr && netErr.message) || netErr || '');
+       e.cause = netErr;
+       throw e;
+     }
+     const rem = r.headers.get('x-ratelimit-requests-remaining');
+     const lim = r.headers.get('x-ratelimit-requests-limit');
+-    if (rem != null) lastQuota = { remaining: Number(rem), limit: lim != null ? Number(lim) : 100, at: Date.now() };
++    if (rem != null) {
++      lastQuota = { remaining: Number(rem), limit: lim != null ? Number(lim) : 100, at: Date.now() };
++      try {
++        fs.mkdirSync(MAP_DIR(), { recursive: true });
++        fs.writeFileSync(QUOTA_FILE(), JSON.stringify(lastQuota));
++      } catch (_) {}
++    }
+     let j;
+     try { j = await r.json(); } catch (parseErr) {
+       const e = new Error(upstreamMessageZh(parseErr));
+-      e.code = 'upstream';
++      e.code = r.status === 429 ? 'rate_limit' : 'upstream';
++      e.rawMessage = String((parseErr && parseErr.message) || parseErr || '');
+       throw e;
+     }
+     if (!r.ok) {
+       const e = new Error(upstreamMessageZh({ message: `HTTP ${r.status}`, code: 'upstream' }));
+-      e.code = 'upstream';
++      e.code = r.status === 429 ? 'rate_limit' : 'upstream';
++      e.rawMessage = `HTTP ${r.status}`;
+       throw e;
+     }
+     if (j.errors && (Array.isArray(j.errors) ? j.errors.length : Object.keys(j.errors).length)) {
+@@ -320,8 +354,10 @@
+       const msg = typeof err === 'object' && !Array.isArray(err)
+         ? Object.values(err).join('; ')
+         : JSON.stringify(err);
++      const kind = classifyAfError({ code: 'upstream' }, msg);
+       const e = new Error(upstreamMessageZh({ message: msg, code: 'upstream' }));
+-      e.code = 'upstream';
++      e.code = kind;
++      e.rawMessage = msg;
+       throw e;
+     }
+     return j.response || [];
+@@ -1127,6 +1163,7 @@
+   resolveFixture,
+   resolveAfTeamId,
+   afFetch,
++  classifyAfError,
+   loadMap,
+   // test helpers
+   nameScore,
+--- a/lib/match-stats.js
++++ b/lib/match-stats.js
+@@ -535,8 +535,13 @@
+     } catch (e) {
+       lastErr = e;
+       console.warn('match-stats AF form season', season, e.message);
+-      // season/plan errors: try older; access/suspended: stop
+-      if (/suspend|access/i.test(String(e.message || ''))) break;
++      // Inspect raw/typed error, not the translated zh UI message.
++      let kind = e && e.code;
++      try { kind = kind || require('./live-stats').classifyAfError(e, e.rawMessage || e.message); } catch (_) {}
++      // Only keep walking seasons for a true "no access to this season" on a live key.
++      if (kind === 'season_access') continue;
++      // timeout / network / rate_limit / suspended / other upstream: stop and use local/stale.
++      break;
+     }
+   }
+ 
+--- a/lib/next-fixtures.js
++++ b/lib/next-fixtures.js
+@@ -254,9 +254,15 @@
+       }
+     } catch (e) {
+       lastErr = e;
+-      // plan/param errors → season path
+-      if (!/plan|parameter|last|next|订阅|subscription/i.test(String(e.message || ''))) {
++      let kind = e && e.code;
++      try { kind = kind || require('./live-stats').classifyAfError(e, e.rawMessage || e.message); } catch (_) {}
++      const raw = String(e.rawMessage || e.message || '');
++      // plan/param errors → season path; network/timeout/rate-limit must not burn 5 more calls.
++      if (!/plan|parameter|last|next|订阅|subscription/i.test(raw) && kind !== 'season_access') {
+         console.warn('next-fixtures AF next=', e.message);
++        if (kind === 'timeout' || kind === 'network' || kind === 'rate_limit' || kind === 'suspended') {
++          if (!merged.length && lastErr) throw lastErr;
++        }
+       }
+     }
+   }
+@@ -285,7 +291,10 @@
+       } catch (e) {
+         lastErr = e;
+         console.warn('next-fixtures AF season', season, e.message);
+-        if (/suspend|access/i.test(String(e.message || ''))) break;
++        let kind = e && e.code;
++        try { kind = kind || require('./live-stats').classifyAfError(e, e.rawMessage || e.message); } catch (_) {}
++        if (kind === 'season_access') continue;
++        break;
+       }
+     }
+   }
+--- a/lib/process-stats.js
++++ b/lib/process-stats.js
+@@ -377,15 +377,16 @@
+         if (preview.length >= lim && freshOk) break;
+       } catch (e) {
+         console.warn('process-stats fixtures season', season, e.message);
+-        const msg = String(e.message || '');
+-        if (/suspend/i.test(msg)) {
++        let kind = e && e.code;
++        try { kind = kind || require('./live-stats').classifyAfError(e, e.rawMessage || e.message); } catch (_) {}
++        if (kind === 'suspended') {
+           markSuspended();
+-          const err = new Error(msg);
++          const err = new Error(e.message);
+           err.code = 'suspended';
+           throw err;
+         }
+-        // skip inaccessible seasons, try next
+-        if (/do not have access to this season|season/i.test(msg)) continue;
++        // skip inaccessible seasons, try next; stop on timeout/network/rate-limit/upstream
++        if (kind === 'season_access') continue;
+         break;
+       }
+     }

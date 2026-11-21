@@ -1,0 +1,288 @@
+<!doctype html><html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>404 预览</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { margin: 0; background: #1a1d24; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif; }
+  .row { display: flex; gap: 24px; padding: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .phone { width: 390px; background: #f6f7f9; overflow: hidden; }
+  .prev-hero { background: #0A0B0E; color: #fff; padding: 8px 12px 14px; }
+  .ph-top { display: flex; justify-content: space-between; font-size: 13px; }
+  .ph-teams { display: grid; grid-template-columns: 1fr auto 1fr; text-align: center; margin-top: 10px; font-weight: 800; }
+  .ph-teams .mid b { font-size: 22px; }
+  .ph-teams small { display: block; font-weight: 500; opacity: .7; font-size: 11px; }
+  .prev-tabs { display: flex; background: #fff; border-bottom: 1px solid #ececef; font-size: 13px; color: #6b7280; font-weight: 600; }
+  .prev-tabs span { flex: 1; text-align: center; padding: 11px 0; }
+  .prev-tabs span.on { color: #1a1d24; box-shadow: inset 0 -2px 0 #5b7cfa; }
+  .lab { color: #e8edf5; font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+  .col { display: flex; flex-direction: column; }
+  .land-frame { width: 720px; height: 390px; background: #070a12; overflow: hidden; position: relative; }
+  .land-frame { isolation: isolate; }
+  .land-frame .anim-live-land { position: absolute !important; inset: 0 !important; display: flex !important; }
+  .land-frame .hero-anim-stage, .land-frame .anim-live-stage { width: 100%; height: 100%; }
+  .pip-page { position: relative; width: 390px; background: #f6f7f9; min-height: 640px; }
+  .pip-page .anim-live-pip { position: absolute; right: 10px; bottom: 24px; display: block; }
+
+  .fake-pane { padding: 14px; font-size: 13px; color: #3b4048; background: #fff; min-height: 200px; }
+</style>
+</head><body>
+<div class="row" id="text">
+  <div class="col"><div class="lab">文字直播</div><div class="phone" data-title="text">
+    <div class="prev-hero"><div class="ph-top"><span>‹</span><b>友谊赛</b><span>关注</span></div>
+      <div class="ph-teams"><div>威尔士<br><small>主队</small></div><div class="mid"><b>2 : 3</b><small>完场</small></div><div>葡萄牙<br><small>客队</small></div></div>
+    </div>
+    <div class="prev-tabs"><span>态度</span><span>情报</span><span>赔率</span><span>预测</span><span class="on">实时</span><span>阵容</span></div>
+    <div class="live-subhead">
+    <div class="live-subs">
+      <button type="button" class="on" data-act="liveSub" data-id="m1" data-sub="text">文字直播</button>
+      <button type="button" class="" data-act="liveSub" data-id="m1" data-sub="events">重要事件</button>
+    </div>
+    
+  </div><div class="live-sub-body"><div class="live-comment"><div class="live-c-meta"><p>本场比赛天气情况：晴</p><p>本场比赛场地：卡迪夫球场 · 卡迪夫</p></div><div class="live-c-row is-period"><div class="live-c-ico"><span class="ev-ico whistle" title="哨声">♪</span></div><div class="live-c-body"><b>90'</b> 完场</div></div><div class="live-c-row is-period"><div class="live-c-ico"><span class="ev-ico whistle" title="哨声">♪</span></div><div class="live-c-body"><b>90'</b> 下半场结束</div></div><div class="live-c-row is-period"><div class="live-c-ico"><span class="ev-ico whistle" title="哨声">♪</span></div><div class="live-c-body"><b>90'</b> 伤停补时（+3）</div></div><div class="live-c-row is-away"><div class="live-c-ico"><span class="ev-ico second-yellow" title="两黄变红"><i class="y"></i><i class="r"></i></span></div><div class="live-c-body"><b>74'</b> 两黄变红 — 佩德罗</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">葡</span><span>葡萄牙</span></div></div><div class="live-c-row is-home"><div class="live-c-ico"><span class="ev-ico subst is-injury" title="受伤换人"><b class="up">↑</b><b class="dn">↓</b></span></div><div class="live-c-body"><b>60'</b> 受伤换人 — 换上 约翰逊，换下 詹姆斯</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">威</span><span>威尔士</span></div></div><div class="live-c-row is-away"><div class="live-c-ico"><span class="ev-ico woodwork" title="击中门框">▭</span></div><div class="live-c-body"><b>59'</b> 击中门框 — 佩德罗</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">葡</span><span>葡萄牙</span></div></div><div class="live-c-row is-away"><div class="live-c-ico"><span class="ev-ico var" title="VAR">VAR</span></div><div class="live-c-body"><b>55'</b> VAR — 点球判定</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">葡</span><span>葡萄牙</span></div></div><div class="live-c-row is-home"><div class="live-c-ico"><span class="ev-ico yellow" title="黄牌"></span></div><div class="live-c-body"><b>51'</b> 第1张黄牌 — 卡班戈 · 犯规</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">威</span><span>威尔士</span></div></div><div class="live-c-row is-period"><div class="live-c-ico"><span class="ev-ico whistle" title="哨声">♪</span></div><div class="live-c-body"><b>45'</b> 中场</div></div><div class="live-c-row is-period"><div class="live-c-ico"><span class="ev-ico whistle" title="哨声">♪</span></div><div class="live-c-body"><b>45'</b> 伤停补时（+2）</div></div><div class="live-c-row is-home"><div class="live-c-ico"><span class="ev-ico shot-off" title="射偏"><span class="ev-ball">⚽</span></span></div><div class="live-c-body"><b>40'</b> 第2个射偏 — 威尔士</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">威</span><span>威尔士</span></div></div><div class="live-c-row is-home"><div class="live-c-ico"><span class="ev-ico missed" title="点球未进">○</span></div><div class="live-c-body"><b>30'</b> 点球未进 — 托马斯</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">威</span><span>威尔士</span></div></div><div class="live-c-row is-home"><div class="live-c-ico"><span class="ev-ico corner" title="角球">⚑</span></div><div class="live-c-body"><b>25'</b> 第1个角球 — 威尔士</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">威</span><span>威尔士</span></div></div><div class="live-c-row is-home"><div class="live-c-ico"><span class="ev-ico goal" title="进球"><span class="ev-ball">⚽</span></span></div><div class="live-c-body"><b>13'</b> 第2个进球 — 布鲁克斯 · 左脚（助攻 科尔威尔）</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">威</span><span>威尔士</span></div></div><div class="live-c-row is-away"><div class="live-c-ico"><span class="ev-ico goal" title="进球"><span class="ev-ball">⚽</span></span></div><div class="live-c-body"><b>11'</b> 第1个进球 — 布鲁诺 · 右脚（助攻 内维斯）</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">葡</span><span>葡萄牙</span></div></div><div class="live-c-row is-away"><div class="live-c-ico"><span class="ev-ico shot-on" title="射正"><span class="ev-ball">⚽</span></span></div><div class="live-c-body"><b>11'</b> 第1个射正 — 葡萄牙</div><div class="live-c-team"><span class="badge" style="display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:9px;font-weight:800">葡</span><span>葡萄牙</span></div></div><div class="live-c-row is-period"><div class="live-c-ico"><span class="ev-ico whistle" title="哨声">♪</span></div><div class="live-c-body"><b>0'</b> 开赛</div></div></div></div><div class="live-legend ev-legend">
+    <span><i class="ev-ico goal"><span class="ev-ball">⚽</span></i>进球</span>
+    <span><i class="ev-ico shot-on"><span class="ev-ball">⚽</span></i>射正</span>
+    <span><i class="ev-ico shot-off"><span class="ev-ball">⚽</span></i>射偏</span>
+    <span><i class="ev-ico pen"><span class="ev-ball">⚽</span><b>P</b></i>点球</span>
+    <span><i class="ev-ico missed">○</i>点球未进</span>
+    <span><i class="ev-ico pen shootout"><span class="ev-ball">⚽</span><b>PS</b></i>点球大战</span>
+    <span><i class="ev-ico own"><span class="ev-ball">⚽</span><b>OG</b></i>乌龙球</span>
+    <span><i class="ev-ico assist">👟</i>助攻</span>
+    <span><i class="ev-ico corner">⚑</i>角球</span>
+    <span><i class="ev-ico yellow"></i>黄牌</span>
+    <span><i class="ev-ico red"></i>红牌</span>
+    <span><i class="ev-ico second-yellow"><i class="y"></i><i class="r"></i></i>两黄变红</span>
+    <span><i class="ev-ico subst is-injury"><b class="up">↑</b><b class="dn">↓</b></i>受伤换人</span>
+    <span><i class="ev-ico subst"><b class="up">↑</b><b class="dn">↓</b></i>换人</span>
+    <span><i class="ev-ico var">VAR</i>VAR</span>
+    <span><i class="ev-ico woodwork">▭</i>击中门框</span>
+    <span><i class="ev-ico offside">▲</i>越位</span>
+  </div>
+  </div></div>
+</div>
+<div class="row" id="events">
+  <div class="col"><div class="lab">重要事件</div><div class="phone" data-title="events">
+    <div class="prev-hero"><div class="ph-top"><span>‹</span><b>友谊赛</b><span>关注</span></div>
+      <div class="ph-teams"><div>威尔士<br><small>主队</small></div><div class="mid"><b>2 : 3</b><small>完场</small></div><div>葡萄牙<br><small>客队</small></div></div>
+    </div>
+    <div class="prev-tabs"><span>态度</span><span>情报</span><span>赔率</span><span>预测</span><span class="on">实时</span><span>阵容</span></div>
+    <div class="live-subhead">
+    <div class="live-subs">
+      <button type="button" class="" data-act="liveSub" data-id="m1" data-sub="text">文字直播</button>
+      <button type="button" class="on" data-act="liveSub" data-id="m1" data-sub="events">重要事件</button>
+    </div>
+    <button type="button" class="live-goals-tog" data-act="liveGoalsOnly" data-id="m1" aria-pressed="false"><i class="tog"></i>只看进球</button>
+  </div><div class="live-sub-body"><div class="live-tl is-split"><div class="live-tl-item is-period" data-period="kickoff"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>开赛</span></div></div><div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">11'</div><div class="live-tl-card is-goal"><div class="tl-score">0-1</div><div class="tl-player"><span class="ev-ico goal" title="进球"><span class="ev-ball">⚽</span></span> 布鲁诺 · 右脚</div><div class="tl-assist"><span class="ev-ico assist" title="助攻">👟</span> 内维斯</div></div></div><div class="live-tl-item is-home"><div class="live-tl-card is-goal"><div class="tl-score">1-1</div><div class="tl-player"><span class="ev-ico goal" title="进球"><span class="ev-ball">⚽</span></span> 布鲁克斯 · 左脚</div><div class="tl-assist"><span class="ev-ico assist" title="助攻">👟</span> 科尔威尔</div></div><div class="live-tl-min">13'</div><div class="live-tl-gap"></div></div><div class="live-tl-item is-home"><div class="live-tl-card is-card"><div class="tl-player"><span class="ev-ico missed" title="点球未进">○</span> 托马斯 · 点球未进</div></div><div class="live-tl-min">30'</div><div class="live-tl-gap"></div></div><div class="live-tl-item is-period" data-period="injury1"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>伤停补时 +2</span></div></div><div class="live-tl-item is-period" data-period="ht"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>中场</span></div></div><div class="live-tl-item is-home"><div class="live-tl-card is-card"><div class="tl-player is-card"><span class="ev-ico yellow" title="黄牌"></span> 黄牌 · 犯规 · 卡班戈</div></div><div class="live-tl-min">51'</div><div class="live-tl-gap"></div></div><div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">55'</div><div class="live-tl-card is-card"><div class="tl-player is-card"><span class="ev-ico var" title="VAR">VAR</span> VAR · 点球判定</div></div></div><div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">59'</div><div class="live-tl-card is-card"><div class="tl-player is-card"><span class="ev-ico woodwork" title="击中门框">▭</span> 击中门框 · 佩德罗</div></div></div><div class="live-tl-item is-home"><div class="live-tl-card is-card"><div class="tl-sub on"><span class="ev-ico subst is-injury" title="受伤换人"><b class="up">↑</b><b class="dn">↓</b></span> 换上 约翰逊</div><div class="tl-sub off">换下 詹姆斯</div></div><div class="live-tl-min">60'</div><div class="live-tl-gap"></div></div><div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">74'</div><div class="live-tl-card is-card"><div class="tl-player is-card"><span class="ev-ico second-yellow" title="两黄变红"><i class="y"></i><i class="r"></i></span> 两黄变红 · 佩德罗</div></div></div><div class="live-tl-item is-period" data-period="injury2"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>伤停补时 +3</span></div></div><div class="live-tl-item is-period" data-period="2h_end"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>下半场结束</span></div></div><div class="live-tl-item is-period" data-period="ft"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>完场</span></div></div></div></div><div class="live-legend ev-legend">
+    <span><i class="ev-ico goal"><span class="ev-ball">⚽</span></i>进球</span>
+    <span><i class="ev-ico shot-on"><span class="ev-ball">⚽</span></i>射正</span>
+    <span><i class="ev-ico shot-off"><span class="ev-ball">⚽</span></i>射偏</span>
+    <span><i class="ev-ico pen"><span class="ev-ball">⚽</span><b>P</b></i>点球</span>
+    <span><i class="ev-ico missed">○</i>点球未进</span>
+    <span><i class="ev-ico pen shootout"><span class="ev-ball">⚽</span><b>PS</b></i>点球大战</span>
+    <span><i class="ev-ico own"><span class="ev-ball">⚽</span><b>OG</b></i>乌龙球</span>
+    <span><i class="ev-ico assist">👟</i>助攻</span>
+    <span><i class="ev-ico corner">⚑</i>角球</span>
+    <span><i class="ev-ico yellow"></i>黄牌</span>
+    <span><i class="ev-ico red"></i>红牌</span>
+    <span><i class="ev-ico second-yellow"><i class="y"></i><i class="r"></i></i>两黄变红</span>
+    <span><i class="ev-ico subst is-injury"><b class="up">↑</b><b class="dn">↓</b></i>受伤换人</span>
+    <span><i class="ev-ico subst"><b class="up">↑</b><b class="dn">↓</b></i>换人</span>
+    <span><i class="ev-ico var">VAR</i>VAR</span>
+    <span><i class="ev-ico woodwork">▭</i>击中门框</span>
+    <span><i class="ev-ico offside">▲</i>越位</span>
+  </div>
+  </div></div>
+</div>
+<div class="row" id="strip">
+  <div class="col"><div class="lab">汇总条（含角球）</div><div class="phone" data-title="strip">
+    <div class="prev-hero"><div class="ph-top"><span>‹</span><b>友谊赛</b><span>关注</span></div>
+      <div class="ph-teams"><div>威尔士<br><small>主队</small></div><div class="mid"><b>2 : 3</b><small>完场</small></div><div>葡萄牙<br><small>客队</small></div></div>
+    </div>
+    <div class="prev-tabs"><span>态度</span><span>情报</span><span>赔率</span><span>预测</span><span class="on">实时</span><span>阵容</span></div>
+    <div class="live-stats-strip" id="live-pitch-m1">
+    <p class="live-stats-empty">进攻 / 控球数据暂无</p>
+    <div class="live-stats-mid">
+    <div class="live-cards is-home">
+      <div class="live-cd is-corner"><i class="c" aria-hidden="true">⚑</i><span>7</span></div>
+      <div class="live-cd"><i class="r"></i><span>0</span></div>
+      <div class="live-cd"><i class="y"></i><span>3</span></div>
+    </div>
+    <div class="live-shots">
+      <div class="ls-row"><span>4</span><b>射正</b><span>5</span></div>
+      <div class="ls-row"><span>6</span><b>射偏</b><span>7</span></div>
+    </div>
+    <div class="live-cards is-away">
+      <div class="live-cd"><span>2</span><i class="y"></i></div>
+      <div class="live-cd"><span>1</span><i class="r"></i></div>
+      <div class="live-cd is-corner"><span>1</span><i class="c" aria-hidden="true">⚑</i></div>
+    </div>
+  </div>
+  </div>
+  </div></div>
+</div>
+<div class="row" id="docked-ns">
+  <div class="col"><div class="lab">动画直播 · 竖屏投放 · 未开赛（交手 + 倒计时）</div>
+    <div class="phone">
+      <div class="prev-hero">
+        <div class="ph-top"><span>‹</span><b>友谊赛</b><span>关注</span></div>
+        <div class="hero-anim-stage is-on"><div class="anim-live-stage" data-phase="ns" data-mode="docked">
+    <div class="anim-live-visual"><div class="pitch-live" id="pitch-ns-docked"></div></div>
+    <div class="anim-live-names"><span class="is-home">威尔士</span><span class="is-away">葡萄牙</span></div>
+    <div class="anim-live-cards">
+  <div class="anim-live-track">
+    <div class="als-page" data-page="h2h">
+      <div class="als-h2h"><div class="als-k">历史交手</div>
+        <div class="als-h2h-sum">威尔士 1胜1平3负</div>
+        <div class="als-form"><i class="l">负</i><i class="d">平</i><i class="l">负</i><i class="w">胜</i><i class="l">负</i></div>
+      </div>
+      <div class="als-k" style="margin-top:12px">开赛倒计时</div>
+      <div class="als-cd" data-anim-cd="1795174112923"><div class="als-cd-cell"><b data-cd="days">0</b><span>天</span></div><div class="als-cd-cell"><b data-cd="hours">02</b><span>时</span></div><div class="als-cd-cell"><b data-cd="mins">15</b><span>分</span></div><div class="als-cd-cell"><b data-cd="secs">08</b><span>秒</span></div></div>
+      <div class="als-meta-row">场地 卡迪夫球场 · 卡迪夫</div>
+      <div class="als-meta-row">天气 晴</div>
+    </div>
+  </div>
+</div>
+    <div class="anim-live-ctrls">
+  <button type="button" class="als-btn als-land">旋转</button>
+  <button type="button" class="als-btn als-pip">小窗</button>
+  <button type="button" class="als-btn als-x">✕</button>
+</div>
+  </div></div>
+        <div class="ph-teams"><div>威尔士<br><small>主队</small></div><div class="mid"><div>VS</div><small>18:00 开赛</small><button class="hero-anim-live is-on">动画直播</button></div><div>葡萄牙<br><small>客队</small></div></div>
+      </div>
+      <div class="prev-tabs"><span>态度</span><span>情报</span><span>赔率</span><span>预测</span><span class="on">实时</span><span>阵容</span></div>
+      <div class="fake-pane">下方赛况、数据仍可滚动查看。</div>
+    </div>
+  </div>
+</div>
+<div class="row" id="docked-live">
+  <div class="col"><div class="lab">动画直播 · 竖屏投放 · 进行中（仅球场）</div>
+    <div class="phone">
+      <div class="prev-hero">
+        <div class="ph-top"><span>‹</span><b>友谊赛</b><span>关注</span></div>
+        <div class="hero-anim-stage is-on"><div class="anim-live-stage" data-phase="live" data-mode="docked">
+    <div class="anim-live-visual"><div class="pitch-live" id="pitch-live-docked"></div></div>
+    <div class="anim-live-names"><span class="is-home">威尔士</span><span class="is-away">葡萄牙</span></div>
+    
+    <div class="anim-live-ctrls">
+  <button type="button" class="als-btn als-land">旋转</button>
+  <button type="button" class="als-btn als-pip">小窗</button>
+  <button type="button" class="als-btn als-x">✕</button>
+</div>
+  </div></div>
+        <div class="ph-teams"><div>威尔士<br><small>主队</small></div><div class="mid"><b>0 : 1</b><small>上半场</small><button class="hero-anim-live is-on">动画直播</button></div><div>葡萄牙<br><small>客队</small></div></div>
+      </div>
+      <div class="prev-tabs"><span>态度</span><span>情报</span><span>赔率</span><span>预测</span><span class="on">实时</span><span>阵容</span></div>
+      <div class="fake-pane">开赛后只保留 3D 球场，不再叠信息卡。</div>
+    </div>
+  </div>
+</div>
+<div class="row" id="land">
+  <div class="col"><div class="lab">动画直播 · 横屏全屏</div>
+    <div class="land-frame">
+      <div class="anim-live-land">
+        <div class="hero-anim-stage is-on"><div class="anim-live-stage" data-phase="ns" data-mode="landscape">
+    <div class="anim-live-visual"><div class="pitch-live" id="pitch-ns-landscape"></div></div>
+    <div class="anim-live-names"><span class="is-home">威尔士</span><span class="is-away">葡萄牙</span></div>
+    <div class="anim-live-cards">
+  <div class="anim-live-track">
+    <div class="als-page" data-page="h2h">
+      <div class="als-h2h"><div class="als-k">历史交手</div>
+        <div class="als-h2h-sum">威尔士 1胜1平3负</div>
+        <div class="als-form"><i class="l">负</i><i class="d">平</i><i class="l">负</i><i class="w">胜</i><i class="l">负</i></div>
+      </div>
+    </div>
+    <div class="als-page" data-page="count">
+      <div class="als-k">开赛倒计时</div>
+      <div class="als-cd" data-anim-cd="1795174112923"><div class="als-cd-cell"><b data-cd="days">0</b><span>天</span></div><div class="als-cd-cell"><b data-cd="hours">02</b><span>时</span></div><div class="als-cd-cell"><b data-cd="mins">15</b><span>分</span></div><div class="als-cd-cell"><b data-cd="secs">08</b><span>秒</span></div></div>
+      <div class="als-meta-row">场地 卡迪夫球场 · 卡迪夫</div>
+      <div class="als-meta-row">天气 晴</div>
+    </div>
+  </div>
+  <div class="anim-live-dots"><i class="on"></i><i></i></div>
+</div>
+    <div class="anim-live-ctrls">
+  <button type="button" class="als-btn als-land">旋转</button>
+  <button type="button" class="als-btn als-pip">小窗</button>
+  <button type="button" class="als-btn als-x">✕</button>
+</div>
+  </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row" id="pip">
+  <div class="col"><div class="lab">动画直播 · 小窗</div>
+    <div class="pip-page">
+      <div class="prev-hero">
+        <div class="ph-top"><span>‹</span><b>友谊赛</b><span>关注</span></div>
+        <div class="ph-teams"><div>威尔士<br><small>主队</small></div><div class="mid"><b>0 : 1</b><small>上半场</small><button class="hero-anim-live is-on">动画直播</button></div><div>葡萄牙<br><small>客队</small></div></div>
+      </div>
+      <div class="prev-tabs"><span>态度</span><span>情报</span><span>赔率</span><span>预测</span><span class="on">实时</span><span>阵容</span></div>
+      <div class="live-stats-strip" id="live-pitch-m1">
+    <p class="live-stats-empty">进攻 / 控球数据暂无</p>
+    <div class="live-stats-mid">
+    <div class="live-cards is-home">
+      <div class="live-cd is-corner"><i class="c" aria-hidden="true">⚑</i><span>7</span></div>
+      <div class="live-cd"><i class="r"></i><span>0</span></div>
+      <div class="live-cd"><i class="y"></i><span>3</span></div>
+    </div>
+    <div class="live-shots">
+      <div class="ls-row"><span>4</span><b>射正</b><span>5</span></div>
+      <div class="ls-row"><span>6</span><b>射偏</b><span>7</span></div>
+    </div>
+    <div class="live-cards is-away">
+      <div class="live-cd"><span>2</span><i class="y"></i></div>
+      <div class="live-cd"><span>1</span><i class="r"></i></div>
+      <div class="live-cd is-corner"><span>1</span><i class="c" aria-hidden="true">⚑</i></div>
+    </div>
+  </div>
+  </div>
+      <div class="live-subhead">
+    <div class="live-subs">
+      <button type="button" class="" data-act="liveSub" data-id="m1" data-sub="text">文字直播</button>
+      <button type="button" class="on" data-act="liveSub" data-id="m1" data-sub="events">重要事件</button>
+    </div>
+    <button type="button" class="live-goals-tog" data-act="liveGoalsOnly" data-id="m1" aria-pressed="false"><i class="tog"></i>只看进球</button>
+  </div>
+      <div class="live-sub-body"><div class="live-tl is-split"><div class="live-tl-item is-period" data-period="kickoff"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>开赛</span></div></div><div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">11'</div><div class="live-tl-card is-goal"><div class="tl-score">0-1</div><div class="tl-player"><span class="ev-ico goal" title="进球"><span class="ev-ball">⚽</span></span> 布鲁诺 · 右脚</div><div class="tl-assist"><span class="ev-ico assist" title="助攻">👟</span> 内维斯</div></div></div><div class="live-tl-item is-home"><div class="live-tl-card is-goal"><div class="tl-score">1-1</div><div class="tl-player"><span class="ev-ico goal" title="进球"><span class="ev-ball">⚽</span></span> 布鲁克斯 · 左脚</div><div class="tl-assist"><span class="ev-ico assist" title="助攻">👟</span> 科尔威尔</div></div><div class="live-tl-min">13'</div><div class="live-tl-gap"></div></div><div class="live-tl-item is-home"><div class="live-tl-card is-card"><div class="tl-player"><span class="ev-ico missed" title="点球未进">○</span> 托马斯 · 点球未进</div></div><div class="live-tl-min">30'</div><div class="live-tl-gap"></div></div><div class="live-tl-item is-period" data-period="injury1"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>伤停补时 +2</span></div></div><div class="live-tl-item is-period" data-period="ht"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>中场</span></div></div><div class="live-tl-item is-home"><div class="live-tl-card is-card"><div class="tl-player is-card"><span class="ev-ico yellow" title="黄牌"></span> 黄牌 · 犯规 · 卡班戈</div></div><div class="live-tl-min">51'</div><div class="live-tl-gap"></div></div><div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">55'</div><div class="live-tl-card is-card"><div class="tl-player is-card"><span class="ev-ico var" title="VAR">VAR</span> VAR · 点球判定</div></div></div><div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">59'</div><div class="live-tl-card is-card"><div class="tl-player is-card"><span class="ev-ico woodwork" title="击中门框">▭</span> 击中门框 · 佩德罗</div></div></div><div class="live-tl-item is-home"><div class="live-tl-card is-card"><div class="tl-sub on"><span class="ev-ico subst is-injury" title="受伤换人"><b class="up">↑</b><b class="dn">↓</b></span> 换上 约翰逊</div><div class="tl-sub off">换下 詹姆斯</div></div><div class="live-tl-min">60'</div><div class="live-tl-gap"></div></div><div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">74'</div><div class="live-tl-card is-card"><div class="tl-player is-card"><span class="ev-ico second-yellow" title="两黄变红"><i class="y"></i><i class="r"></i></span> 两黄变红 · 佩德罗</div></div></div><div class="live-tl-item is-period" data-period="injury2"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>伤停补时 +3</span></div></div><div class="live-tl-item is-period" data-period="2h_end"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>下半场结束</span></div></div><div class="live-tl-item is-period" data-period="ft"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>完场</span></div></div></div></div>
+      <div class="anim-live-pip">
+        <div class="hero-anim-stage is-on"><div class="anim-live-stage" data-phase="live" data-mode="pip">
+    <div class="anim-live-visual"><div class="pitch-live" id="pitch-live-pip"></div></div>
+    <div class="anim-live-names"><span class="is-home">威尔士</span><span class="is-away">葡萄牙</span></div>
+    
+    <div class="anim-live-ctrls">
+  <button type="button" class="als-btn als-land">旋转</button>
+  <button type="button" class="als-btn als-pip">小窗</button>
+  <button type="button" class="als-btn als-x">✕</button>
+</div>
+  </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/js/pitch-live.js?v=pitch403"></script>
+<script>
+(function () {
+  function mount(id, wx, live) {
+    const el = document.getElementById(id);
+    if (!el || !window.JCPitchLive) return;
+    window.JCPitchLive.mount(el, {
+      weather: wx || 'sunny',
+      homeName: '威尔士',
+      awayName: '葡萄牙',
+      tabVisible: true,
+      allowPreviewDemo: false,
+      phase: live ? '1H' : 'NS',
+      phaseZh: live ? '上半场' : '',
+      elapsed: live ? 23 : undefined,
+      live: !!live,
+    });
+  }
+  mount('pitch-ns-docked', 'sunny', false);
+  mount('pitch-live-docked', 'cloudy', true);
+  mount('pitch-ns-landscape', 'sunny', false);
+  mount('pitch-live-pip', 'cloudy', true);
+  document.documentElement.setAttribute('data-preview-ready', '1');
+})();
+</script>
+</body></html>

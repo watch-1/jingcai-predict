@@ -13,7 +13,7 @@ const c = { id: '1', home: 'A-dup' };
 assert.deepStrictEqual(pref.uniqMatches([[a, b], [c, b]]).map((m) => m.id), ['1', '2']);
 assert.strictEqual(pref.uniqMatches([[a, b], [c]]).find((m) => m.id === '1').home, 'A');
 
-const calls = { squad: 0, radar: 0, surface: 0, radarGotSquad: 0 };
+const calls = { squad: 0, radar: 0, surface: 0, radarGotSquad: 0, predictions: 0, facts: 0 };
 const stubs = {
   squadValue: {
     async forMatch(m) {
@@ -37,6 +37,23 @@ const stubs = {
       return { reason: '', players: { home: [{}], away: [{}] } };
     },
   },
+  smPredictions: {
+    async ensurePredictions(args) {
+      calls.predictions += 1;
+      assert.ok(args.matchId);
+      assert.ok(Number.isFinite(args.kickoffMs));
+      if (String(args.matchId) === '2042727') return { ok: true, hasPredictions: false, reason: 'no-team' };
+      return { ok: true, hasPredictions: true, wdl: { h: 0.4, d: 0.3, a: 0.3 } };
+    },
+  },
+  smMatchfacts: {
+    async ensureMatchfacts(args) {
+      calls.facts += 1;
+      assert.ok(args.matchId);
+      if (String(args.matchId) === '2042727') return { ok: true, hasFacts: false, reason: 'no-fixture' };
+      return { ok: true, hasFacts: true, reason: '' };
+    },
+  },
   gapMs: 0,
   reason: 'test',
 };
@@ -55,10 +72,16 @@ const stubs = {
   assert.strictEqual(calls.radar, 2);
   assert.strictEqual(calls.radarGotSquad, 2);
   assert.strictEqual(calls.surface, 2);
+  assert.strictEqual(calls.predictions, 2);
+  assert.strictEqual(calls.facts, 2);
   assert.strictEqual(st.rows[0].squad, 'ok');
+  assert.strictEqual(st.rows[0].facts, 'ok');
   assert.strictEqual(st.rows[0].radar, 'ok');
   assert.strictEqual(st.rows[0].surface, 'ok');
+  assert.strictEqual(st.rows[0].predictions, 'ok');
   assert.strictEqual(st.rows[1].surface, 'no-team');
+  assert.strictEqual(st.rows[1].predictions, 'no-team');
+  assert.strictEqual(st.rows[1].facts, 'no-fixture');
   assert.ok(st.rows[1].surface !== 'fail', 'honest no-team is a warmed empty, not a failure');
 
   // overlapping run is skipped
@@ -83,6 +106,23 @@ const stubs = {
   const ps = pref.status();
   assert.strictEqual(ps.running, false);
   assert.strictEqual(ps.reason, 'hold');
+
+  pref.resetState();
+  calls.squad = calls.radar = calls.surface = calls.predictions = calls.facts = 0;
+  const noPred = Object.assign({}, stubs, { smPredictions: { /* no ensurePredictions */ }, reason: 'no-pred-mod', gapMs: 0 });
+  const skipped = await pref.warmSlate([matches[0]], noPred);
+  assert.strictEqual(skipped.ok, 1);
+  assert.strictEqual(skipped.fail, 0);
+  assert.strictEqual(skipped.rows[0].predictions, 'skipped');
+  assert.strictEqual(calls.predictions, 0);
+
+  calls.squad = calls.radar = calls.surface = calls.predictions = calls.facts = 0;
+  const noFacts = Object.assign({}, stubs, { smMatchfacts: { /* no ensureMatchfacts */ }, reason: 'no-facts-mod', gapMs: 0 });
+  const skippedFacts = await pref.warmSlate([matches[0]], noFacts);
+  assert.strictEqual(skippedFacts.ok, 1);
+  assert.strictEqual(skippedFacts.fail, 0);
+  assert.strictEqual(skippedFacts.rows[0].facts, 'skipped');
+  assert.strictEqual(calls.facts, 0);
 
   console.log('slate-prefetch-test ok', { n: st.n, ok: st.ok, surfaces: st.rows.map((r) => r.surface) });
 })().catch((e) => {

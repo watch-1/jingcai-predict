@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>云球迷 · 实时球场预览</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  html, body { margin: 0; background: #F7F7F8; }
+  .phone {
+    width: 390px;
+    min-height: 640px;
+    margin: 0 auto;
+    background: #F7F7F8;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif;
+  }
+  .prev-top {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    background: #fff;
+    font-weight: 700;
+    font-size: 16px;
+    color: #1A1A1A;
+    border-bottom: 1px solid #eee;
+  }
+  .prev-hero {
+    background: #1A1E2B;
+    color: #fff;
+    padding: 10px 12px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .prev-hero .n { font-size: 13px; font-weight: 600; }
+  .prev-hero .s { font-size: 20px; font-weight: 800; letter-spacing: .04em; }
+  .prev-hero .c { font-size: 11px; opacity: .8; text-align: center; }
+  .prev-tabs { display: flex; gap: 14px; padding: 8px 12px; background: #fff; font-size: 13px; color: #888; }
+  .prev-tabs .on { color: #2F6FED; font-weight: 700; }
+  .prev-note {
+    margin: 8px 12px 0;
+    font-size: 11px;
+    color: #8A3B00;
+    background: #FFF6E8;
+    border-radius: 8px;
+    padding: 6px 8px;
+    display: none;
+  }
+  .prev-note.show { display: block; }
+  .wx-slip { margin: 10px 12px 0; }
+  /* Preview only: freeze a distant opening-sky streak + stadium highlight. */
+  html[data-preview-scene="storm"] .pitch-live-wrap .pl-wx-open-sky {
+    background-image: linear-gradient(180deg, #7e8b9c 0%, #b7c0cc 100%);
+  }
+  html[data-preview-scene="storm"] .pitch-live-wrap .pl-wx-sky-flash {
+    opacity: 1;
+  }
+  html[data-preview-scene="storm"] .pitch-live-wrap .pitch-world {
+    filter: saturate(.95) brightness(1.22) contrast(1.08);
+  }
+</style>
+</head>
+<body>
+  <div class="phone" id="phone">
+    <div class="prev-top"><span>‹</span><span>云球迷</span><span></span></div>
+    <div class="prev-hero">
+      <div class="n" id="homeName">主队</div>
+      <div class="c"><div class="s" id="score">0 - 0</div><div id="clock">未开赛</div></div>
+      <div class="n" id="awayName">客队</div>
+    </div>
+    <div class="prev-tabs"><span>态度</span><span>情报</span><span>赔率</span><span>数据</span><span class="on">实时</span><span>阵容</span></div>
+    <div id="pitch" class="pitch-live"></div>
+    <p class="prev-note" id="note">预览轨迹（非本场数据）</p>
+  </div>
+  <script src="js/pitch-live.js?v=pitch403"></script>
+  <script>
+    (function () {
+      const q = new URLSearchParams(location.search);
+      const scene = q.get('scene') || 'sunny';
+      const home = '主队';
+      const away = '客队';
+      const crest = (fill, letter) =>
+        '<span class="badge sm" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:' + fill + ';color:#fff;font-size:9px;font-weight:700">' + letter + '</span>';
+
+      const demoCoords = [
+        { x: 0.50, y: 0.50, t: 0 },
+        { x: 0.42, y: 0.58, t: 1.4 },
+        { x: 0.33, y: 0.46, t: 2.8 },
+        { x: 0.22, y: 0.52, t: 4.2 },
+        { x: 0.14, y: 0.40, t: 5.6 },
+        { x: 0.28, y: 0.44, t: 7.2 }
+      ];
+
+      const scenes = {
+        sunny:   { weather: 'sunny', phase: 'NS', phaseZh: '未开赛', finished: false, live: false, kickoffMs: Date.now() + 3600e3, coords: [], label: '未开赛', score: 'vs' },
+        cloudy:  { weather: 'cloudy', phase: 'NS', phaseZh: '未开赛', finished: false, live: false, kickoffMs: Date.now() + 3600e3, coords: [], label: '未开赛', score: 'vs' },
+        rain:    { weather: 'rain', phase: 'NS', phaseZh: '未开赛', finished: false, live: false, kickoffMs: Date.now() + 3600e3, coords: [], label: '未开赛', score: 'vs' },
+        storm:   { weather: 'storm', phase: 'NS', phaseZh: '未开赛', finished: false, live: false, kickoffMs: Date.now() + 3600e3, coords: [], label: '未开赛', score: 'vs' },
+        pre:     { weather: 'cloudy', phase: 'NS', phaseZh: '未开赛', finished: false, live: false, kickoffMs: Date.now() + 3600e3, coords: [], label: '未开赛', score: 'vs' },
+        inplay:  { weather: 'sunny', phase: '1H', phaseZh: '上半场', elapsed: 24, finished: false, live: true, kickoffMs: Date.now() - 1800e3, coords: demoCoords, previewDemoCoords: true, label: "上半场 24'", score: '1 - 0', demo: true },
+      };
+      const s = scenes[scene] || scenes.sunny;
+      document.getElementById('clock').textContent = s.label;
+      document.getElementById('score').textContent = s.score;
+      document.getElementById('note').classList.toggle('show', !!s.demo);
+
+      const el = document.getElementById('pitch');
+      window.JCPitchLive.mount(el, {
+        allowPreviewDemo: !!s.demo,
+        weather: s.weather,
+        homeName: home,
+        awayName: away,
+        homeCrestHtml: crest('#2F6FED', '主'),
+        awayCrestHtml: crest('#E8A23A', '客'),
+        tabVisible: true,
+        pack: {
+          coords: s.coords,
+          hasCoords: s.coords.length > 0,
+          previewDemoCoords: !!s.previewDemoCoords,
+          live: s.live,
+          finished: s.finished,
+          phase: s.phase,
+          phaseZh: s.phaseZh,
+          elapsed: s.elapsed,
+          kickoffMs: s.kickoffMs,
+        },
+        state: s,
+      });
+      document.documentElement.setAttribute('data-preview-scene', scene);
+      if (scene === 'storm') {
+        const inst = window.JCPitchLive.get(el);
+        const wrap = el.querySelector('.pitch-live-wrap');
+        if (wrap) wrap.classList.add('is-flashing');
+        if (inst && inst.paintSkyFlash) inst.paintSkyFlash({ preview: true });
+      }
+      document.documentElement.setAttribute('data-preview-ready', '1');
+    })();
+  </script>
+</body>
+</html>

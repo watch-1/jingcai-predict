@@ -109,4 +109,42 @@ assert.ok(!/-1%/.test(barRow({ label: '传球成功率', unit: '%', home: -1, aw
 assert.ok(/—/.test(barRow({ label: '传球成功率', unit: '%', home: -1, away: 79 })));
 assert.ok(/79%/.test(barRow({ label: '传球成功率', unit: '%', home: -1, away: 79 })));
 
+
+// t1387: Sporttery wall-clock 91 (formats as 90+1') must lose to official SM 71 / 2H.
+const sportteryWall = {
+  id: '2042003', source: 'sporttery', scoreSource: 'sporttery',
+  live: true, finished: false, phase: '2H', phaseZh: '下半场',
+  minute: 91, minuteExtra: null, homeScore: 0, awayScore: 0, full: '0:0', half: '0:0', cards: null,
+};
+const sm71 = sm.fromSm(fx({
+  state: { developer_name: 'INPLAY_2ND_HALF' },
+  scores: [
+    { description: 'CURRENT', participant_id: 11, score: { goals: 0 } },
+    { description: 'CURRENT', participant_id: 22, score: { goals: 0 } },
+    { description: '1ST_HALF', participant_id: 11, score: { goals: 0 } },
+    { description: '1ST_HALF', participant_id: 22, score: { goals: 0 } },
+  ],
+  periods: [{ ticking: true, minutes: 71, extra_minute: 0, description: '2nd Half' }],
+  events: [],
+}));
+assert.strictEqual(sm71.minute, 71);
+assert.strictEqual(sm71.phase, '2H');
+assert.strictEqual(sm.smClockBetter(sportteryWall, sm71), true, 'SM 71 beats Sporttery wall-clock 91');
+const merged71 = sm.mergeSmOverlay(sportteryWall, sm71, '2042003', sm.smClockBetter(sportteryWall, sm71));
+assert.strictEqual(merged71.minute, 71);
+assert.strictEqual(merged71.phase, '2H');
+assert.strictEqual(merged71.phaseZh, '下半场');
+assert.strictEqual(merged71.homeScore, 0);
+assert.strictEqual(merged71.awayScore, 0);
+
+// Real stoppage: SM 90+2 stays 90 / extra 2 (or 92) — still preferred, not invented.
+const smStoppage = sm.fromSm(fx({
+  state: { developer_name: 'INPLAY_2ND_HALF' },
+  periods: [{ ticking: true, minutes: 90, extra_minute: 2, description: '2nd Half' }],
+  events: [],
+}));
+assert.strictEqual(smStoppage.minute, 90);
+assert.strictEqual(smStoppage.minuteExtra, 2);
+assert.ok(sm.smClockBetter({ live: true, phase: '2H', minute: 92, phaseZh: '下半场' }, smStoppage));
+
 console.log('sm-live-scores-test OK');

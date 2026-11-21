@@ -47,7 +47,8 @@ const { mergeAfOverlay } = require('../lib/live-scores');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ls258-'));
   fs.mkdirSync(path.join(tmp, 'live-stats'), { recursive: true });
   process.env.DATA_DIR = tmp;
-  process.env.API_FOOTBALL_KEY = 'ut-258-key';
+  process.env.ALLOW_AF_HTTP = '1';
+process.env.API_FOOTBALL_KEY = 'ut-258-key';
   fs.writeFileSync(path.join(tmp, 'live-stats', 'fixture-map.json'), JSON.stringify({
     'm:aug258': { fixtureId: 888258, sportteryMatchId: 'aug258', date: '2026-10-31' },
   }));

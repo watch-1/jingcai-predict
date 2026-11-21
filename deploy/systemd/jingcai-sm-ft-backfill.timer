@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Jingcai SportMonks 10-day finished-match backfill
+
+[Timer]
+OnCalendar=*-*-* 11:00:00
+Persistent=true
+AccuracySec=1min
+Unit=jingcai-sm-ft-backfill.service
+
+[Install]
+WantedBy=timers.target

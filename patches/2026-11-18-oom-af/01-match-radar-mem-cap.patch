@@ -1,0 +1,72 @@
+--- a/lib/match-radar.js
++++ b/lib/match-radar.js
+@@ -672,6 +672,9 @@
+ 
+ function indexKey(asOf) { return String(asOf || ''); }
+ 
++/** Max parsed slim indexes kept in process memory. Each is ~20-25MB. */
++const INDEX_MEM_MAX = 2;
++
+ function attachNameIndexes(idx) {
+   if (!idx) return idx;
+   const names = new Map();
+@@ -708,28 +711,49 @@
+ 
+ function clearIndexMem() { mem.clear(); }
+ 
++function evictIndexMem() {
++  while (mem.size > INDEX_MEM_MAX) {
++    const oldest = mem.keys().next().value;
++    mem.delete(oldest);
++  }
++}
++
++function rememberIndex(cacheKey, idx) {
++  if (mem.has(cacheKey)) mem.delete(cacheKey);
++  mem.set(cacheKey, idx);
++  evictIndexMem();
++  return idx;
++}
++
+ function loadIndex(asOf) {
+   const key = indexKey(asOf);
+-  if (mem.has(key)) return mem.get(key);
+   const dir = INDEX_DIR();
+   const exact = path.join(dir, `asof-${key}.json`);
++  let fileKey = null;
++  try {
++    if (fs.existsSync(exact)) fileKey = exact;
++    else {
++      const earlier = listAsofFiles().filter((x) => x.date <= key).pop();
++      if (earlier) fileKey = earlier.fp;
++    }
++  } catch (e) {
++    console.warn('match-radar index lookup', e.message);
++  }
++  // Cache by source file, not by every match date. Many asOf dates share one asof-*.json.
++  if (fileKey && mem.has(fileKey)) return mem.get(fileKey);
++  if (mem.has(key)) return mem.get(key);
+   // Prefer a prebuilt windowed index so production can serve without
+   // shipping the rich sqlite, and so first request is not a rebuild.
+   try {
+-    if (fs.existsSync(exact)) {
+-      const idx = readSlimIndex(exact);
+-      if (idx) { mem.set(key, idx); return idx; }
+-    }
+-    const earlier = listAsofFiles().filter((x) => x.date <= key).pop();
+-    if (earlier) {
+-      const idx = readSlimIndex(earlier.fp);
+-      if (idx) { mem.set(key, idx); return idx; }
++    if (fileKey) {
++      const idx = readSlimIndex(fileKey);
++      if (idx) return rememberIndex(fileKey, idx);
+     }
+   } catch (e) {
+     console.warn('match-radar index read', e.message);
+   }
+   const idx = buildIndex(asOf);
+-  mem.set(key, idx);
++  rememberIndex(fileKey || key, idx);
+   try {
+     fs.mkdirSync(dir, { recursive: true });
+     if (idx && idx.ok) fs.writeFileSync(exact, JSON.stringify(slimIndex(idx)));

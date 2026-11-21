@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "teams": {
+    "426": {
+      "smId": 18599,
+      "zh": "中国",
+      "en": "",
+      "source": "fixture",
+      "matchId": "2042829",
+      "at": 1795079396830
+    },
+    "427": {
+      "smId": 18590,
+      "zh": "巴林",
+      "en": "",
+      "source": "fixture",
+      "matchId": "2042829",
+      "at": 1795079396830
+    },
+    "564": {
+      "smId": 3432,
+      "zh": "巴竞技",
+      "en": "",
+      "source": "fixture",
+      "matchId": "test-pin-2042839",
+      "at": 1795079396713
+    },
+    "571": {
+      "smId": 1024,
+      "zh": "弗拉门戈",
+      "en": "",
+      "source": "fixture",
+      "matchId": "test-pin-2042839",
+      "at": 1795079396713
+    }
+  }
+}

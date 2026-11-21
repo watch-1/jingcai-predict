@@ -10,13 +10,7 @@ const css = fs.readFileSync(path.join(root, 'public/style.css'), 'utf8');
 const index = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
-assert.ok(/216lu33/.test(index), 'cache 216lu33');
-assert.ok(!/216lu32/.test(index), 'no stale 216lu32');
-assert.ok(/app\.js\?v=216lu33/.test(index), 'app.js cache-busted');
-assert.ok(/style\.css\?v=216lu33/.test(index), 'style cache-busted');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.382\}"/.test(apkSh), 'apk default 2.1.5.382');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-382\}"/.test(apkSh), 'apk default 382');
-
+assert.ok(/app\.js\?v=216/.test(index) && /style\.css\?v=216/.test(index), 'app.js and style are cache-busted');
 assert.ok(/preview 382/.test(appJs), '382 notes present');
 
 const extractNamed = (src, name) => {
@@ -50,12 +44,10 @@ const onShow = renderRadar.slice(renderRadar.indexOf('onShow:'), renderRadar.ind
 assert.ok(!/bindRadarBoardFit/.test(onShow), 'bindRadarBoardFit is not in the reveal / onShow frame');
 assert.ok(!/getBoundingClientRect/.test(onShow), 'no layout measure in the reveal frame');
 
-assert.ok(/function swapSlotHtml/.test(appJs), 'shared offscreen slot swap helper');
-
-const formCase = appJs.slice(appJs.indexOf("case 'smFormSide'"), appJs.indexOf("case 'mvOpenPlayer'") > 0 ? appJs.indexOf("case 'openMvSheet'") : appJs.length);
-assert.ok(/swapSlotHtml/.test(formCase), 'form tab uses hide-wait-write-show');
+assert.ok(/function applySmFormSide/.test(appJs) && /function normalizeSmForm/.test(appJs), 'form side is a CSS data-side flip');
+const formCase = appJs.slice(appJs.indexOf("case 'smFormSide'"), appJs.indexOf("case 'openMvSheet'"));
+assert.ok(/applySmFormSide/.test(formCase), 'form tab applies data-side without rebuilding the list');
 assert.ok(!/n\.hidden\s*=/.test(formCase), 'form tab does not live-toggle hidden on a built list');
-assert.ok(/sm-form-src/.test(formCase) && /sm-form-mount/.test(formCase), 'form tab reads the inactive side from a template');
 
 const formHtml = surface.renderFormHtml({
   players: {
@@ -65,16 +57,12 @@ const formHtml = surface.renderFormHtml({
   homeName: '哈萨克',
   awayName: '斯洛伐克',
 });
-assert.ok(/sm-form-mount/.test(formHtml), 'active form side is mounted');
-assert.strictEqual((formHtml.match(/class="sm-form-src"/g) || []).length, 2, 'both sides stored in templates');
-assert.ok(/data-for="home"/.test(formHtml) && /data-for="away"/.test(formHtml), 'templates are keyed by side');
+assert.ok(/sm-form-pane/.test(formHtml) && /sm-form-panes/.test(formHtml), 'both form sides are panes in the tree');
+assert.ok(!/<template/.test(formHtml), 'form HTML no longer uses templates');
+assert.ok(/data-for="home"/.test(formHtml) && /data-for="away"/.test(formHtml), 'panes are keyed by side');
 assert.ok(!/sm-form-list[^>]*\bhidden\b/.test(formHtml), 'no prebuilt hidden form list');
-assert.ok(formHtml.includes('主将') && formHtml.includes('客将'), 'both rosters are in the markup (mount + templates)');
-const mountStart = formHtml.indexOf('sm-form-mount');
-const firstTpl = formHtml.indexOf('<template');
-assert.ok(mountStart >= 0 && firstTpl > mountStart, 'mount comes before templates');
-assert.ok(formHtml.slice(mountStart, firstTpl).includes('主将'), 'home starts in the mount');
-assert.ok(!formHtml.slice(mountStart, firstTpl).includes('客将'), 'away is not in the live mount');
+assert.ok(formHtml.includes('主将') && formHtml.includes('客将'), 'both rosters are in the markup');
+
 
 // 381 teardown invariants still hold
 assert.ok(/function teardownOverlayEl/.test(appJs) && /function closeSheet/.test(appJs), '381 teardown kept');

@@ -1,0 +1,209 @@
+<!doctype html><html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>406 预览</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { margin: 0; background: #1a1d24; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif; }
+  .row { display: flex; gap: 24px; padding: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .phone { width: 390px; background: #f6f7f9; overflow: hidden; position: relative; }
+  .lab { color: #e8edf5; font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+  .col { display: flex; flex-direction: column; }
+  .phone.view.sub.md-wrap { padding-top: 0; }
+  .prev-dtabs { display: flex; margin: 0 !important; border-radius: 0; background: #fff; position: relative !important; top: auto !important; }
+  .prev-dtabs button { flex: 1; min-width: 0; }
+  .phone .detail-pane { background: #f6f7f9; }
+  .hero.hero--weather { padding-bottom: 16px; }
+  .lu-board-preview { height: 420px; background: #141622; position: relative; }
+  .lu-board-preview .row { position: absolute; left: 8%; right: 8%; display: flex; justify-content: space-around; padding: 0; gap: 0; }
+  .lu-dot { width: 36px; height: 36px; border-radius: 50%; background: #2a3144; border: 2px solid #c9d2e0; color: #fff; font: 700 10px/32px sans-serif; text-align: center; }
+</style>
+</head><body>
+
+<div class="row" id="live-tab-no-pitch">
+  <div class="col"><div class="lab">实时 Tab · 未点动画直播（无 3D 球场，不自动弹出）</div>
+    <div class="phone view sub md-wrap">
+      <div class="hero hero--edge hero--weather" id="match-hero-a" data-weather="rain">
+        <div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow"></div><div class="hero-wx-sky"></div><div class="hero-wx-fx hero-wx-rain"></div><div class="hero-wx-scrim"></div></div>
+        <div class="hero-edge-nav"><button type="button" class="ic-btn hero-ic" aria-label="返回">‹</button><div class="hero-lg"><span class="hero-lg-name">澳超 · 周五001</span></div><button type="button" class="fav-btn">☆ 关注</button></div>
+        <div class="teams">
+          <div class="tm"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">西</span><span>西悉尼</span><small>主队</small></div>
+          <div class="mid"><div class="score num">4 : 2</div><small>下半场 94'</small>
+            <button type="button" class="hero-anim-live" aria-pressed="false">动画直播</button>
+          </div>
+          <div class="tm"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">阿</span><span>阿德莱德</span><small>客队</small></div>
+        </div>
+      </div>
+      <div class="dtabs prev-dtabs"><button type="button" class="">态度</button><button type="button" class="">情报</button><button type="button" class="">赔率</button><button type="button" class="">数据</button><button type="button" class="on">实时</button><button type="button" class="">阵容</button><button type="button" class="">预测</button></div>
+      <div class="detail-pane" id="detail-pane-a">
+        <section class="wx-slip" data-wx="rain" data-source="SportMonks">
+  <div class="wx-slip-sky"><i class="wx-slip-sky-fx" aria-hidden="true"></i>
+    <div class="wx-slip-kicker">11月20日</div>
+    <div class="wx-slip-venue">CommBank Stadium</div>
+  </div>
+  <div class="wx-slip-body">
+    <div class="wx-slip-temp"><b>22.1<small>°C</small></b><span>小雨</span></div>
+    <div class="wx-slip-metrics">
+      <div class="wx-slip-m"><i>湿度</i><b>79%</b></div>
+      <div class="wx-slip-m"><i>风速</i><b>1.9m/s</b></div>
+      <div class="wx-slip-m"><i>气压</i><b>762mmHg</b></div>
+    </div>
+  </div>
+  <p class="wx-slip-foot">天气来源 SportMonks · 当场天气</p>
+</section>
+        <div class="live-stats-preview" style="margin:12px 0 0;padding:12px;background:#fff;border-radius:12px;color:#4A5568;font-size:13px;">实时事件与统计 · 无嵌入 3D 球场</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row" id="docked-fixed">
+  <div class="col"><div class="lab">点击动画直播后 · 竖屏投放（球场完整，比分在下方，无天气叠层/重复比分）</div>
+    <div class="phone view sub md-wrap">
+      <div class="hero hero--edge hero--weather hero--anim-live" id="match-hero-b" data-weather="sunny">
+        <div class="hero-wx" aria-hidden="true"><div class="hero-wx-base"></div><div class="hero-wx-glow"></div><div class="hero-wx-sky"></div><div class="hero-wx-scrim"></div></div>
+        <div class="hero-edge-nav"><button type="button" class="ic-btn hero-ic" aria-label="返回">‹</button><div class="hero-lg"><span class="hero-lg-name">日职 · 周五002</span></div><button type="button" class="fav-btn">☆ 关注</button></div>
+        <div class="hero-anim-stage is-on" id="hero-anim-stage-b">
+          <div class="anim-live-stage" data-phase="live" data-mode="docked">
+            <div class="anim-live-visual"><section class="pitch-live" id="pitch-live-docked" data-wx="sunny"></section></div>
+            <div class="anim-live-scorebar">
+  <div class="als-sb-side is-home"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">柏</span><span class="als-sb-name">柏太阳神</span></div>
+  <div class="als-sb-mid"><div class="als-sb-score">0-0</div><div class="als-sb-phase">上半场 40'</div></div>
+  <div class="als-sb-side is-away"><span class="als-sb-name">千叶市原</span><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">千</span></div>
+</div>
+            <div class="anim-live-ctrls">
+  <button type="button" class="als-btn als-land">旋转</button>
+  <button type="button" class="als-btn als-pip">小窗</button>
+  <button type="button" class="als-btn als-x">✕</button>
+</div>
+          </div>
+        </div>
+        <div class="teams">
+          <div class="tm"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">柏</span><span>柏太阳神</span><small>主队</small></div>
+          <div class="mid"><div class="score num">0 : 0</div><small>上半场 40'</small>
+            <button type="button" class="hero-anim-live is-on" aria-pressed="true">动画直播</button>
+          </div>
+          <div class="tm"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">千</span><span>千叶市原</span><small>客队</small></div>
+        </div>
+      </div>
+      <div class="dtabs prev-dtabs"><button type="button" class="">态度</button><button type="button" class="">情报</button><button type="button" class="">赔率</button><button type="button" class="">数据</button><button type="button" class="on">实时</button><button type="button" class="">阵容</button><button type="button" class="">预测</button></div>
+      <div class="detail-pane">
+        <div class="pitch-live-in-hero-note">动画直播正在上方播出</div>
+        <section class="wx-slip" data-wx="sunny" data-source="SportMonks">
+  <div class="wx-slip-sky"><i class="wx-slip-sky-fx" aria-hidden="true"></i>
+    <div class="wx-slip-kicker">11月20日</div>
+    <div class="wx-slip-venue">SANKYO FRONTIER Kashiwa Stadium</div>
+  </div>
+  <div class="wx-slip-body">
+    <div class="wx-slip-temp"><b>11.3<small>°C</small></b><span>晴</span></div>
+    <div class="wx-slip-metrics">
+      <div class="wx-slip-m"><i>湿度</i><b>28%</b></div>
+      <div class="wx-slip-m"><i>风速</i><b>5.6m/s</b></div>
+      <div class="wx-slip-m"><i>气压</i><b>756mmHg</b></div>
+    </div>
+  </div>
+  <p class="wx-slip-foot">天气来源 SportMonks · 当场天气</p>
+</section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row" id="attack-fallback">
+  <div class="col"><div class="lab">无球员持球精度时 · 显示哪一方持球进攻（真实最后坐标，不编造盘带）</div>
+    <div class="phone view sub md-wrap">
+      <div class="hero hero--edge hero--weather hero--anim-live" data-weather="rain">
+        <div class="hero-edge-nav"><button type="button" class="ic-btn hero-ic" aria-label="返回">‹</button><div class="hero-lg"><span class="hero-lg-name">澳超 · 周五001</span></div><button type="button" class="fav-btn">☆ 关注</button></div>
+        <div class="hero-anim-stage is-on">
+          <div class="anim-live-stage" data-phase="live" data-mode="docked">
+            <div class="anim-live-visual"><section class="pitch-live" id="pitch-live-attack" data-wx="rain"></section></div>
+            <div class="anim-live-scorebar">
+  <div class="als-sb-side is-home"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">西</span><span class="als-sb-name">西悉尼</span></div>
+  <div class="als-sb-mid"><div class="als-sb-score">4-2</div><div class="als-sb-phase">下半场 94'</div></div>
+  <div class="als-sb-side is-away"><span class="als-sb-name">阿德莱德</span><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">阿</span></div>
+</div>
+            <div class="anim-live-ctrls">
+  <button type="button" class="als-btn als-land">旋转</button>
+  <button type="button" class="als-btn als-pip">小窗</button>
+  <button type="button" class="als-btn als-x">✕</button>
+</div>
+          </div>
+        </div>
+      </div>
+      <div class="dtabs prev-dtabs"><button type="button" class="">态度</button><button type="button" class="">情报</button><button type="button" class="">赔率</button><button type="button" class="">数据</button><button type="button" class="on">实时</button><button type="button" class="">阵容</button><button type="button" class="">预测</button></div>
+      <div class="detail-pane"><div class="pitch-live-in-hero-note">动画直播正在上方播出</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="row" id="lineup-flush">
+  <div class="col"><div class="lab">阵容 Tab · 首发顶格，无顶部空白与提示文案</div>
+    <div class="phone view sub md-wrap">
+      <div class="dtabs prev-dtabs"><button type="button" class="">态度</button><button type="button" class="">情报</button><button type="button" class="">赔率</button><button type="button" class="">数据</button><button type="button" class="">实时</button><button type="button" class="on">阵容</button><button type="button" class="">预测</button></div>
+      <div class="detail-pane detail-pane--lineup">
+        <div class="dsec lineup-sec">
+          <div class="lu-toolbar"><div class="h">首发阵型</div>
+            <div class="lu-seg">
+              <button type="button" class="on">阵型</button>
+              <button type="button">替补</button>
+              <button type="button">名单</button>
+            </div>
+          </div>
+          <p class="lu-hint">半场对半场 · 点「替补」查看双方替补</p>
+          <div class="lu-fm">
+            <div class="lu-board lu-board-preview">
+              <div class="row" style="top:10%"><i class="lu-dot">22</i></div>
+              <div class="row" style="top:28%"><i class="lu-dot">4</i><i class="lu-dot">52</i><i class="lu-dot">7</i><i class="lu-dot">14</i></div>
+              <div class="row" style="top:46%"><i class="lu-dot">11</i><i class="lu-dot">55</i><i class="lu-dot">10</i><i class="lu-dot">23</i></div>
+              <div class="row" style="top:68%;justify-content:center"><span style="color:#9aa3b5;font-size:11px;letter-spacing:.2em">ADELAIDE UNITED</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/pitch-live.js?v=pitch406"></script>
+<script>
+(function () {
+  function mount(id, opts) {
+    const el = document.getElementById(id);
+    if (!el || !window.JCPitchLive) return;
+    window.JCPitchLive.mount(el, Object.assign({
+      tabVisible: true,
+      allowPreviewDemo: false,
+      phase: '1H',
+      live: true,
+    }, opts));
+  }
+  mount('pitch-live-docked', {
+    weather: 'sunny',
+    homeName: '柏太阳神',
+    awayName: '千叶市原',
+    phaseZh: '上半场',
+    elapsed: 40,
+    pack: { coords: [], hasCoords: false, live: true, phase: '1H' },
+    attackingSide: 'home',
+  });
+  mount('pitch-live-attack', {
+    weather: 'rain',
+    homeName: '西悉尼',
+    awayName: '阿德莱德',
+    phase: '2H',
+    phaseZh: '下半场',
+    elapsed: 94,
+    pack: {
+      live: true,
+      phase: '2H',
+      hasCoords: true,
+      coords: [
+        { x: 0.62, y: 0.48, t: 100 },
+        { x: 0.70, y: 0.44, t: 104 },
+        { x: 0.78, y: 0.46, t: 108 }
+      ]
+    }
+  });
+  document.documentElement.setAttribute('data-preview-ready', '1');
+})();
+</script>
+</body></html>

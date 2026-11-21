@@ -79,11 +79,11 @@ function xi(n, extra) {
 {
   assert.strictEqual(layout.parseFormation('4-3-3').join('-'), '4-3-3');
   assert.strictEqual(layout.parseFormation('主 4-2-3-1').join('-'), '4-2-3-1');
-  assert.deepStrictEqual(layout.xsForCount(3), [18, 50, 82]);
+  assert.deepStrictEqual(layout.xsForCount(3), [10, 50, 90]);
   assert.deepStrictEqual(layout.xsForCount(4), [10, 40, 70, 100].map((_, i, a) => [10, 40, 70, 90][i]) && layout.xsForCount(4), [10, 40, 70, 90] ? layout.xsForCount(4) : []);
   const xs4 = layout.xsForCount(4);
-  assert.strictEqual(xs4[0], 10);
-  assert.strictEqual(xs4[3], 90);
+  assert.strictEqual(xs4[0], 8);
+  assert.strictEqual(xs4[3], 92);
   const ysA = layout.ysForLines(4, 'away');
   const ysH = layout.ysForLines(4, 'home');
   assert.strictEqual(ysA[0], 8);

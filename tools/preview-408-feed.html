@@ -1,0 +1,202 @@
+<!doctype html><html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>408 预览</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { margin: 0; background: #1a1d24; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif; }
+  .row { display: flex; gap: 24px; padding: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .phone { width: 390px; background: #f6f7f9; overflow: hidden; position: relative; }
+  .phone.land { width: 780px; height: 390px; background: #070a12; }
+  .lab { color: #e8edf5; font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+  .col { display: flex; flex-direction: column; }
+  .prev-status { display: flex; align-items: center; justify-content: space-between; padding: 4px 12px 2px; font: 600 12px/1.2 -apple-system, sans-serif; background: #0a0b0e; color: #fff; }
+  .phone.land .prev-status { background: #070a12; }
+  .sch-head { background: #fff; padding: 10px 16px 0; }
+  .sch-head h1 { margin: 0; font-size: 18px; }
+  .sch-chips { display: flex; gap: 8px; padding: 10px 16px; background: #fff; overflow: auto; }
+  .sch-chips span { flex: none; padding: 6px 10px; border-radius: 10px; background: #f0f2f6; font-size: 12px; color: #6a7384; }
+  .sch-chips span.on { background: #3b5bdb; color: #fff; }
+  .sch-filters { display: flex; gap: 8px; padding: 0 16px 10px; background: #fff; }
+  .sch-filters i { padding: 4px 10px; border-radius: 999px; background: #edf0f5; font: 650 12px/1.4 sans-serif; font-style: normal; }
+  .sch-filters i.on { background: #3b5bdb; color: #fff; }
+  .phone .ls-row { width: 100%; border: 0; background: #fff; border-bottom: 1px solid #eceff3; padding: 10px 16px; text-align: left; }
+  .phone .ls-meta { display: flex; justify-content: space-between; color: #8b93a3; font-size: 11px; margin-bottom: 6px; }
+  .phone .ls-body { display: flex; align-items: center; gap: 8px; }
+  .phone .ls-side { display: flex; align-items: center; gap: 6px; flex: 1; font-weight: 700; font-size: 14px; }
+  .phone .ls-side.a { justify-content: flex-end; }
+  .phone .ls-mid { flex: none; text-align: center; min-width: 90px; }
+  .hero.hero--weather { background: linear-gradient(180deg, #7ea8c9 0%, #c5d8ea 55%, #e8eef5 100%); color: #fff; padding: 8px 16px 16px; }
+  .hero .hero-score { text-align: center; font-size: 34px; font-weight: 800; }
+  .hero .hero-phase { text-align: center; font-size: 13px; opacity: .9; }
+  .hero .hero-teams { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; }
+  .hero .tname { font-weight: 800; font-size: 14px; }
+  .prev-dtabs { display: flex; margin: 0 !important; border-radius: 0; background: #fff; position: relative !important; top: auto !important; }
+  .prev-dtabs button { flex: 1; min-width: 0; }
+  .anim-btn { display: inline-flex; align-items: center; gap: 4px; margin: 8px auto 0; padding: 4px 10px; border-radius: 999px; background: rgba(12,16,26,.35); font-size: 11px; }
+  .land-frame { position: relative; width: 100%; height: 354px; }
+  .land-frame .anim-live-land { position: absolute; inset: 0; display: flex; }
+  .feed-pane { background: #fff; padding: 8px 0 16px; min-height: 420px; }
+  .hero.hero--anim-live { padding-bottom: 0; }
+</style>
+</head><body>
+<div class="row">
+  <div class="col" id="sched-clock">
+    <p class="lab">1. 赛程列表：官方下半场 71'，不是 90+</p>
+    <div class="phone">
+      <div class="prev-status"><span>19:31</span><span class="dots">•••••</span><span>19:37</span><span class="bat">117</span></div>
+      <div class="sch-head"><h1>比分</h1></div>
+      <div class="sch-chips"><span>昨天<br>11-19</span><span class="on">今天<br>11-20</span><span>明天<br>11-21</span></div>
+      <div class="sch-filters"><i class="on">全部 8</i><i>日职 2</i></div>
+      <button type="button" class="ls-row live">
+    <div class="ls-meta"><span>日职 · 周五002</span><span>18:00</span></div>
+    <div class="ls-body">
+      <div class="ls-side h"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">柏</span><span class="nm">柏太阳神</span></div>
+      <div class="ls-mid">
+        <div class="match-st red">下半场 71'</div>
+        <div class="score num is-live">0 : 0</div>
+        <div class="match-ht">上半场 0:0</div>
+      </div>
+      <div class="ls-side a"><span class="nm">千叶市原</span><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">千</span></div>
+    </div>
+  </button>
+      <button type="button" class="ls-row live">
+    <div class="ls-meta"><span>日职 · 周五003</span><span>18:00</span></div>
+    <div class="ls-body">
+      <div class="ls-side h"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">鹿</span><span class="nm">鹿岛鹿角</span></div>
+      <div class="ls-mid">
+        <div class="match-st red">下半场 71'</div>
+        <div class="score num is-live">0 : 0</div>
+        <div class="match-ht">上半场 0:0</div>
+      </div>
+      <div class="ls-side a"><span class="nm">清水鼓动</span><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">清</span></div>
+    </div>
+  </button>
+    </div>
+  </div>
+  <div class="col" id="detail-clock">
+    <p class="lab">2. 详情头部：同一场也是下半场 71'</p>
+    <div class="phone">
+      <div class="prev-status"><span>19:31</span><span class="dots">•••••</span><span>19:37</span><span class="bat">117</span></div>
+      <div class="hero hero--weather">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
+          <span>‹</span><span>日职 · 周五003<br>2026/11/20 18:00 北京时间</span><span>☆ 关注</span>
+        </div>
+        <div class="hero-teams">
+          <div style="text-align:center"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">鹿</span><div class="tname">鹿岛鹿角</div><small>主队</small></div>
+          <div><div class="hero-score">0 : 0</div><div class="hero-phase">下半场 71'</div><div class="anim-btn">▷ 动画直播</div></div>
+          <div style="text-align:center"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">清</span><div class="tname">清水鼓动</div><small>客队</small></div>
+        </div>
+      </div>
+      <div class="dtabs prev-dtabs"><button type="button" class="">态度</button><button type="button" class="">情报</button><button type="button" class="">赔率</button><button type="button" class="">数据</button><button type="button" class="">实时</button><button type="button" class="">阵容</button><button type="button" class="on">预测</button></div>
+      <div class="detail-pane" style="padding:12px 16px;background:#fff">头部时钟与列表一致，均为官方 71'。</div>
+    </div>
+  </div>
+  <div class="col" id="sim-docked">
+    <p class="lab">3. 竖屏直播：模拟无球跑动（无真实球员坐标时）</p>
+    <div class="phone view sub md-wrap is-anim-live">
+      <div class="prev-status"><span>19:37</span><span class="dots">•••••</span><span>19:37</span><span class="bat">117</span></div>
+      <div class="hero hero--edge hero--weather hero--anim-live">
+        <div class="hero-edge-nav"><button type="button" class="ic-btn hero-ic" aria-label="返回">‹</button><div class="hero-lg"><span class="hero-lg-name">日职</span></div><button type="button" class="fav-btn">☆</button></div>
+        <div class="hero-anim-stage is-on"><div class="anim-live-stage" id="anim-live-stage-pitch-live-dock" data-mode="docked" data-phase="live">
+  <div class="anim-live-ctrls">
+    <button type="button" class="als-btn als-ico-btn als-land" data-act="animLiveLand" data-id="kashima" aria-label="旋转屏幕"><svg class="als-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="8.2" y="2.8" width="8.6" height="14.8" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M11 16.4h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M6.2 13.2c-2.2 1.1-3.2 3.6-2.2 5.7 1.1 2.3 3.9 3.2 6.2 2.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M5.1 11.8l2.4.5-1.5 2.1z" fill="currentColor"/></svg></button>
+    <button type="button" class="als-btn als-ico-btn als-expand" data-act="animLiveLand" data-id="kashima" aria-label="全屏观看"><svg class="als-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.6" y="6.6" width="14.8" height="10.8" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 9.2L6.8 7m0 0H9.1M6.8 7v2.3M15 9.2L17.2 7m0 0H15M17.2 7v2.3M9 14.8L6.8 17m0 0H9.1M6.8 17v-2.3M15 14.8L17.2 17m0 0H15M17.2 17v-2.3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="als-ctrls-end">
+      <button type="button" class="als-btn als-ico-btn als-pip" data-act="animLivePip" data-id="kashima" aria-label="小窗模式"><svg class="als-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.6" y="5.6" width="16.8" height="12.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="11.2" y="10.8" width="7.4" height="5.6" rx="1" fill="currentColor"/></svg></button>
+      <button type="button" class="als-btn als-ico-btn als-x" data-act="animLiveClose" data-id="kashima" aria-label="关闭">✕</button>
+    </div>
+  </div>
+  <div class="anim-live-visual" id="anim-live-visual-pitch-live-dock">
+    <section class="pitch-live" id="pitch-live-dock"></section>
+  </div>
+  <div class="anim-live-scorebar">
+  <div class="als-sb-side is-home"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">鹿</span><span class="als-sb-name">鹿岛鹿角</span></div>
+  <div class="als-sb-mid"><div class="als-sb-score">0-1</div><div class="als-sb-phase">下半场 73'</div></div>
+  <div class="als-sb-side is-away"><span class="als-sb-name">清水鼓动</span><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">清</span></div>
+</div>
+</div></div>
+      </div>
+      <div class="dtabs prev-dtabs"><button type="button" class="">态度</button><button type="button" class="">情报</button><button type="button" class="">赔率</button><button type="button" class="">数据</button><button type="button" class="on">实时</button><button type="button" class="">阵容</button><button type="button" class="">预测</button></div>
+    </div>
+  </div>
+  <div class="col" id="sim-land">
+    <p class="lab">4. 横屏直播：同样可见双方球员跑动</p>
+    <div class="phone land">
+      <div class="prev-status"><span>19:37</span><span class="dots">•••••</span><span>19:37</span><span class="bat">117</span></div>
+      <div class="land-frame">
+        <div class="anim-live-land"><div class="anim-live-stage" id="anim-live-stage-land" data-mode="landscape" data-phase="live">
+  <div class="anim-live-ctrls">
+    <button type="button" class="als-btn als-ico-btn als-land" data-act="animLiveLand" data-id="kashima" aria-label="退出横屏"><svg class="als-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.6" y="5.6" width="16.8" height="12.8" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 10H5.8V6.8M15 10h3.2V6.8M9 14H5.8v3.2M15 14h3.2v3.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    
+    <div class="als-ctrls-end">
+      <button type="button" class="als-btn als-ico-btn als-pip" data-act="animLivePip" data-id="kashima" aria-label="小窗模式"><svg class="als-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.6" y="5.6" width="16.8" height="12.8" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="11.2" y="10.8" width="7.4" height="5.6" rx="1" fill="currentColor"/></svg></button>
+      <button type="button" class="als-btn als-ico-btn als-x" data-act="animLiveClose" data-id="kashima" aria-label="关闭">✕</button>
+    </div>
+  </div>
+  <div class="anim-live-names"><span class="is-home">鹿岛鹿角</span><span class="is-away">清水鼓动</span></div>
+  <div class="anim-live-visual" id="anim-live-visual-land">
+    <section class="pitch-live" id="pitch-live-land"></section>
+  </div>
+  <div class="anim-live-scorebar">
+  <div class="als-sb-side is-home"><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">鹿</span><span class="als-sb-name">鹿岛鹿角</span></div>
+  <div class="als-sb-mid"><div class="als-sb-score">0-1</div><div class="als-sb-phase">下半场 73'</div></div>
+  <div class="als-sb-side is-away"><span class="als-sb-name">清水鼓动</span><span class="badge" style="display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#3a4a6a;color:#fff;font-size:10px;font-weight:800;flex:none">清</span></div>
+</div>
+</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="col" id="goal-tl">
+    <p class="lab">5. 实时时间轴：73' 只出现一次进球，比分 0-1</p>
+    <div class="phone">
+      <div class="prev-status"><span>19:38</span><span class="dots">•••••</span><span>19:37</span><span class="bat">117</span></div>
+      <div style="background:#1d6fd4;color:#fff;padding:10px 16px;font-weight:700">鹿岛鹿角 0 : 1 清水鼓动 · 下半场 73'</div>
+      <div class="dtabs prev-dtabs"><button type="button" class="">态度</button><button type="button" class="">情报</button><button type="button" class="">赔率</button><button type="button" class="">数据</button><button type="button" class="on">实时</button><button type="button" class="">阵容</button><button type="button" class="">预测</button></div>
+      <div class="feed-pane"><div class="live-tl is-split"><div class="live-tl-item is-period" data-period="kickoff"><div class="live-tl-period"><span class="live-tl-whistle" aria-hidden="true">♪</span><span>开赛</span></div></div><div class="live-tl-item is-home"><div class="live-tl-card is-card"><div class="tl-sub on"><span class="ev-ico subst" title="换人"><b class="up">↑</b><b class="dn">↓</b></span> 换上 换上 A</div><div class="tl-sub off">换下 换下 B</div></div><div class="live-tl-min">65'</div><div class="live-tl-gap"></div></div><div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">73'</div><div class="live-tl-card is-goal"><div class="tl-score">0-1</div><div class="tl-player"><span class="ev-ico goal" title="进球"><span class="ev-ball">⚽</span></span> 科亚·基塔加瓦 · 右脚</div></div></div><div class="live-tl-item is-away"><div class="live-tl-gap"></div><div class="live-tl-min">76'</div><div class="live-tl-card is-card"><div class="tl-sub on"><span class="ev-ico subst" title="换人"><b class="up">↑</b><b class="dn">↓</b></span> 换上 换上 C</div><div class="tl-sub off">换下 换下 D</div></div></div></div></div>
+    </div>
+  </div>
+  <div class="col" id="goal-feed">
+    <p class="lab">6. 文字直播：只有第1个进球，没有第2个进球</p>
+    <div class="phone">
+      <div class="prev-status"><span>19:38</span><span class="dots">•••••</span><span>19:37</span><span class="bat">117</span></div>
+      <div style="background:#1d6fd4;color:#fff;padding:10px 16px;font-weight:700">鹿岛鹿角 0 : 1 清水鼓动 · 下半场 73'</div>
+      <div class="dtabs prev-dtabs"><button type="button" class="">态度</button><button type="button" class="">情报</button><button type="button" class="">赔率</button><button type="button" class="">数据</button><button type="button" class="on">实时</button><button type="button" class="">阵容</button><button type="button" class="">预测</button></div>
+      <div class="feed-pane"><div class="live-comment"><div class="live-c-row is-away"><div class="live-c-ico"><span class="ev-ico subst" title="换人"><b class="up">↑</b><b class="dn">↓</b></span></div><div class="live-c-body"><b>76'</b> 换人 — 换上 换上 C，换下 换下 D</div><div class="live-c-team"><span>清水鼓动</span></div></div><div class="live-c-row is-away"><div class="live-c-ico"><span class="ev-ico goal" title="进球"><span class="ev-ball">⚽</span></span></div><div class="live-c-body"><b>73'</b> 第1个进球 — 科亚·基塔加瓦 · 右脚</div><div class="live-c-team"><span>清水鼓动</span></div></div><div class="live-c-row is-away"><div class="live-c-ico"><span class="ev-ico shot-on" title="射正"><span class="ev-ball">⚽</span></span></div><div class="live-c-body"><b>73'</b> 第1个射正 — 科亚·基塔加瓦</div><div class="live-c-team"><span>清水鼓动</span></div></div><div class="live-c-row is-away"><div class="live-c-ico"><span class="ev-ico shot-off" title="射偏"><span class="ev-ball">⚽</span></span></div><div class="live-c-body"><b>73'</b> 第1个射偏 — 清水鼓动</div><div class="live-c-team"><span>清水鼓动</span></div></div><div class="live-c-row is-away"><div class="live-c-ico"><span class="ev-ico corner" title="角球">⚑</span></div><div class="live-c-body"><b>73'</b> 第1个角球 — 清水鼓动</div><div class="live-c-team"><span>清水鼓动</span></div></div><div class="live-c-row is-home"><div class="live-c-ico"><span class="ev-ico subst" title="换人"><b class="up">↑</b><b class="dn">↓</b></span></div><div class="live-c-body"><b>65'</b> 换人 — 换上 换上 A，换下 换下 B</div><div class="live-c-team"><span>鹿岛鹿角</span></div></div><div class="live-c-row is-period"><div class="live-c-ico"><span class="ev-ico whistle" title="哨声">♪</span></div><div class="live-c-body"><b>0'</b> 开赛</div></div></div></div>
+    </div>
+  </div>
+</div>
+<script src="/js/pitch-live.js"></script>
+<script>
+(function () {
+  const PATH = [
+    { x: 0.42, y: 0.54, t: 100 },
+    { x: 0.50, y: 0.48, t: 102 },
+    { x: 0.58, y: 0.44, t: 104 },
+    { x: 0.66, y: 0.42, t: 105.5 },
+    { x: 0.74, y: 0.46, t: 107 },
+    { x: 0.82, y: 0.50, t: 108.5 }
+  ];
+  function mount(id) {
+    const el = document.getElementById(id);
+    if (!el || !window.JCPitchLive) return;
+    window.JCPitchLive.mount(el, {
+      tabVisible: true,
+      allowPreviewDemo: false,
+      weather: 'sunny',
+      homeName: '鹿岛鹿角',
+      awayName: '清水鼓动',
+      phase: '2H',
+      phaseZh: '下半场',
+      elapsed: 73,
+      live: true,
+      kickoffMs: Date.now() - 98 * 60 * 1000,
+      attackingSide: 'home',
+      pack: { live: true, phase: '2H', hasCoords: true, coords: PATH }
+    });
+  }
+  mount('pitch-live-dock');
+  mount('pitch-live-land');
+  document.documentElement.setAttribute('data-preview-ready', '1');
+})();
+</script>
+</body></html>

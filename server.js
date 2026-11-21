@@ -45,6 +45,7 @@ if (PROXY) { const { ProxyAgent } = require('undici'); dispatcher = new ProxyAge
 
 const cache = {};
 const lastError = {};
+const sportteryLiveCache = require('./lib/sporttery-live-cache');
 
 async function fetchJson(url) {
   const ctrl = new AbortController();
@@ -861,6 +862,7 @@ async function refreshData(kind) {
         meta: { total: data.length, byBusinessDate: byBiz, ...metaExtra },
       };
       cache[kind] = { at: Date.now(), payload };
+      try { sportteryLiveCache.persistLive(kind, payload, cache[kind].at); } catch (e) { console.warn('[sporttery-live-cache] persist', kind, e.message); }
       // 1.9.53: after schedule/matches refresh, enqueue any sporttery team ids missing crests
       if (kind === 'schedule' || kind === 'matches') {
         try {
@@ -900,6 +902,7 @@ async function refreshData(kind) {
           },
         };
         cache[kind] = { at: Date.now(), payload };
+        try { sportteryLiveCache.persistLive(kind, payload, cache[kind].at); } catch (err) { console.warn('[sporttery-live-cache] persist', kind, err.message); }
         return payload;
       }
     } catch (e) {
@@ -1591,6 +1594,73 @@ app.get('/api/sm-surface', async (req, res) => {
   }
 });
 
+app.get('/api/sm-matchfacts', async (req, res) => {
+  try {
+    const q = req.query || {};
+    const matchId = String(q.matchId || '').trim();
+    if (!matchId) return res.status(400).json({ ok: false, error: '缺少比赛' });
+    const kickoffMs = Date.parse(`${q.date || ''}T${String(q.time || '00:00').slice(0, 5)}:00+08:00`);
+    const pack = await require('./lib/sm-matchfacts').ensureMatchfacts({
+      matchId,
+      homeTeamId: q.homeTeamId,
+      awayTeamId: q.awayTeamId,
+      home: q.home,
+      away: q.away,
+      homeZh: q.home,
+      awayZh: q.away,
+      league: q.league,
+      date: q.date,
+      time: q.time,
+      kickoffMs: Number.isFinite(kickoffMs) ? kickoffMs : Date.now(),
+    });
+    const body = Object.assign({}, pack);
+    delete body._raw;
+    res.json(body);
+  } catch (e) {
+    res.status(502).json({ ok: false, error: '比赛事实暂时不可用' });
+  }
+});
+
+app.get('/api/sm-predictions', async (req, res) => {
+  try {
+    const q = req.query || {};
+    const matchId = String(q.matchId || '').trim();
+    if (!matchId) return res.status(400).json({ ok: false, error: '缺少比赛' });
+    const kickoffMs = Date.parse(`${q.date || ''}T${String(q.time || '00:00').slice(0, 5)}:00+08:00`);
+    const official = matchFromCaches(matchId);
+    const goalLine = (q.goalLine != null && String(q.goalLine).trim() !== '')
+      ? q.goalLine
+      : (official && official.hhad && official.hhad.goalLine != null && official.hhad.goalLine !== ''
+        ? official.hhad.goalLine
+        : (official && official.goalLine));
+    const smPred = require('./lib/sm-predictions');
+    const pack = await smPred.ensurePredictions({
+      matchId,
+      homeTeamId: q.homeTeamId,
+      awayTeamId: q.awayTeamId,
+      home: q.home,
+      away: q.away,
+      homeZh: q.home,
+      awayZh: q.away,
+      league: q.league,
+      date: q.date,
+      time: q.time,
+      kickoffMs: Number.isFinite(kickoffMs) ? kickoffMs : Date.now(),
+      goalLine,
+    });
+    const body = Object.assign({}, pack);
+    delete body._raw;
+    if (goalLine != null && String(goalLine).trim() !== '' && body.scores) {
+      const derived = smPred.deriveHhad(body.scores, goalLine);
+      if (derived) body.hhadPred = derived;
+      else if (body.hhadPred && Number(body.hhadPred.goalLine) !== Number(goalLine)) body.hhadPred = null;
+    }
+    res.json(body);
+  } catch (e) {
+    res.status(502).json({ ok: false, error: '预测数据暂时不可用' });
+  }
+});
+
 app.get('/api/player', async (req, res) => {
   try {
     const id = String(req.query.id || '').trim();
@@ -1673,6 +1743,71 @@ app.get('/api/live-stats', async (req, res) => {
     res.json(payload);
   } catch (e) {
     res.status(502).json({ ok: false, reason: 'error', error: '实时技术统计暂时不可用', detail: e.message });
+  }
+});
+
+app.get('/api/sm-ball-coords', async (req, res) => {
+  try {
+    let matchId = String(req.query.matchId || '').trim();
+    let homeTeamId = String(req.query.homeTeamId || '').trim();
+    let awayTeamId = String(req.query.awayTeamId || '').trim();
+    let home = String(req.query.home || req.query.homeTeam || '').trim();
+    let away = String(req.query.away || req.query.awayTeam || '').trim();
+    let date = String(req.query.date || '').trim();
+    let time = String(req.query.time || '').trim();
+    let businessDate = String(req.query.businessDate || '').trim();
+    const force = String(req.query.force || '') === '1';
+
+    if (matchId || (homeTeamId && awayTeamId && !home)) {
+      const findIn = (list) => (list || []).find(m =>
+        (matchId && String(m.id) === matchId) ||
+        (homeTeamId && awayTeamId && String(m.homeTeamId) === homeTeamId && String(m.awayTeamId) === awayTeamId && (!date || m.date === date))
+      );
+      let hit = null;
+      for (const kind of ['schedule', 'matches', 'results']) {
+        try {
+          const payload = peekCachedPayload(kind);
+          hit = findIn(payload && payload.data);
+          if (hit) break;
+        } catch { /* ignore */ }
+      }
+      if (hit) {
+        matchId = matchId || String(hit.id);
+        homeTeamId = homeTeamId || String(hit.homeTeamId || '');
+        awayTeamId = awayTeamId || String(hit.awayTeamId || '');
+        home = home || hit.home || '';
+        away = away || hit.away || '';
+        date = date || hit.date || '';
+        time = time || hit.time || '';
+        businessDate = businessDate || hit.businessDate || '';
+      }
+    }
+
+    if (!matchId && !(homeTeamId && awayTeamId) && !(home && away && date)) {
+      return res.status(400).json({ ok: false, reason: 'bad_request', error: '需要 matchId，或 homeTeamId+awayTeamId，或 home+away+date', coords: [], hasCoords: false });
+    }
+
+    const coords = require('./lib/sm-ball-coords');
+    const coordOpts = { matchId, homeTeamId, awayTeamId, home, away, date, time, businessDate };
+    const cached = !force ? coords.peekCached(coordOpts) : null;
+    if (cached && cached.hasCoords) {
+      res.json(cached);
+      setImmediate(() => {
+        coords.getBallCoords(coordOpts).catch(() => {});
+      });
+      return;
+    }
+    const payload = await Promise.race([
+      coords.getBallCoords(Object.assign({}, coordOpts, { force })),
+      new Promise((resolve) => setTimeout(() => resolve(
+        coords.peekCached(coordOpts) || {
+          ok: false, reason: 'timeout', error: '实时轨迹暂时不可用', coords: [], hasCoords: false,
+        }
+      ), 8000)),
+    ]);
+    res.json(payload);
+  } catch (e) {
+    res.status(502).json({ ok: false, reason: 'error', error: '实时轨迹暂时不可用', coords: [], hasCoords: false });
   }
 });
 
@@ -2709,10 +2844,37 @@ async function lineupWarmJob(reason) {
     }
     const r = await lu.warmUpcoming([...byId.values()], { withinHours: 36, limit: 24, gapMs: 800 });
     if (r.warmed || reason === 'startup') console.log('[lineup-warm]', reason, JSON.stringify(r));
+    try {
+      try { require('./lib/player-match-db').beginPhotoFoldWarm(); } catch (_) {}
+      const photoWarm = require('./lib/lineup-photo-warm');
+      const urls = photoWarm.collectFromMatches([...byId.values()], {
+        withinHours: 36,
+        readMatchCache: (id) => lu.readMatchCache(id),
+      });
+      const pr = await photoWarm.warmUrls(urls, {
+        limit: 40,
+        gapMs: 400,
+        logoDir: LOGO_DIR,
+        safeLogoTarget,
+        readCachedLogo,
+        fetchLogo,
+      });
+      if (pr.fetched || pr.fail || pr.skippedRun || reason === 'startup') {
+        console.log('[lineup-photo-warm]', reason, JSON.stringify(pr));
+      }
+    } catch (e2) { console.warn('[lineup-photo-warm]', reason, e2.message); }
   } catch (e) { console.warn('[lineup-warm]', reason, e.message); }
 }
 setTimeout(() => lineupWarmJob('startup'), 90e3);
 setInterval(() => lineupWarmJob('tick'), 12 * 60e3);
+
+// Photo fold map is rebuilt off the main thread so HTTP stays responsive.
+setTimeout(() => {
+  try {
+    const r = require('./lib/player-match-db').beginPhotoFoldWarm();
+    if (r && (r.started || r.stale)) console.log('[photo-fold-warm]', JSON.stringify({ started: r.started, cached: r.cached, stale: r.stale }));
+  } catch (e) { console.warn('[photo-fold-warm]', e.message); }
+}, 1500);
 
 // Current selling-slate 数据页 packs (身价 / 六围 / 赛前近况), so the first
 // open is a cache hit. Only /api/matches (the live window), not the full schedule.
@@ -2840,6 +3002,16 @@ try {
 try {
   require('./lib/push-goals').startWorker({ fetchJson, base: BASE });
 } catch (e) { console.warn('[push-goals] start failed', e.message); }
+
+// Serve last-good official payloads immediately after a process restart.
+// Do not wait for a fresh official fetch before listen; refresh runs in the background via getData.
+try {
+  sportteryLiveCache.hydrateCache(cache);
+  const bootKinds = Object.keys(cache).filter((k) => cache[k] && cache[k].payload && cache[k].payload.source === 'live');
+  if (bootKinds.length) {
+    console.log('[sporttery-live-cache] boot', bootKinds.map((k) => k + '=' + ((cache[k].payload.data || []).length)).join(' '));
+  }
+} catch (e) { console.warn('[sporttery-live-cache] boot', e.message); }
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`竞彩预测 v${require('./package.json').version} running at http://localhost:${PORT} (data: ${require('./lib/db').DATA_DIR})`);

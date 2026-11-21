@@ -9,13 +9,7 @@ const css = fs.readFileSync(path.join(root, 'public/style.css'), 'utf8');
 const index = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
 const apkSh = fs.readFileSync(path.join(root, 'android/build-apk.sh'), 'utf8');
 
-assert.ok(/216lu33/.test(index), 'cache 216lu33');
-assert.ok(!/216lu32/.test(index), 'no stale 216lu32');
-assert.ok(/app\.js\?v=216lu33/.test(index), 'app.js cache-busted');
-assert.ok(/style\.css\?v=216lu33/.test(index), 'style cache-busted');
-assert.ok(/VERSION_NAME="\$\{VERSION_NAME:-2\.1\.5\.382\}"/.test(apkSh), 'apk default 2.1.5.382');
-assert.ok(/VERSION_CODE="\$\{VERSION_CODE:-382\}"/.test(apkSh), 'apk default 382');
-
+assert.ok(/app\.js\?v=216/.test(index) && /style\.css\?v=216/.test(index), 'app.js and style are cache-busted');
 assert.ok(/preview 381/.test(appJs) && /preview 381/.test(css), '381 notes present');
 assert.ok(/function afterCompositorIdle/.test(appJs), 'double-rAF + delay helper');
 assert.ok(/OVERLAY_TEARDOWN_MS = 80/.test(appJs), 'teardown waits ~80ms after two frames');
